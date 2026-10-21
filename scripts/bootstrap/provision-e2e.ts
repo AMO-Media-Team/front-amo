@@ -12,6 +12,7 @@ import { type EstadoPerfil, transicionesParaRestaurar } from "./estado-perfil"
 import { enrolarTotpEnSesion } from "./mfa"
 import { conOperadorTemporal } from "./operador-temporal"
 import { organizacionDe, type RolCuentaPrueba } from "./organizacion"
+import { exigirFueraDeProduccion } from "./produccion"
 import {
   activarPerfil,
   actualizarPerfil,
@@ -93,6 +94,8 @@ export function emailDe(cuenta: CuentaE2E): string {
 export async function clienteComoSuperadmin(
   entorno: EntornoBootstrap
 ): Promise<ClienteSupabase> {
+  // Punto común de bootstrap:e2e, cuenta-pista, carrera-cupos y la preparación E2E.
+  exigirFueraDeProduccion(entorno.url, "Crear cuentas o datos de prueba")
   const email = entorno.superadminEmail
   if (!email) throw new ErrorBootstrap("Define SUPERADMIN_EMAIL en .env.local.")
   const servicio = crearClienteServicio(entorno)

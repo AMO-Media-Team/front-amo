@@ -1,8 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
-// Origen: Supabase generate_typescript_types (proyecto zygfqfvqwfvhbirmjojp, esquema public),
-// última migración aplicada: 20261005233015_configuracion_claves_publicas (12a–12c solo tocan `private`
-// y triggers, y la de integración solo datos: el contenido no cambia desde 20261005171106_roles_guardar_permisos).
+// Origen: Supabase generate_typescript_types (proyecto oriuuuaczpncmtglfgpv, esquema public),
+// última migración aplicada: 20261006170206_bitacora_indice_cronologico.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =

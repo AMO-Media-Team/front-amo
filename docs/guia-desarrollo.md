@@ -9,9 +9,10 @@
 - **Producto**: AMO (Advertising Market Optimization), marketplace de pauta en medios hiperlocales
   de Colombia (Anunciante ↔ Plataforma ↔ Medio).
 - **Repo**: Next.js 16.3.7 (App Router, `src/`), React 19.3.0, Tailwind v4, TypeScript 5.9, pnpm 12,
-  Node ≥ 22.12. Despliegue en Vercel (región `iad1`).
-- **Backend**: Supabase `baas-amo` (ref `zygfqfvqwfvhbirmjojp`, Postgres 17): Auth, Postgres con RLS,
-  Storage. Migraciones en `supabase/migrations/`.
+  Node ≥ 22.12. Despliegue en Vercel (región `yul1`, Montreal), dominio `https://front-amo.vercel.app`.
+- **Backend**: Supabase (Postgres 17): Auth, Postgres con RLS, Storage. Producción
+  `oriuuuaczpncmtglfgpv` (ca-central-1; `.env.produccion`) y desarrollo `zygfqfvqwfvhbirmjojp` (datos
+  demo; `.env.local`). Migraciones en `supabase/migrations/`.
 - **Documentación oficial de Next instalada**: `node_modules/next/dist/docs/` — consúltala antes de
   usar una API de Next; esta versión difiere de versiones anteriores.
 
@@ -100,8 +101,15 @@ supabase/{migrations,seed,tests}/   e2e/   docs/
 
 ## Flujo de base de datos
 
-1. Escribir la migración y aplicarla (MCP `apply_migration` o `supabase db push`).
-2. Guardar el SQL exacto como `supabase/migrations/<versión>_<nombre>.sql`.
+1. Crear el archivo con `supabase migration new <nombre>` (queda como
+   `supabase/migrations/<versión>_<nombre>.sql`) y escribir el SQL.
+2. Aplicarlo **primero en desarrollo** y luego en producción con
+   `supabase db push --db-url "$SUPABASE_DB_URL" --skip-vault` (URL del _Session pooler_ de cada
+   proyecto, usuario `postgres.<ref>`, guardada en un `.env.db*` que git ignora; contraseña
+   alfanumérica o codificada). Así `session_user` es `postgres`, como exigen `private.modo_carga()` y
+   las guardas de roles; con `--linked` el CLI entra como `cli_login_*` y esas migraciones fallan. No
+   se usa MCP `apply_migration`: numera por su cuenta y desalinea el historial con los archivos. El MCP
+   del repositorio apunta a producción y es solo para leer.
 3. **Nunca** editar una migración aplicada: se corrige con una nueva.
 4. Pruebas en `supabase/tests/*.sql` dentro de `begin … rollback`.
 5. Revisar advisors (0 ERROR) y regenerar `src/types/database.types.ts` (`pnpm db:types`).

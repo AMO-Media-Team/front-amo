@@ -6,6 +6,7 @@ import {
   generarNonce,
   modoCspDesdeEntorno,
   nombreCabeceraCsp,
+  origenesSupabase,
   resumirReportesCsp,
   sanearUrlReporte,
 } from "./csp"
@@ -16,14 +17,18 @@ function directiva(csp: string, nombre: string): string | undefined {
     .find((parte) => parte === nombre || parte.startsWith(`${nombre} `))
 }
 
+const SUPABASE_URL = "https://proyectoprueba.supabase.co"
+
 describe("construirCsp", () => {
   const produccion = construirCsp({
     nonce: "abc123",
+    supabaseUrl: SUPABASE_URL,
     desarrollo: false,
     https: true,
   })
   const desarrollo = construirCsp({
     nonce: "abc123",
+    supabaseUrl: SUPABASE_URL,
     desarrollo: true,
     https: false,
   })
@@ -45,6 +50,7 @@ describe("construirCsp", () => {
     // `pnpm start` en http://localhost: build de producción sin HTTPS.
     const produccionLocal = construirCsp({
       nonce: "abc123",
+      supabaseUrl: SUPABASE_URL,
       desarrollo: false,
       https: false,
     })
@@ -54,12 +60,13 @@ describe("construirCsp", () => {
     expect(produccionLocal).not.toContain("'unsafe-eval'")
   })
 
-  it("permite Supabase (REST, Realtime y Storage directo) y Mapbox", () => {
+  it("permite el Supabase del entorno (REST, Realtime y Storage directo) y Mapbox", () => {
     const conexiones = directiva(produccion, "connect-src")
-    expect(conexiones).toContain("https://zygfqfvqwfvhbirmjojp.supabase.co")
-    expect(conexiones).toContain("wss://zygfqfvqwfvhbirmjojp.supabase.co")
-    expect(conexiones).toContain(
-      "https://zygfqfvqwfvhbirmjojp.storage.supabase.co"
+    expect(conexiones).toContain("https://proyectoprueba.supabase.co")
+    expect(conexiones).toContain("wss://proyectoprueba.supabase.co")
+    expect(conexiones).toContain("https://proyectoprueba.storage.supabase.co")
+    expect(directiva(produccion, "img-src")).toContain(
+      "https://proyectoprueba.supabase.co"
     )
     expect(conexiones).toContain("https://events.mapbox.com")
     expect(directiva(produccion, "img-src")).toContain(
@@ -83,6 +90,38 @@ describe("construirCsp", () => {
 
   it("es una sola línea sin espacios sobrantes", () => {
     expect(produccion).not.toMatch(/\s{2,}|\n/)
+  })
+})
+
+describe("origenesSupabase", () => {
+  it("deriva REST, Realtime y Storage directo de un proyecto en la nube", () => {
+    expect(origenesSupabase("https://abc123.supabase.co/")).toEqual({
+      http: "https://abc123.supabase.co",
+      websocket: "wss://abc123.supabase.co",
+      storage: "https://abc123.storage.supabase.co",
+    })
+  })
+
+  it("con Supabase local usa ws:// y no añade el host de Storage", () => {
+    expect(origenesSupabase("http://127.0.0.1:54321")).toEqual({
+      http: "http://127.0.0.1:54321",
+      websocket: "ws://127.0.0.1:54321",
+      storage: null,
+    })
+  })
+
+  it("sin una URL válida no permite ningún origen de Supabase", () => {
+    expect(origenesSupabase("")).toBeNull()
+    expect(origenesSupabase("no es una url")).toBeNull()
+    expect(origenesSupabase("javascript:alert(1)")).toBeNull()
+    const politica = construirCsp({
+      nonce: "n",
+      supabaseUrl: "",
+      desarrollo: false,
+      https: true,
+    })
+    expect(directiva(politica, "connect-src")).not.toContain("supabase")
+    expect(directiva(politica, "img-src")).not.toContain("supabase")
   })
 })
 
