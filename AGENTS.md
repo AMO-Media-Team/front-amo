@@ -56,7 +56,7 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
 Next.js 16.3.7 (App Router, `src/`) · React 19.3 · TypeScript 5.9 estricto · Tailwind v4 · shadcn sobre
 **Base UI** · motion 13 · TanStack Table 9 · react-hook-form + zod 4 · nuqs · TanStack Query ·
 Chart.js 4 · Mapbox GL 3 (`react-map-gl/mapbox`) · Supabase (Auth, Postgres 17 con RLS, Storage) ·
-Vitest 5 · Playwright · pnpm 12 · Node ≥ 22.12 · despliegue en Vercel (`iad1`).
+Vitest 5 · Playwright · pnpm 12 · Node ≥ 22.12 · despliegue en Vercel (`yul1`, Montreal).
 
 ## Comandos
 
@@ -71,7 +71,9 @@ pnpm brand:build            # regenera logos e iconos
 pnpm db:types               # regenera src/types/database.types.ts (requiere `supabase login`)
 pnpm db:permisos            # genera supabase/seed/permisos.sql desde src/lib/auth/permisos.ts
 pnpm bootstrap:superadmin   # crea/recupera el superadministrador (imprime un enlace de un solo uso)
+                            # contra producción: AMO_ARCHIVO_ENTORNO=.env.produccion pnpm bootstrap:superadmin
 pnpm bootstrap:restablecer-mfa   # emergencia: borra los factores MFA de una cuenta y da un enlace nuevo
+                            # contra producción: AMO_ARCHIVO_ENTORNO=.env.produccion pnpm bootstrap:restablecer-mfa
 pnpm bootstrap:e2e          # cuentas de prueba E2E (variables E2E_* en .env.local)
 pnpm demo:generar | pnpm demo:purgar   # datos demo (ver supabase/seed/demo/README.md)
 ```
@@ -166,11 +168,27 @@ Variables en `.env.local` (plantilla documentada en `.env.example`; el build fal
 obligatoria): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
 `NEXT_PUBLIC_MAPBOX_TOKEN`, `NEXT_PUBLIC_MAPBOX_STYLE`, `NEXT_PUBLIC_SITE_URL`, `SUPABASE_SECRET_KEY`,
 `AMO_CIFRADO_KEY`, `AMO_SERVIDOR_SECRET` (el mismo valor está en Supabase Vault),
-`SUPERADMIN_EMAIL`, `AMO_SMTP_CONFIGURADO`, `AMO_CSP_MODO`, y opcionales `TURNSTILE_*`.
+`SUPERADMIN_EMAIL`, `AMO_SMTP_CONFIGURADO`, `AMO_CSP_MODO`, y `TURNSTILE_*` (reservadas: la app aún no
+implementa Turnstile; no activar CAPTCHA en Supabase Auth o el ingreso fallaría).
 
-Proyecto Supabase: `baas-amo` (ref `zygfqfvqwfvhbirmjojp`). Ajustes de Auth esperados: registros
-públicos cerrados, contraseña mínima de 12 con todas las clases, vigencia de enlaces de 24 h, reenvío
-de IP activo y URLs de redirección del sitio (`/auth/callback`, `/auth/confirm`).
+Proyectos Supabase:
+
+- **Producción** `oriuuuaczpncmtglfgpv` (ca-central-1, plan gratuito por ahora; nació sin datos demo).
+  Sus variables están en `.env.produccion` (ignorado por git y que Next no carga en local): son las que
+  se importan en Vercel, que corre en `yul1` (Montreal, junto a la base) con el dominio
+  `https://front-amo.vercel.app`. Los scripts de arranque la usan con `AMO_ARCHIVO_ENTORNO=.env.produccion`.
+- **Desarrollo** `zygfqfvqwfvhbirmjojp` (15 meses de datos demo y cuentas de prueba): `.env.local`.
+
+Todo lo que crea datos de prueba (cuentas E2E y de pista, `demo:*`, carrera de cupos, prueba de
+guardas por PostgREST y la suite E2E) se niega a correr contra producción
+(`scripts/bootstrap/produccion.ts`). Las migraciones se aplican con
+`supabase db push --db-url <pooler de sesión como postgres.<ref>>`, primero en desarrollo; nunca con
+`--linked` (el CLI entra como `cli_login_*` y `session_user` deja de ser `postgres`, que exigen
+`private.modo_carga()` y las guardas de roles) ni mezclando `apply_migration` (otra numeración).
+
+Ajustes de Auth esperados en ambos: registros públicos cerrados, contraseña mínima de 12 con todas las
+clases, vigencia de enlaces de 24 h, reenvío de IP activo, Realtime sin acceso público y URLs de
+redirección del sitio (`/auth/callback`, `/auth/confirm`). Lista paso a paso en el README.
 
 ## Trazabilidad
 

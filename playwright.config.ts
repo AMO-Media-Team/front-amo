@@ -1,6 +1,10 @@
 import { defineConfig, devices } from "@playwright/test"
 
 import {
+  exigirFueraDeProduccion,
+  supabaseUrlDe,
+} from "./scripts/bootstrap/produccion"
+import {
   PROYECTO_ESCRITORIO,
   PROYECTO_MOVIL,
   PROYECTO_PREPARACION,
@@ -14,6 +18,9 @@ import {
  * Las pruebas del mapa necesitan que el token de Mapbox admita ese origen.
  */
 const PUERTO = Number(process.env.AMO_E2E_PUERTO ?? 3000)
+
+// Antes de compilar la app: la suite crea usuarios, roles y bitácora.
+exigirFueraDeProduccion(supabaseUrlDe(), "La suite E2E")
 const URL_BASE = `http://localhost:${PUERTO}`
 
 // SwiftShader permite renderizar WebGL (Mapbox) en navegadores headless sin GPU.

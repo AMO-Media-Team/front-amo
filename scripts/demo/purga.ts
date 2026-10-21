@@ -59,9 +59,10 @@ export function enLotes<T>(elementos: readonly T[], tamano: number): T[][] {
 }
 
 /**
- * Transacción de purga. Solo funciona por MCP `execute_sql` (único canal con
- * `session_user = postgres`): por PostgREST los interruptores `amo.*` no
- * tienen efecto y `private.purgar_demo()` responde `AMO_NO_AUTORIZADO`.
+ * Transacción de purga. Solo funciona como `postgres` sobre el proyecto de
+ * desarrollo (único canal con `session_user = postgres`; nunca el MCP del
+ * repositorio, que apunta a producción): por PostgREST los interruptores
+ * `amo.*` no tienen efecto y `private.purgar_demo()` responde `AMO_NO_AUTORIZADO`.
  */
 export function sqlPurga(): string {
   return [

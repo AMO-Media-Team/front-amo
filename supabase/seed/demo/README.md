@@ -11,11 +11,14 @@ es para producción real**: los scripts exigen `--forzar` si `NEXT_PUBLIC_SITE_U
 Los interruptores `amo.modo_carga`, `amo.reloj` y `amo.purga` solo tienen efecto con `session_user = postgres`. Por
 PostgREST (incluso con la secret key) la sesión es `authenticator`, y el proyecto no tiene driver de Postgres. Por eso:
 
-- **SQL** → MCP `execute_sql` sobre el proyecto (`zygfqfvqwfvhbirmjojp`), siempre dentro de
+- **SQL** → sobre el proyecto de **desarrollo** (`zygfqfvqwfvhbirmjojp`) con una conexión como `postgres` (MCP
+  `execute_sql` conectado a ese proyecto, o un cliente con su URL del *Session pooler*), siempre dentro de
   `begin; set local amo.modo_carga = 'on'; set local statement_timeout = '110s'; …; commit;`.
 - **Usuarios de Auth y Storage** → scripts TS con la Admin API (`pnpm demo:generar`, `pnpm demo:purgar`).
 
-Nunca se usa `apply_migration`: los datos demo y su andamiaje no son migraciones.
+Nunca se usa `apply_migration`: los datos demo y su andamiaje no son migraciones. **Nunca en producción**
+(`oriuuuaczpncmtglfgpv`, a donde apunta hoy el MCP del repositorio): los scripts se niegan
+(`scripts/bootstrap/produccion.ts`) y el SQL tampoco se ejecuta ahí.
 
 ## Archivos
 
@@ -42,10 +45,10 @@ previo (si lo hay, primero «Purgar»).
 1. **Usuarios** — `pnpm demo:generar usuarios [--forzar]`. Crea en Auth las 363 cuentas de `scripts/demo/cuentas.ts`,
    enrola TOTP en las tres internas con nombre y **agrega** a `.env.local` las credenciales `DEMO_*` (no las imprime).
    Es idempotente.
-2. **Definiciones** — ejecutar por MCP `00_base.sql` … `06_cierre.sql`, en orden. Las funciones largas van una por
-   llamada.
+2. **Definiciones** — ejecutar `00_base.sql` … `06_cierre.sql`, en orden, como `postgres` sobre el proyecto de
+   desarrollo (ver «Canal de ejecución»). Las funciones largas van una por llamada.
 3. **Pasos** — `pnpm demo:generar pasos [--desde 2025-07] [--semilla 0.4242]` escribe `pasos/*.sql`. Se ejecutan por
-   MCP **en orden de nombre, una llamada por archivo** (cada una tarda pocos segundos):
+   el mismo canal **en orden de nombre, una llamada por archivo** (cada una tarda pocos segundos):
 
    | Paso                  | Llamada                               | Qué deja                                                         |
    | --------------------- | ------------------------------------- | ---------------------------------------------------------------- |
@@ -119,7 +122,7 @@ En este orden. Los tres primeros pasos son destructivos e irreversibles.
 
 1. `pnpm demo:purgar storage [--forzar]` — borra de Storage los objetos de las entidades demo y
    `evidencias/muestras/`. Va **antes** del SQL: necesita las filas para saber qué carpetas `{tipo}/{id}` son demo.
-2. **SQL por MCP** — `pnpm demo:purgar sql` imprime la transacción:
+2. **SQL como `postgres` en desarrollo** — `pnpm demo:purgar sql` imprime la transacción:
 
    ```sql
    begin;

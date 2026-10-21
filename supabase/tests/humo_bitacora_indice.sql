@@ -3,6 +3,10 @@
 -- sobre `created_at desc, id desc` con LIMIT) debe recorrer `bitacora_created_at_id_idx`: sin él, el plan lee la
 -- tabla entera con el BRIN «lossy» y ordena (4,7 s con 95 mil filas; ANTES: Sort + Bitmap Heap Scan).
 -- Se ejecuta como owner (MCP execute_sql o psql) dentro de una transacción que SIEMPRE se revierte; no escribe datos.
+-- a01/a02 miden la elección del planificador, que depende del volumen: en una base recién montada (producción nació
+-- con ~80 filas de bitácora) a02 elige Bitmap + Sort por ser más barato y falla sin que haya defecto de esquema.
+-- Para comprobar allí que el índice cubre la consulta, repetir a02 con `set local enable_bitmapscan = off` y
+-- `set local enable_sort = off`: debe salir `Index Scan using bitacora_created_at_id_idx` sin Sort.
 -- Cada prueba deja `true` si pasa o lo observado.
 begin;
 

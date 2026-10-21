@@ -1,13 +1,11 @@
 # For detailed configuration reference documentation, visit:
 # https://supabase.com/docs/guides/local-development/cli/config
 #
-# AMO: este archivo es la fuente de verdad de la configuración de Auth/API del proyecto.
-# Se sincroniza con el proyecto remoto `baas-amo` así:
-#   supabase login
-#   supabase link --project-ref zygfqfvqwfvhbirmjojp
-#   supabase config push
-# En remoto, site_url y additional_redirect_urls deben incluir además el dominio de producción
-# y las previews de Vercel (ajústalos antes del push o desde el panel).
+# AMO: este archivo es la fuente de verdad de la configuración de Auth/API para el entorno local
+# (site_url y redirecciones apuntan a localhost). Proyectos remotos: producción
+# `oriuuuaczpncmtglfgpv` y desarrollo `zygfqfvqwfvhbirmjojp`; sus ajustes de Auth se hacen en el panel
+# (lista en el README). Si se usa `supabase config push` contra un remoto, cambia antes site_url y
+# additional_redirect_urls por las de ese entorno (en producción, https://front-amo.vercel.app).
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
 project_id = "front-amo"

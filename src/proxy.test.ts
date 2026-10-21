@@ -81,7 +81,7 @@ vi.mock("@/lib/supabase/auth-server", () => ({
             await cookies?.setAll?.(
               [
                 {
-                  name: "sb-zygfqfvqwfvhbirmjojp-auth-token",
+                  name: "sb-proyectoprueba-auth-token",
                   value: "sesion-refrescada",
                   options: { path: "/", maxAge: 43_200, sameSite: "lax" },
                 },
@@ -189,9 +189,9 @@ describe("proxy", () => {
     const respuesta = await proxy(solicitud("/ingresar"))
 
     expect(respuesta.status).toBe(307)
-    expect(
-      respuesta.cookies.get("sb-zygfqfvqwfvhbirmjojp-auth-token")?.value
-    ).toBe("sesion-refrescada")
+    expect(respuesta.cookies.get("sb-proyectoprueba-auth-token")?.value).toBe(
+      "sesion-refrescada"
+    )
     expect(respuesta.headers.get("cache-control")).toBe(
       CABECERAS_ANTICACHE["Cache-Control"]
     )
@@ -204,7 +204,7 @@ describe("proxy", () => {
     escenario.refrescar = true
     const respuesta = await proxy(solicitud("/inicio"))
     expect(respuesta.headers.get("x-middleware-request-cookie")).toContain(
-      "sb-zygfqfvqwfvhbirmjojp-auth-token=sesion-refrescada"
+      "sb-proyectoprueba-auth-token=sesion-refrescada"
     )
   })
 

@@ -17,9 +17,11 @@ import {
   type EntornoBootstrap,
   rutaConfirmacion,
 } from "../../scripts/bootstrap/supabase"
+import { exigirFueraDeProduccion } from "../../scripts/bootstrap/produccion"
 import { PASO_TOTP_SEGUNDOS } from "../../scripts/bootstrap/totp"
 
 export const entorno: EntornoBootstrap = cargarEntorno()
+exigirFueraDeProduccion(entorno.url, "La suite E2E")
 
 export interface Credenciales {
   email: string

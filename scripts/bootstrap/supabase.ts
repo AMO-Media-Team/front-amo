@@ -40,8 +40,15 @@ export class ErrorBootstrap extends Error {
   }
 }
 
-/** Lee `.env.local` (si existe) y valida las variables con los mismos esquemas de la app. */
-export function cargarEntorno(archivo = ".env.local"): EntornoBootstrap {
+/**
+ * Lee el archivo de entorno (si existe) y valida las variables con los mismos
+ * esquemas de la app. Por defecto `.env.local` (desarrollo);
+ * `AMO_ARCHIVO_ENTORNO=.env.produccion` apunta los scripts de arranque a
+ * producción. Las variables ya definidas en el proceso no se pisan.
+ */
+export function cargarEntorno(
+  archivo = process.env.AMO_ARCHIVO_ENTORNO ?? ".env.local"
+): EntornoBootstrap {
   if (existsSync(archivo)) process.loadEnvFile(archivo)
   const cliente = validarEnvCliente(process.env)
   const servidor = validarEnvServidor(process.env)
@@ -56,6 +63,14 @@ export function cargarEntorno(archivo = ".env.local"): EntornoBootstrap {
     sitioUrl: cliente.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, ""),
     superadminEmail: servidor.SUPERADMIN_EMAIL,
   }
+}
+
+/** Proyecto al que apunta el entorno (ref de Supabase o host), para avisar al operador. */
+export function describirProyecto(entorno: EntornoBootstrap): string {
+  const { hostname } = new URL(entorno.url)
+  return hostname.endsWith(".supabase.co")
+    ? hostname.slice(0, -".supabase.co".length)
+    : hostname
 }
 
 const SIN_SESION = {

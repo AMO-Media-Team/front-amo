@@ -13,6 +13,11 @@ begin
   if not private.modo_carga() then
     raise exception 'demo_catalogos exige amo.modo_carga (solo el owner por conexión directa)';
   end if;
+  -- Guarda contra producción del lado de la BD: las cuentas demo solo existen donde corrió
+  -- `pnpm demo:generar usuarios`, que se niega a correr contra producción (scripts/bootstrap/produccion.ts).
+  if not exists (select 1 from auth.users where email = 'demo.admin@amo.test') then
+    raise exception 'Faltan las cuentas demo en Auth: ejecuta antes pnpm demo:generar usuarios (no corre en producción)';
+  end if;
   insert into private.demo_control (clave, valor)
   values ('hoy', date_trunc('minute', now())::text), ('inicio', '2025-07-01')
   on conflict (clave) do nothing;

@@ -20,6 +20,9 @@ export async function proxy(request: NextRequest) {
   const nonce = generarNonce()
   const politica = construirCsp({
     nonce,
+    // Se lee aquí y no de `@/lib/env`: ese módulo valida al cargarse y el
+    // proxy debe poder probarse sin entorno.
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     desarrollo: process.env.NODE_ENV === "development",
     https: request.nextUrl.protocol === "https:",
   })
