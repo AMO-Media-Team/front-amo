@@ -1,0 +1,36 @@
+# Dependencias y artefactos
+pnpm-lock.yaml
+node_modules
+.next
+out
+build
+coverage
+playwright-report
+test-results
+blob-report
+next-env.d.ts
+*.tsbuildinfo
+
+# Datos y código generados
+public/data
+public/vendor
+scripts/geo/fuentes
+supabase/seed
+supabase/.temp
+supabase/.branches
+src/types/database.types.ts
+src/lib/geo/diccionarios
+src/lib/geo/svg-departamentos.ts
+
+# Componentes vendorizados de shadcn: se conservan tal como los genera la CLI
+# para que `shadcn diff`/actualizaciones produzcan diffs limpios.
+src/components/ui
+
+# Documentos confidenciales del cliente y configuración de agentes
+context
+.agents
+.claude
+skills-lock.json
+
+# Bloque gestionado por `next dev`
+AGENTS.md

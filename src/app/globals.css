@@ -1,0 +1,644 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Design system AMO — identidad "Lila AMO".
+   · :root  = tema claro · .dark = tema oscuro (principal).
+   · Todo en HEX: Chart.js y Mapbox no entienden oklch().
+   · Contraste AA (≥ 4.5:1) verificado para texto/superficie en ambos temas.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-jakarta);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-surface-elevada: var(--surface-elevada);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-lila-50: var(--lila-50);
+  --color-lila-100: var(--lila-100);
+  --color-lila-200: var(--lila-200);
+  --color-lila-300: var(--lila-300);
+  --color-lila-400: var(--lila-400);
+  --color-lila-500: var(--lila-500);
+  --color-lila-600: var(--lila-600);
+  --color-lila-700: var(--lila-700);
+  --color-lila-800: var(--lila-800);
+  --color-lila-900: var(--lila-900);
+  --color-lila-950: var(--lila-950);
+
+  --shadow-glow: var(--sombra-glow);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Curvas y animaciones de marca (generan `ease-suave`, `animate-*`). */
+@theme {
+  --ease-suave: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-aparecer-arriba: aparecer-arriba 0.5s var(--ease-suave) both;
+  --animate-brillo-shimmer: brillo-shimmer 1.8s linear infinite;
+  --animate-pulso-anillo: pulso-anillo 2.2s var(--ease-suave) infinite;
+  --animate-aurora-desplazar: aurora-desplazar 16s ease-in-out infinite;
+  --animate-girar-lento: girar-lento 14s linear infinite;
+
+  @keyframes aparecer-arriba {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Con background-size 200 %: 200 % deja el brillo fuera a la izquierda y
+     -100 % fuera a la derecha, así el barrido cruza todo el elemento. */
+  @keyframes brillo-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  @keyframes pulso-anillo {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 45%, transparent);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 10px transparent;
+    }
+  }
+
+  @keyframes aurora-desplazar {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  @keyframes girar-lento {
+    to {
+      rotate: 360deg;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+  --radius: 0.75rem;
+
+  /* Paleta Lila AMO (idéntica en ambos temas). */
+  --lila-50: #f6f3ff;
+  --lila-100: #ede7fe;
+  --lila-200: #dcd0fd;
+  --lila-300: #c3aefb;
+  --lila-400: #a788f6;
+  --lila-500: #8c66ee;
+  --lila-600: #7549de;
+  --lila-700: #6238bf;
+  --lila-800: #4f2f98;
+  --lila-900: #3f2a76;
+  --lila-950: #261848;
+
+  /* Tema claro: neutros mauve tintados. */
+  --background: #faf9fd;
+  --foreground: #1b1528;
+  --card: #ffffff;
+  --card-foreground: #1b1528;
+  --popover: #ffffff;
+  --popover-foreground: #1b1528;
+  --surface-elevada: #ffffff;
+  --primary: #7549de;
+  --primary-foreground: #ffffff;
+  --secondary: #f1eef9;
+  --secondary-foreground: #2b2340;
+  --muted: #f2f0f7;
+  --muted-foreground: #615a75;
+  --accent: #eee9fd;
+  --accent-foreground: #4f2f98;
+  /* Tono profundo: el texto conserva ≥ 4.5:1 sobre sus propios tintes
+     (botón destructive /10 en reposo y /20 en hover) sobre fondo, card y muted. */
+  --destructive: #aa1c3a;
+  --destructive-foreground: #ffffff;
+  --border: #e7e3f0;
+  --input: #908aa3;
+  --ring: #7549de;
+
+  --success: #0b7a55;
+  --success-foreground: #ffffff;
+  --warning: #a35400;
+  --warning-foreground: #ffffff;
+  --info: #2160c9;
+  --info-foreground: #ffffff;
+
+  /* Categórica en orden fijo, validada por tema: CVD adyacente ΔE ≥ 8,
+     visión normal ΔE ≥ 15; los 3 primeros también en todos-los-pares. */
+  --chart-1: #7549de;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #2a78d6;
+  --chart-8: #e34948;
+
+  --sidebar: #f5f3fa;
+  --sidebar-foreground: #1b1528;
+  --sidebar-primary: #7549de;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ece7fa;
+  --sidebar-accent-foreground: #3f2a76;
+  --sidebar-border: #e4dfee;
+  --sidebar-ring: #7549de;
+
+  /* Gradiente Aurora: lila → índigo con destello orquídea. Texto blanco encima
+     solo en tamaño grande (≥ 24 px o 19 px en negrita) y fuera del destello:
+     #8c66ee da 4.0:1 y el orquídea 2.7:1; para texto normal usa lila-950. */
+  --aurora:
+    radial-gradient(
+      120% 140% at 88% 0%,
+      rgb(199 125 255 / 0.6) 0%,
+      transparent 55%
+    ),
+    linear-gradient(135deg, #8c66ee 0%, #5b6cf0 100%);
+  /* Variante para texto: paradas más oscuras para mantener contraste. */
+  --aurora-texto: linear-gradient(
+    120deg,
+    #6238bf 0%,
+    #4450d8 55%,
+    #9b4ddb 100%
+  );
+  --sombra-glow:
+    0 1px 2px rgb(38 24 72 / 0.06), 0 10px 28px -12px rgb(117 73 222 / 0.35);
+
+  /* Transiciones de vista (páginas y cambio de tema). */
+  --vt-duracion-salida: 150ms;
+  --vt-duracion-entrada: 260ms;
+  --vt-desplazamiento: 12px;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0e0b16;
+  --foreground: #f2effa;
+  --card: #15111f;
+  --card-foreground: #f2effa;
+  --popover: #1c1729;
+  --popover-foreground: #f2effa;
+  --surface-elevada: #1c1729;
+  --primary: #a788f6;
+  --primary-foreground: #160f29;
+  --secondary: #231c33;
+  --secondary-foreground: #ede7fe;
+  /* Un paso sobre popover (#1c1729) y card: un `bg-muted` se distingue en
+     cualquier superficie (1,08:1 en popover, 1,15:1 en card, como el 1,13:1
+     del tema claro) y el texto secundario conserva 6,3:1 encima. */
+  --muted: #241d35;
+  --muted-foreground: #a59eb8;
+  --accent: #261e3a;
+  --accent-foreground: #ede7fe;
+  /* Coral claro: ≥ 4.5:1 sobre sus tintes /20 y /30 (hover) incluso en popover. */
+  --destructive: #ff9aa6;
+  --destructive-foreground: #2a0a12;
+  --border: #2a2338;
+  --input: #6a6180;
+  --ring: #a788f6;
+
+  --success: #34d399;
+  --success-foreground: #052e1f;
+  --warning: #fbbf24;
+  --warning-foreground: #3a2604;
+  --info: #60a5fa;
+  --info-foreground: #0b1e3b;
+
+  --chart-1: #8c66ee;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #3987e5;
+  --chart-8: #e66767;
+
+  --sidebar: #110d1b;
+  --sidebar-foreground: #e7e2f3;
+  --sidebar-primary: #a788f6;
+  --sidebar-primary-foreground: #160f29;
+  --sidebar-accent: #211a31;
+  --sidebar-accent-foreground: #f2effa;
+  --sidebar-border: #221c2f;
+  --sidebar-ring: #a788f6;
+
+  --aurora-texto: linear-gradient(
+    120deg,
+    #c3aefb 0%,
+    #9aa5ff 55%,
+    #dcb0ff 100%
+  );
+  --sombra-glow:
+    0 0 0 1px rgb(167 136 246 / 0.12), 0 10px 36px -10px rgb(140 102 238 / 0.45);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--lila-400) 30%, transparent)
+      transparent;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "liga" 1,
+      "calt" 1;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  table,
+  [data-slot="table"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--lila-400) 38%, transparent);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Safari aún no soporta scrollbar-color. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+    background-color: color-mix(in oklab, var(--lila-400) 30%, transparent);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ── Utilidades de marca ─────────────────────────────────────────────────── */
+
+@utility bg-aurora {
+  background-image: var(--aurora);
+}
+
+/* Para títulos grandes; usa --aurora-texto, que conserva contraste por tema. */
+@utility texto-gradiente {
+  background-image: var(--aurora-texto);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Glassmorphism sutil: solo sobre fondos con textura (aurora, rejilla, mapa). */
+@utility vidrio {
+  background-color: color-mix(in oklab, var(--card) 72%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-width: 1px;
+  border-style: solid;
+  border-color: color-mix(in oklab, var(--foreground) 9%, transparent);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+}
+
+@utility esqueleto-shimmer {
+  background-color: var(--muted);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: brillo-shimmer 1.8s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Rejilla de líneas que se desvanece hacia los bordes. */
+@utility patron-rejilla {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--foreground) 6%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    #000 35%,
+    transparent 80%
+  );
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 80%);
+}
+
+@utility patron-puntos {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--foreground) 12%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    #000 35%,
+    transparent 80%
+  );
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 80%);
+}
+
+/* Anillo de foco de marca; úsalo como `focus-visible:anillo-foco`. */
+@utility anillo-foco {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--ring) 22%, transparent);
+}
+
+/* Cifras alineadas para KPI, tablas y montos. */
+@utility cifras {
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── Toasts (sonner richColors) con los tokens semánticos ────────────────── */
+
+html [data-sonner-toaster][data-sonner-theme] {
+  --success-bg: color-mix(in oklab, var(--success) 10%, var(--popover));
+  --success-border: color-mix(in oklab, var(--success) 35%, var(--popover));
+  --success-text: var(--success);
+  --info-bg: color-mix(in oklab, var(--info) 10%, var(--popover));
+  --info-border: color-mix(in oklab, var(--info) 35%, var(--popover));
+  --info-text: var(--info);
+  --warning-bg: color-mix(in oklab, var(--warning) 10%, var(--popover));
+  --warning-border: color-mix(in oklab, var(--warning) 35%, var(--popover));
+  --warning-text: var(--warning);
+  --error-bg: color-mix(in oklab, var(--destructive) 10%, var(--popover));
+  --error-border: color-mix(in oklab, var(--destructive) 35%, var(--popover));
+  --error-text: var(--destructive);
+}
+
+/* ── View Transitions ────────────────────────────────────────────────────── */
+
+/* Los clics atraviesan la capa de la transición (guía de Next). */
+::view-transition {
+  pointer-events: none;
+}
+
+/* Cambio de tema: revelado circular desde el punto de clic. El hook
+   `useTransicionTema` marca <html data-transicion="tema"> y define
+   --vt-x / --vt-y / --vt-radio antes de document.startViewTransition(). */
+:root[data-transicion="tema"]::view-transition-old(root),
+:root[data-transicion="tema"]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root[data-transicion="tema"]::view-transition-new(root) {
+  animation: revelar-tema 620ms var(--ease-suave) both;
+}
+
+/* Las barras ancladas llevan view-transition-name propio (y sin animación):
+   durante el cambio de tema se capturan dentro de `root` para que el círculo
+   también las revele, en lugar de cambiar de golpe por encima. */
+:root[data-transicion="tema"] * {
+  view-transition-name: none !important;
+}
+
+@keyframes revelar-tema {
+  from {
+    clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(
+      var(--vt-radio, 150vmax) at var(--vt-x, 50%) var(--vt-y, 50%)
+    );
+  }
+}
+
+/* Páginas (clase `pagina` de TransicionPagina): salida rápida, entrada suave. */
+::view-transition-old(.pagina) {
+  animation: var(--vt-duracion-salida) ease-in both vt-salir;
+}
+
+::view-transition-new(.pagina) {
+  animation: var(--vt-duracion-entrada) var(--ease-suave)
+    calc(var(--vt-duracion-salida) * 0.5) both vt-entrar;
+}
+
+/* Navegación direccional (transitionTypes nav-adelante / nav-atras). */
+::view-transition-old(.nav-adelante),
+::view-transition-old(.nav-atras) {
+  animation: var(--vt-duracion-salida) ease-in both vt-salir-x;
+}
+
+::view-transition-new(.nav-adelante),
+::view-transition-new(.nav-atras) {
+  animation: var(--vt-duracion-entrada) var(--ease-suave)
+    calc(var(--vt-duracion-salida) * 0.5) both vt-entrar-x;
+}
+
+::view-transition-old(.nav-adelante),
+::view-transition-new(.nav-atras) {
+  --vt-dx: -24px;
+}
+
+::view-transition-new(.nav-adelante),
+::view-transition-old(.nav-atras) {
+  --vt-dx: 24px;
+}
+
+/* Elementos compartidos (share="morph"). */
+::view-transition-group(.morph) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--ease-suave);
+}
+
+/* Anclas del AppShell: no se deslizan con el contenido. */
+::view-transition-group(amo-barra-superior),
+::view-transition-group(amo-barra-lateral),
+::view-transition-group(amo-barra-inferior) {
+  animation: none;
+  z-index: 100;
+}
+
+::view-transition-old(amo-barra-superior),
+::view-transition-old(amo-barra-lateral),
+::view-transition-old(amo-barra-inferior) {
+  display: none;
+}
+
+::view-transition-new(amo-barra-superior),
+::view-transition-new(amo-barra-lateral),
+::view-transition-new(amo-barra-inferior) {
+  animation: none;
+}
+
+@keyframes vt-salir {
+  to {
+    opacity: 0;
+    translate: 0 calc(var(--vt-desplazamiento) * -0.5);
+  }
+}
+
+@keyframes vt-entrar {
+  from {
+    opacity: 0;
+    translate: 0 var(--vt-desplazamiento);
+  }
+}
+
+@keyframes vt-salir-x {
+  to {
+    opacity: 0;
+    translate: var(--vt-dx, 0) 0;
+  }
+}
+
+@keyframes vt-entrar-x {
+  from {
+    opacity: 0;
+    translate: var(--vt-dx, 0) 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* ── Movimiento reducido ─────────────────────────────────────────────────── */
+
+/* Las animaciones de marca (`animate-*` del @theme) se apagan en su origen:
+   con la preferencia del sistema o con la de la cuenta (`data-movimiento` lo
+   fija ProveedorPreferencias), sin depender de que cada uso recuerde añadir
+   `motion-reduce:animate-none`. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-aparecer-arriba: none;
+    --animate-brillo-shimmer: none;
+    --animate-pulso-anillo: none;
+    --animate-aurora-desplazar: none;
+    --animate-girar-lento: none;
+  }
+}
+
+:root[data-movimiento="reducido"] {
+  --animate-aparecer-arriba: none;
+  --animate-brillo-shimmer: none;
+  --animate-pulso-anillo: none;
+  --animate-aurora-desplazar: none;
+  --animate-girar-lento: none;
+}

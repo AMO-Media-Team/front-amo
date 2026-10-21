@@ -1,0 +1,16 @@
+import {
+  EsqueletoCuerpoReporte,
+  EsqueletoEncabezadoReporte,
+  EsqueletoFiltrosReporte,
+} from "@/features/reportes/components/esqueletos"
+
+/** Carga de un reporte: encabezado con exportación, filtros y cuerpo. */
+export default function CargandoReporte() {
+  return (
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <EsqueletoEncabezadoReporte />
+      <EsqueletoFiltrosReporte />
+      <EsqueletoCuerpoReporte />
+    </div>
+  )
+}
