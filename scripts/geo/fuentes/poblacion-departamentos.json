@@ -1,0 +1,141 @@
+{
+  "anio": 2025,
+  "fuente": "DANE — Proyecciones de población y estudios demográficos (PPED): población departamental por área geográfica 2018-2050, actualizada el 30 de julio de 2025",
+  "url": "https://www.dane.gov.co/files/censo2018/proyecciones-de-poblacion/Departamental/PPED-AreaDep-2018-2050_VP.xlsx",
+  "hoja": "PobDepartamentalxÁrea",
+  "consultado": "2026-09-30",
+  "valores": {
+    "11": {
+      "nombre": "Bogotá, D.C.",
+      "poblacion": 7942867
+    },
+    "13": {
+      "nombre": "Bolívar",
+      "poblacion": 2241282
+    },
+    "15": {
+      "nombre": "Boyacá",
+      "poblacion": 1290393
+    },
+    "17": {
+      "nombre": "Caldas",
+      "poblacion": 1054450
+    },
+    "18": {
+      "nombre": "Caquetá",
+      "poblacion": 429041
+    },
+    "19": {
+      "nombre": "Cauca",
+      "poblacion": 1599148
+    },
+    "20": {
+      "nombre": "Cesar",
+      "poblacion": 1469159
+    },
+    "23": {
+      "nombre": "Córdoba",
+      "poblacion": 1992907
+    },
+    "25": {
+      "nombre": "Cundinamarca",
+      "poblacion": 3535067
+    },
+    "27": {
+      "nombre": "Chocó",
+      "poblacion": 593106
+    },
+    "41": {
+      "nombre": "Huila",
+      "poblacion": 1208728
+    },
+    "44": {
+      "nombre": "La Guajira",
+      "poblacion": 1066679
+    },
+    "47": {
+      "nombre": "Magdalena",
+      "poblacion": 1544507
+    },
+    "50": {
+      "nombre": "Meta",
+      "poblacion": 1156405
+    },
+    "52": {
+      "nombre": "Nariño",
+      "poblacion": 1713586
+    },
+    "54": {
+      "nombre": "Norte de Santander",
+      "poblacion": 1709289
+    },
+    "63": {
+      "nombre": "Quindío",
+      "poblacion": 557884
+    },
+    "66": {
+      "nombre": "Risaralda",
+      "poblacion": 1003225
+    },
+    "68": {
+      "nombre": "Santander",
+      "poblacion": 2398303
+    },
+    "70": {
+      "nombre": "Sucre",
+      "poblacion": 1034102
+    },
+    "73": {
+      "nombre": "Tolima",
+      "poblacion": 1386410
+    },
+    "76": {
+      "nombre": "Valle del Cauca",
+      "poblacion": 4708393
+    },
+    "81": {
+      "nombre": "Arauca",
+      "poblacion": 279191
+    },
+    "85": {
+      "nombre": "Casanare",
+      "poblacion": 473165
+    },
+    "86": {
+      "nombre": "Putumayo",
+      "poblacion": 390742
+    },
+    "88": {
+      "nombre": "Archipiélago de San Andrés, Providencia y Santa Catalina",
+      "poblacion": 63438
+    },
+    "91": {
+      "nombre": "Amazonas",
+      "poblacion": 85057
+    },
+    "94": {
+      "nombre": "Guainía",
+      "poblacion": 59706
+    },
+    "95": {
+      "nombre": "Guaviare",
+      "poblacion": 84696
+    },
+    "97": {
+      "nombre": "Vaupés",
+      "poblacion": 44142
+    },
+    "99": {
+      "nombre": "Vichada",
+      "poblacion": 148738
+    },
+    "05": {
+      "nombre": "Antioquia",
+      "poblacion": 6928372
+    },
+    "08": {
+      "nombre": "Atlántico",
+      "poblacion": 2865034
+    }
+  }
+}

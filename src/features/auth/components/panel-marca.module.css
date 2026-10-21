@@ -1,0 +1,111 @@
+/*
+ * Fondo del panel de marca del ingreso: manchas Aurora difuminadas que
+ * derivan muy despacio sobre el neutro más profundo. Siempre oscuro (en
+ * ambos temas): es una superficie de marca, no de interfaz.
+ */
+
+.fondo {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 80% at 100% 0%,
+      rgb(91 108 240 / 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 70% at 0% 100%,
+      rgb(140 102 238 / 0.2),
+      transparent 62%
+    ),
+    #0b0913;
+}
+
+.mancha {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  will-change: transform;
+  animation: derivar 24s ease-in-out infinite alternate;
+}
+
+.manchaLila {
+  top: -14%;
+  right: -12%;
+  width: 34rem;
+  height: 34rem;
+  background: #6b4fe0;
+  opacity: 0.42;
+}
+
+.manchaIndigo {
+  bottom: -16%;
+  left: -14%;
+  width: 30rem;
+  height: 30rem;
+  background: #4452d6;
+  opacity: 0.4;
+  animation-duration: 29s;
+  animation-delay: -9s;
+}
+
+.manchaOrquidea {
+  top: 36%;
+  left: 38%;
+  width: 20rem;
+  height: 20rem;
+  background: #b06cf0;
+  opacity: 0.2;
+  animation-duration: 34s;
+  animation-delay: -15s;
+}
+
+/* Rejilla de puntos que se desvanece hacia los bordes. */
+.puntos {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgb(237 231 254 / 0.12) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 60% 45%,
+    #000 30%,
+    transparent 80%
+  );
+}
+
+/* Viñeta inferior para que el texto conserve contraste sobre el mapa. */
+.vineta {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 45%;
+  background: linear-gradient(
+    to top,
+    #0b0913 12%,
+    rgb(11 9 19 / 0.6) 55%,
+    transparent
+  );
+}
+
+@keyframes derivar {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-7%, 6%, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(5%, -4%, 0) scale(0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mancha {
+    animation: none;
+  }
+}
