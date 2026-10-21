@@ -6,8 +6,8 @@
  * 1. `storage`   — borra de Storage los objetos de las entidades demo y las
  *    capturas compartidas `evidencias/muestras/`. Va ANTES del SQL porque
  *    necesita las filas para saber qué carpetas `{tipo}/{id}` son demo.
- * 2. `sql`       — imprime la transacción de purga. Se ejecuta por MCP
- *    `execute_sql`, el único canal con `session_user = postgres`: este
+ * 2. `sql`       — imprime la transacción de purga. Se ejecuta como
+ *    `postgres` sobre el proyecto de desarrollo (único canal con `session_user = postgres`): este
  *    script no puede correrla (por PostgREST los interruptores no aplican).
  * 3. `usuarios`  — borra de Auth las cuentas demo (cascada a `perfiles`). Se
  *    niega a correr mientras el paso 2 no haya desvinculado sus organizaciones.
@@ -21,6 +21,7 @@ import {
   crearClienteServicio,
   ErrorBootstrap,
 } from "../bootstrap/supabase"
+import { exigirFueraDeProduccion } from "../bootstrap/produccion"
 import { esCorreoDemo } from "./cuentas"
 import { enParalelo, exigirEntornoLocal } from "./entorno"
 import {
@@ -280,7 +281,7 @@ async function purgarStorage(servicio: ClienteSupabase): Promise<void> {
     MUESTRAS_DEMO.carpeta
   )
   process.stderr.write(
-    `Objetos de Storage borrados: ${borrados}.\nSiguiente paso: pnpm demo:purgar sql (se ejecuta por MCP).\n`
+    `Objetos de Storage borrados: ${borrados}.\nSiguiente paso: pnpm demo:purgar sql (se ejecuta como postgres en desarrollo).\n`
   )
 }
 
@@ -323,7 +324,7 @@ async function borrarUsuarios(servicio: ClienteSupabase): Promise<void> {
   const vinculados = perfiles.filter((perfil) => perfil.vinculado).length
   if (vinculados > 0) {
     throw new ErrorBootstrap(
-      `${vinculados} cuentas demo siguen ligadas a su organización: ejecuta antes la purga SQL por MCP (pnpm demo:purgar sql).`
+      `${vinculados} cuentas demo siguen ligadas a su organización: ejecuta antes la purga SQL como postgres en desarrollo (pnpm demo:purgar sql).`
     )
   }
   await enParalelo(perfiles, async (perfil) => {
@@ -404,7 +405,7 @@ async function verificar(servicio: ClienteSupabase): Promise<void> {
 function imprimirSql(): void {
   process.stdout.write(sqlPurga())
   process.stderr.write(
-    "Ejecuta esa transacción por MCP execute_sql (como owner) y después supabase/seed/demo/99_limpieza.sql.\n" +
+    "Ejecuta esa transacción como owner (postgres) sobre el proyecto de desarrollo y después supabase/seed/demo/99_limpieza.sql.\n" +
       "Luego: pnpm demo:purgar usuarios y pnpm demo:purgar verificar.\n"
   )
 }
@@ -422,6 +423,7 @@ async function main(): Promise<void> {
     )
   }
   const entorno = cargarEntorno(ARCHIVO_ENV)
+  exigirFueraDeProduccion(entorno.url, "pnpm demo:purgar")
   exigirEntornoLocal(entorno)
   const servicio = crearClienteServicio(entorno)
   if (comando === "storage") return purgarStorage(servicio)

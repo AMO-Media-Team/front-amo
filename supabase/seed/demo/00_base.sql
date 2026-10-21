@@ -1,5 +1,5 @@
 -- Datos demo · paso 00 · tablas de plan y utilidades (docs/modelo-datos.md §10)
--- Se ejecuta UNA vez como owner (MCP execute_sql). Todo vive en `private` con prefijo `demo_` y se borra al final
+-- Se ejecuta UNA vez como owner sobre el proyecto de DESARROLLO (nunca en producción: README.md). Todo vive en `private` con prefijo `demo_` y se borra al final
 -- con 99_limpieza.sql. Nada de esto es alcanzable por la API: `private` no está expuesto y las funciones nacen sin
 -- EXECUTE para PUBLIC (default privileges de la migración 1); además se revocan explícitamente.
 

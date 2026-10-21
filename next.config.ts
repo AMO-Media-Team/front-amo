@@ -10,8 +10,6 @@ import {
   validarEnvServidor,
 } from "./src/lib/env-esquema"
 
-const SUPABASE_PROYECTO = "zygfqfvqwfvhbirmjojp"
-
 /**
  * La CSP con nonce la emite `src/proxy.ts` (necesita un valor por solicitud);
  * aquí solo van las cabeceras estáticas.
@@ -43,6 +41,16 @@ const CACHE_GEODATOS = [
     value: "public, max-age=86400, stale-while-revalidate=604800",
   },
 ]
+
+/**
+ * Imágenes de Storage del proyecto del entorno. Sin una URL válida no se
+ * admite ninguna (en desarrollo y `typegen` la validación solo avisa).
+ */
+function patronesStorage(): URL[] {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url || !URL.canParse(url)) return []
+  return [new URL("/storage/v1/object/**", url)]
+}
 
 /** Mensajes de todos los grupos inválidos (públicas y de servidor) a la vez. */
 function erroresDeEntorno(): string[] {
@@ -86,11 +94,7 @@ export default function configuracion(fase: string): NextConfig {
     },
     images: {
       qualities: [75, 90],
-      remotePatterns: [
-        new URL(
-          `https://${SUPABASE_PROYECTO}.supabase.co/storage/v1/object/**`
-        ),
-      ],
+      remotePatterns: patronesStorage(),
     },
     async headers() {
       return [

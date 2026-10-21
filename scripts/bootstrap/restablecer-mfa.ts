@@ -22,6 +22,7 @@ import {
   cargarEntorno,
   type ClienteSupabase,
   crearClienteServicio,
+  describirProyecto,
   enlaceConfirmacion,
   ErrorBootstrap,
 } from "./supabase"
@@ -103,9 +104,12 @@ async function main(): Promise<void> {
   const email = process.argv[2] ?? entorno.superadminEmail
   if (!email) {
     throw new ErrorBootstrap(
-      "Indica el correo o define SUPERADMIN_EMAIL en .env.local."
+      "Indica el correo o define SUPERADMIN_EMAIL en el archivo de entorno."
     )
   }
+  process.stderr.write(
+    `Proyecto ${describirProyecto(entorno)} · enlaces hacia ${entorno.sitioUrl}\n`
+  )
 
   const servicio = crearClienteServicio(entorno)
   const usuario = await buscarUsuarioPorEmail(servicio, email)

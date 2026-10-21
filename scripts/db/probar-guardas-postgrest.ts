@@ -8,6 +8,8 @@
  */
 import { existsSync, readFileSync } from "node:fs"
 
+import { exigirFueraDeProduccion } from "../bootstrap/produccion"
+
 interface Caso {
   readonly nombre: string
   readonly ruta: string
@@ -47,6 +49,11 @@ async function mensajeDe(respuesta: Response): Promise<string> {
 
 async function main(): Promise<void> {
   const env = variables()
+  // Si una guarda fallara, sus peticiones de escritura prosperarían.
+  exigirFueraDeProduccion(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    "La prueba de guardas por PostgREST"
+  )
   const base = `${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1`
   const servicio = {
     apikey: env.SUPABASE_SECRET_KEY,

@@ -31,6 +31,7 @@ import {
   enlaceConfirmacion,
   cargarEntorno,
   actualizarPerfil,
+  describirProyecto,
   ErrorBootstrap,
   idDeRol,
 } from "./supabase"
@@ -158,7 +159,13 @@ async function descartarRegistroExterno(
 async function main(): Promise<void> {
   const entorno = cargarEntorno()
   const email = entorno.superadminEmail
-  if (!email) throw new ErrorBootstrap("Define SUPERADMIN_EMAIL en .env.local.")
+  if (!email)
+    throw new ErrorBootstrap(
+      "Define SUPERADMIN_EMAIL en el archivo de entorno."
+    )
+  process.stderr.write(
+    `Proyecto ${describirProyecto(entorno)} · enlaces hacia ${entorno.sitioUrl}\n`
+  )
 
   const servicio = crearClienteServicio(entorno)
   const existente = await descartarRegistroExterno(

@@ -3,7 +3,7 @@
 -- tablas de plan (demo_control, demo_usuarios, demo_anunciantes, demo_medios, demo_cuentas, demo_eventos, demo_avisos).
 -- No toca ningún dato de `public`: los datos demo se borran con la purga (README.md, «Purgar»).
 --
--- Cuándo ejecutarlo (MCP execute_sql, como owner):
+-- Cuándo ejecutarlo (como owner, sobre el proyecto de desarrollo):
 --   · siempre después de la purga, antes de volver a generar (demo_actores se niega a correr si demo_medios tiene filas);
 --   · opcionalmente al terminar una generación, cuando ya no se vayan a ajustar los datos. Mientras exista, el andamiaje
 --     conserva el perfil de conexión de cada usuario y los factores latentes de cada medio, y evita generar dos veces.

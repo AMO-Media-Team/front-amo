@@ -8,8 +8,9 @@
  *   Idempotente. El rol, la organización y el estado los fija después
  *   `private.demo_actores` (SQL con `amo.modo_carga`).
  * - `pasos`: escribe `supabase/seed/demo/pasos/*.sql`, una transacción por
- *   paso, en el orden en que se ejecutan por MCP `execute_sql` (el único
- *   canal con `session_user = postgres`; ver README).
+ *   paso, en el orden en que se ejecutan como `postgres` sobre el proyecto
+ *   de desarrollo (único canal con `session_user = postgres`; nunca el MCP
+ *   del repositorio, que apunta a producción; ver README).
  *
  * No imprime contraseñas ni claves. Fuera de un entorno local exige `--forzar`.
  */
@@ -19,6 +20,7 @@ import { join } from "node:path"
 import { agregarVariables } from "../bootstrap/archivo-env"
 import { generarContrasena } from "../bootstrap/contrasena"
 import { enrolarTotpEnSesion } from "../bootstrap/mfa"
+import { exigirFueraDeProduccion } from "../bootstrap/produccion"
 import {
   cargarEntorno,
   type ClienteSupabase,
@@ -150,6 +152,7 @@ async function enrolarTotp(
 
 async function generarUsuarios(): Promise<void> {
   const entorno = cargarEntorno(ARCHIVO_ENV)
+  exigirFueraDeProduccion(entorno.url, "pnpm demo:generar")
   exigirEntornoLocal(entorno)
   const servicio = crearClienteServicio(entorno)
   const cuentas = cuentasDemo()
@@ -213,7 +216,7 @@ async function generarUsuarios(): Promise<void> {
   }
   process.stderr.write(
     `Cuentas demo: ${cuentas.length} (${creadas} nuevas). Variables agregadas a ${ARCHIVO_ENV}: ${agregadas.length > 0 ? agregadas.join(", ") : "ninguna"}.\n` +
-      "Siguiente paso: ejecutar supabase/seed/demo por MCP (ver README).\n"
+      "Siguiente paso: ejecutar supabase/seed/demo como postgres sobre el proyecto de desarrollo (ver README).\n"
   )
 }
 

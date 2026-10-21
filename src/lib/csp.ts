@@ -8,11 +8,6 @@
  * next/font, input-otp y number-flow inyectan estilos en línea.
  */
 
-const SUPABASE_PROYECTO = "zygfqfvqwfvhbirmjojp"
-const SUPABASE = `https://${SUPABASE_PROYECTO}.supabase.co`
-const SUPABASE_WS = `wss://${SUPABASE_PROYECTO}.supabase.co`
-// Subidas reanudables (TUS): el endpoint directo de Storage.
-const SUPABASE_STORAGE = `https://${SUPABASE_PROYECTO}.storage.supabase.co`
 const MAPBOX_API = "https://api.mapbox.com"
 const MAPBOX_EVENTOS = "https://events.mapbox.com"
 const MAPBOX_TESELAS = "https://*.tiles.mapbox.com"
@@ -25,6 +20,11 @@ export type ModoCsp = "enforce" | "report"
 
 export interface OpcionesCsp {
   nonce: string
+  /**
+   * `NEXT_PUBLIC_SUPABASE_URL`: de ahí salen los orígenes de Supabase, así
+   * que la política sigue al proyecto del entorno (desarrollo o producción).
+   */
+  supabaseUrl: string
   /** `next dev`: React necesita `eval` para reconstruir pilas de error. */
   desarrollo: boolean
   /**
@@ -41,7 +41,48 @@ type Directivas = ReadonlyArray<
   readonly [directiva: string, ...fuentes: string[]]
 >
 
-function directivas({ nonce, desarrollo, https }: OpcionesCsp): Directivas {
+interface OrigenesSupabase {
+  /** REST, Auth y Storage (también las URL firmadas de imágenes). */
+  readonly http: string
+  /** Realtime. */
+  readonly websocket: string
+  /** Subidas reanudables (TUS): el endpoint directo de Storage, solo en la nube. */
+  readonly storage: string | null
+}
+
+const PROYECTO_EN_LA_NUBE = /^([a-z0-9]+)\.supabase\.co$/
+
+/**
+ * Orígenes que el navegador necesita para hablar con el proyecto de Supabase.
+ * Sin una URL válida no se permite ninguno: la política falla cerrada.
+ */
+export function origenesSupabase(supabaseUrl: string): OrigenesSupabase | null {
+  if (!URL.canParse(supabaseUrl)) return null
+  const url = new URL(supabaseUrl)
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null
+  const ref = PROYECTO_EN_LA_NUBE.exec(url.hostname)?.[1]
+  return {
+    http: url.origin,
+    websocket: `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`,
+    storage: ref ? `https://${ref}.storage.supabase.co` : null,
+  }
+}
+
+function directivas({
+  nonce,
+  supabaseUrl,
+  desarrollo,
+  https,
+}: OpcionesCsp): Directivas {
+  const supabase = origenesSupabase(supabaseUrl)
+  const supabaseImagenes = supabase ? [supabase.http] : []
+  const supabaseConexiones = supabase
+    ? [
+        supabase.http,
+        supabase.websocket,
+        ...(supabase.storage ? [supabase.storage] : []),
+      ]
+    : []
   const scripts = [
     "'self'",
     `'nonce-${nonce}'`,
@@ -60,7 +101,7 @@ function directivas({ nonce, desarrollo, https }: OpcionesCsp): Directivas {
       "'self'",
       "data:",
       "blob:",
-      SUPABASE,
+      ...supabaseImagenes,
       MAPBOX_API,
       MAPBOX_TESELAS,
     ],
@@ -68,9 +109,7 @@ function directivas({ nonce, desarrollo, https }: OpcionesCsp): Directivas {
     [
       "connect-src",
       "'self'",
-      SUPABASE,
-      SUPABASE_WS,
-      SUPABASE_STORAGE,
+      ...supabaseConexiones,
       MAPBOX_API,
       MAPBOX_EVENTOS,
       MAPBOX_TESELAS,
