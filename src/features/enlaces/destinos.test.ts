@@ -60,6 +60,22 @@ describe("destinoDe · equipo AMO", () => {
     ).toBe(`/operacion/medios/${PADRE}?pestana=documentos`)
   })
 
+  it("quien verifica anunciantes abre su expediente; quien ve ofertas, su ficha", () => {
+    const verifica = interno(["anunciantes.verificar"])
+    expect(destinoDe("anunciantes", ID, verifica)).toBe(
+      `/operacion/anunciantes/${ID}?pestana=verificacion`
+    )
+    expect(
+      destinoDe("documentos_anunciante", ID, verifica, { anuncianteId: PADRE })
+    ).toBe(`/operacion/anunciantes/${PADRE}?pestana=verificacion`)
+    expect(
+      destinoDe("documentos_anunciante", ID, interno(), { anuncianteId: PADRE })
+    ).toBe(`/operacion/anunciantes/${PADRE}?pestana=documentos`)
+    expect(
+      destinoDe("ofertas", ID, interno(["ofertas.ver"]), { campanaId: PADRE })
+    ).toBe(`/operacion/ofertas/${ID}`)
+  })
+
   it("sin relacionados visibles no hay destino", () => {
     expect(destinoDe("publicaciones", ID, interno(), {})).toBeNull()
     expect(destinoDe("ofertas", ID, interno())).toBeNull()
@@ -76,6 +92,19 @@ describe("destinoDe · portales externos", () => {
       "/mi-medio/cuentas"
     )
     expect(destinoDe("asignaciones", ID, medio)).toBe("/inicio")
+  })
+
+  it("el anunciante va a su empresa, sus campañas y sus ofertas", () => {
+    expect(destinoDe("anunciantes", ID, anunciante)).toBe("/empresa")
+    expect(destinoDe("documentos_anunciante", ID, anunciante)).toBe(
+      "/empresa/documentos"
+    )
+    expect(destinoDe("campanas", ID, anunciante)).toBe(`/campanas/${ID}`)
+    expect(destinoDe("ofertas", ID, anunciante, { campanaId: PADRE })).toBe(
+      `/campanas/${PADRE}/ofertas/${ID}`
+    )
+    expect(destinoDe("ofertas", ID, anunciante)).toBe("/campanas")
+    expect(destinoDe("facturas", ID, anunciante)).toBe("/inicio")
   })
 
   it("nunca manda a un externo a una ruta de operación", () => {

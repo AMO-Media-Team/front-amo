@@ -6,11 +6,13 @@ import {
 } from "./scripts/bootstrap/produccion"
 import {
   PROYECTO_ALTA_MEDIO,
+  PROYECTO_ANUNCIANTE,
   PROYECTO_ESCRITORIO,
   PROYECTO_MOVIL,
   PROYECTO_PREPARACION,
   PROYECTO_TABLET,
   SPECS_ALTA_MEDIO,
+  SPECS_ANUNCIANTE,
 } from "./e2e/utilidades/proyectos"
 
 /**
@@ -91,6 +93,19 @@ export default defineConfig({
       name: PROYECTO_ALTA_MEDIO,
       dependencies: [PROYECTO_PREPARACION],
       testMatch: SPECS_ALTA_MEDIO,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // Las pruebas que escriben del portal del anunciante, en serie (comparten
+      // las cuentas y la empresa de prueba).
+      name: PROYECTO_ANUNCIANTE,
+      dependencies: [PROYECTO_PREPARACION],
+      testMatch: SPECS_ANUNCIANTE,
       workers: 1,
       use: {
         ...devices["Desktop Chrome"],

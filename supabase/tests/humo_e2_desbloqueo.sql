@@ -103,14 +103,31 @@ begin
   end;
   r := r || jsonb_build_object('n03_extranjero_sin_dv', case when v_e = 'ok' then 'true'::jsonb else to_jsonb(v_e) end);
 
-  -- n04: el usuario del anunciante (JWT authenticated, sin anunciantes.editar) no corrige su NIT.
+  -- n04: el usuario del anunciante (JWT authenticated, sin anunciantes.editar) corrige su NIT mientras la empresa no
+  -- está verificada (fase 2: atiende un rechazo), pero no después.
   perform set_config('request.jwt.claims', jsonb_build_object('sub', u_anu, 'role', 'authenticated')::text, true);
+  begin
+    update public.anunciantes set nit = '987650001', digito_verificacion = private.digito_verificacion_nit('987650001')
+    where id = an_id;
+    v_e := 'ok';
+  exception when others then v_e := sqlerrm;
+  end;
+  r := r || jsonb_build_object('n04_propietario_corrige_nit_sin_verificar', case when v_e = 'ok' then 'true'::jsonb else to_jsonb(v_e) end);
+  perform set_config('amo.transicion_autorizada', 'on', true);
+  update public.anunciantes set estado_verificacion = 'VERIFICADO' where id = an_id;
+  perform set_config('amo.transicion_autorizada', '', true);
   begin
     update public.anunciantes set nit = '860002183', digito_verificacion = '9' where id = an_id;
     v_e := 'NO FALLÓ';
   exception when others then v_e := sqlerrm;
   end;
-  r := r || jsonb_build_object('n04_propietario_no_cambia_nit', case when v_e = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(v_e) end);
+  r := r || jsonb_build_object('n04_propietario_no_cambia_nit_verificado', case when v_e = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(v_e) end);
+  begin
+    update public.anunciantes set razon_social = 'Otra Razón S.A.S.' where id = an_id;
+    v_e := 'NO FALLÓ';
+  exception when others then v_e := sqlerrm;
+  end;
+  r := r || jsonb_build_object('n04_propietario_no_cambia_razon_verificada', case when v_e = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(v_e) end);
   -- n05: …pero sí su nombre comercial (la guarda solo mira la identificación).
   begin
     update public.anunciantes set nombre_comercial = 'Humo E2 Renovado' where id = an_id;

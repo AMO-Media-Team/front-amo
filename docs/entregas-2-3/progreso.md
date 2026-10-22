@@ -139,4 +139,6 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   errores de consola ni de CSP; las rutas privadas redirigen a `/ingresar?next=`. `pnpm prod:config-pruebas`
   (`scripts/produccion/`) probado en la base local (simular, aplicar, reaplicar sin cambios, revertir; bitácora con actor
   SUPERADMIN y origen APP). Simulación contra producción: 3 parámetros (anticipación 24→0 h, cortes → `["H24"]`,
-  creativo 50→25 MB) y los 4 textos legales `0.1-PRUEBA`. Pendiente aplicarlo en producción (lo ejecuta Andrés).
+  creativo 50→25 MB) y los 4 textos legales `0.1-PRUEBA`. Andrés lo aplicó en producción; verificado por MCP (solo
+  lectura): valores nuevos, 4 versiones publicadas y vigentes, 11 entradas de bitácora (SUPERADMIN, APP) y respaldo en
+  `context/respaldos/configuracion-pruebas-oriuuuaczpncmtglfgpv.json` (0600).

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
 // Origen: Supabase local (supabase start), esquema public,
-// última migración aplicada: 20261022030525_e2_notificaciones_negocio.
+// última migración aplicada: 20261022193647_e2_anunciantes_ofertas.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -166,6 +166,7 @@ export type Database = {
           datos_facturacion: Json
           deleted_at: string | null
           digito_verificacion: string | null
+          enviado_verificacion_at: string | null
           es_demo: boolean
           estado_verificacion: Database["public"]["Enums"]["anunciante_estado"]
           id: string
@@ -191,6 +192,7 @@ export type Database = {
           datos_facturacion?: Json
           deleted_at?: string | null
           digito_verificacion?: string | null
+          enviado_verificacion_at?: string | null
           es_demo?: boolean
           estado_verificacion?: Database["public"]["Enums"]["anunciante_estado"]
           id?: string
@@ -216,6 +218,7 @@ export type Database = {
           datos_facturacion?: Json
           deleted_at?: string | null
           digito_verificacion?: string | null
+          enviado_verificacion_at?: string | null
           es_demo?: boolean
           estado_verificacion?: Database["public"]["Enums"]["anunciante_estado"]
           id?: string
@@ -955,6 +958,7 @@ export type Database = {
       }
       creativos: {
         Row: {
+          activado_at: string | null
           copy_sugerido: string | null
           creado_por: string | null
           created_at: string
@@ -970,6 +974,7 @@ export type Database = {
           vigente: boolean
         }
         Insert: {
+          activado_at?: string | null
           copy_sugerido?: string | null
           creado_por?: string | null
           created_at?: string
@@ -985,6 +990,7 @@ export type Database = {
           vigente?: boolean
         }
         Update: {
+          activado_at?: string | null
           copy_sugerido?: string | null
           creado_por?: string | null
           created_at?: string
@@ -2493,6 +2499,54 @@ export type Database = {
           },
         ]
       }
+      oferta_historial: {
+        Row: {
+          actor_id: string | null
+          actor_tipo: Database["public"]["Enums"]["transicion_actor"]
+          comentario: string | null
+          created_at: string
+          desde: Database["public"]["Enums"]["oferta_estado"]
+          hacia: Database["public"]["Enums"]["oferta_estado"]
+          id: string
+          oferta_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_tipo: Database["public"]["Enums"]["transicion_actor"]
+          comentario?: string | null
+          created_at?: string
+          desde: Database["public"]["Enums"]["oferta_estado"]
+          hacia: Database["public"]["Enums"]["oferta_estado"]
+          id?: string
+          oferta_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_tipo?: Database["public"]["Enums"]["transicion_actor"]
+          comentario?: string | null
+          created_at?: string
+          desde?: Database["public"]["Enums"]["oferta_estado"]
+          hacia?: Database["public"]["Enums"]["oferta_estado"]
+          id?: string
+          oferta_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oferta_historial_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oferta_historial_oferta_id_fkey"
+            columns: ["oferta_id"]
+            isOneToOne: false
+            referencedRelation: "ofertas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       oferta_vistas: {
         Row: {
           id: number
@@ -3657,6 +3711,14 @@ export type Database = {
         }
         Returns: string
       }
+      activar_creativo_srv: {
+        Args: {
+          p_actor_id: string
+          p_creativo_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
       activar_perfil_srv: { Args: { p_usuario_id: string }; Returns: undefined }
       actividad_heatmap: {
         Args: { p_desde: string; p_fuente?: string; p_hasta: string }
@@ -3768,6 +3830,10 @@ export type Database = {
           variacion: number
         }[]
       }
+      disponible_campana: {
+        Args: { p_campana_id: string; p_excluir_oferta?: string }
+        Returns: number
+      }
       editar_privado_srv: {
         Args: {
           p_actor_id: string
@@ -3809,6 +3875,14 @@ export type Database = {
         Args: { p_actor_id: string; p_factura_id: string; p_session_id: string }
         Returns: Json
       }
+      enviar_anunciante_a_verificacion_srv: {
+        Args: {
+          p_actor_id: string
+          p_anunciante_id: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       enviar_medio_a_verificacion_srv: {
         Args: { p_actor_id: string; p_medio_id: string; p_session_id: string }
         Returns: undefined
@@ -3820,7 +3894,9 @@ export type Database = {
           p_departamentos: string[]
           p_exclusividad_dias?: number
           p_formato_id: string
+          p_medios_excluidos?: string[]
           p_municipios: string[]
+          p_publicaciones?: number
           p_seguidores_minimos: number
         }
         Returns: {
@@ -3977,6 +4053,14 @@ export type Database = {
           nombre: string
           ultima_aceptacion_at: string
           ultima_actividad_at: string
+        }[]
+      }
+      medios_para_exclusion: {
+        Args: { p_ids?: string[]; p_limite?: number; p_texto?: string }
+        Returns: {
+          id: string
+          municipio: string
+          nombre: string
         }[]
       }
       medios_publico: {

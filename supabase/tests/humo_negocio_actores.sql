@@ -86,13 +86,14 @@ begin
   get diagnostics v_n = row_count;                                      r := r || jsonb_build_object('a5_edita_su_empresa', v_n = 1);
   update public.anunciantes set nombre_comercial = 'Secuestro' where id = an_b;
   get diagnostics v_n = row_count;                                      r := r || jsonb_build_object('a6_no_edita_la_ajena', v_n = 0);
-  -- Desde 20261022024336 la columna tiene GRANT (la corrige el equipo AMO) y el trigger frena al propio anunciante.
+  -- Desde 20261022024336 la columna tiene GRANT; sin verificar, el propio anunciante la corrige (20261022193647) pero
+  -- el dígito de verificación debe cuadrar. Verificada, solo el equipo AMO (humo_e2_desbloqueo n04).
   begin
     update public.anunciantes set nit = '900000999' where id = an_a;
-    r := r || jsonb_build_object('a7_nit_solo_equipo_amo', 'NO FALLÓ');
+    r := r || jsonb_build_object('a7_nit_exige_dv', 'NO FALLÓ');
   exception when others then
-    r := r || jsonb_build_object('a7_nit_solo_equipo_amo',
-      case when sqlerrm = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(sqlerrm) end);
+    r := r || jsonb_build_object('a7_nit_exige_dv',
+      case when sqlerrm = 'AMO_CONFIG_INVALIDA' then 'true'::jsonb else to_jsonb(sqlerrm) end);
   end;
   begin
     update public.anunciantes set deleted_at = now() where id = an_a;

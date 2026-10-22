@@ -91,7 +91,9 @@ begin
          (o2, c1, an_a, 'Oferta Diez publicada', f_post, 'INSTAGRAM', 5000000, 1, '{D7}', now() + interval '3 days',
           now() + interval '10 days', now() + interval '2 days', 'PUBLICADA', now());
   insert into public.creativos (id, oferta_id, tipo, version, vigente)
-  values (cr1, o1, 'IMAGEN', 1, true), (cr2, o2, 'IMAGEN', 1, false), (cr2v, o2, 'IMAGEN', 2, true);
+  values (cr1, o1, 'IMAGEN', 1, true), (cr2, o2, 'IMAGEN', 1, true), (cr2v, o2, 'IMAGEN', 2, false);
+  -- e2_anunciantes_ofertas: la v2 de la oferta publicada está pendiente (sin activar).
+  update public.creativos set activado_at = null where id = cr2v;
   insert into public.asignaciones (id, oferta_id, campana_id, anunciante_id, medio_id, cuenta_social_id, plataforma, slot, estado,
                                    aceptada_at, contenido_descargado_at, fecha_limite_publicacion, publicaciones, monto_bruto,
                                    tarifa_id, franja_id)
@@ -227,13 +229,15 @@ begin
     (select count(*) = 2 from storage.objects where bucket_id = 'documentos'));
   execute 'reset role';
 
-  -- Owner: creativo de la oferta publicada para probar la lectura del medio.
-  insert into storage.objects (bucket_id, name) values ('creativos', 'oferta/' || o2 || '/' || cr2v || '/9-owner.jpg');
+  -- Owner: un archivo de la versión vigente y otro de la pendiente, para probar la lectura del medio.
+  insert into storage.objects (bucket_id, name) values ('creativos', 'oferta/' || o2 || '/' || cr2 || '/9-owner.jpg'),
+                                                       ('creativos', 'oferta/' || o2 || '/' || cr2v || '/9-owner.jpg');
 
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
   r := r || jsonb_build_object('c12_medio_lee_creativo_descargado',
-    (select count(*) >= 2 from storage.objects where bucket_id = 'creativos' and name like 'oferta/' || o2 || '/%')
+    (select count(*) = 1 from storage.objects where bucket_id = 'creativos' and name like 'oferta/' || o2 || '/' || cr2 || '/%')
+    and not exists (select 1 from storage.objects where bucket_id = 'creativos' and name like 'oferta/' || o2 || '/' || cr2v || '/%')
     and not exists (select 1 from storage.objects where bucket_id = 'creativos' and name like 'oferta/' || o1 || '/%'));
   execute 'reset role';
   perform set_config('request.jwt.claims', c_meb, true);

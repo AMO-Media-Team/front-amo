@@ -133,7 +133,7 @@ begin
   c_med := jsonb_build_object('sub', u_med, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_med)::text;
   perform set_config('amo.ctx_confiable', 'no', true);
 
-  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 141 from private.transiciones_estado));
+  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 145 from private.transiciones_estado));
 
   -- ── (a) Perfiles: la regla de M3 sigue en el transicionar_srv definitivo ─────────────────────────────
   perform set_config('amo.actor_id', u_adm::text, true);
@@ -247,8 +247,13 @@ begin
   exception when check_violation then
     r := r || jsonb_build_object('b10_ruta_creativo_ligada', true);
   end;
-  insert into public.creativo_archivos (creativo_id, archivo_path, mime, tamano_bytes)
-  values (cr1, 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', 'image/jpeg', 1000);
+  -- Desde e2_anunciantes_ofertas el archivo cumple su formato (POST_FEED 1:1), trae su SHA-256 y existe en Storage.
+  execute 'reset role';
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('creativos', 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', jsonb_build_object('size', 1000, 'mimetype', 'image/jpeg'));
+  execute 'set local role authenticated';
+  insert into public.creativo_archivos (creativo_id, archivo_path, mime, tamano_bytes, ancho, alto, sha256)
+  values (cr1, 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', 'image/jpeg', 1000, 1080, 1080, repeat('a', 64));
   execute 'reset role';
   r := r || jsonb_build_object('b9_creativo_v1', (select version = 1 and vigente and creado_por = u_ana from public.creativos where id = cr1));
   perform set_config('request.jwt.claims', c_srv, true);

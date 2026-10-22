@@ -6,8 +6,10 @@
 import {
   BadgeCheck,
   Bell,
+  BriefcaseBusiness,
   Building2,
   ChartColumn,
+  ClipboardCheck,
   Fingerprint,
   Handshake,
   House,
@@ -59,6 +61,12 @@ export interface ItemNavegacion {
    * su miga. Sin entrada, el título sale del segmento (ver `migas`).
    */
   subpaginas?: Readonly<Record<string, string>>
+  /**
+   * `false`: la sección existe para las migas y `/ir`, pero no se lista en la
+   * barra lateral ni en ⌘K (p. ej. la ficha interna de una oferta, a la que se
+   * llega desde la moderación o desde su campaña).
+   */
+  enMenu?: false
 }
 
 export type IdGrupoNavegacion =
@@ -76,6 +84,7 @@ export interface GrupoNavegacion {
 
 const SOLO_INTERNOS: readonly TipoRol[] = ["ADMIN"]
 const SOLO_MEDIOS: readonly TipoRol[] = ["MEDIO"]
+const SOLO_ANUNCIANTES: readonly TipoRol[] = ["ANUNCIANTE"]
 
 export const NAVEGACION: readonly GrupoNavegacion[] = [
   {
@@ -164,6 +173,41 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
           nivel: "Nivel",
         },
       },
+      {
+        id: "mis-campanas",
+        titulo: "Mis campañas",
+        href: ruta("/campanas"),
+        icono: Megaphone,
+        permisos: ["campanas.gestionar_propias"],
+        tiposRol: SOLO_ANUNCIANTES,
+        descripcion: "Tus campañas, sus ofertas y el estado de cada una",
+        palabrasClave: [
+          "ofertas",
+          "pauta",
+          "crear oferta",
+          "presupuesto",
+          "moderación",
+        ],
+        subpaginas: { nueva: "Nueva campaña" },
+      },
+      {
+        id: "empresa",
+        titulo: "Mi empresa",
+        href: ruta("/empresa"),
+        icono: BriefcaseBusiness,
+        permisos: ["anunciantes.editar_propio"],
+        tiposRol: SOLO_ANUNCIANTES,
+        descripcion: "Datos de la empresa, documentos, verificación y equipo",
+        palabrasClave: [
+          "empresa",
+          "rut",
+          "cámara de comercio",
+          "verificación",
+          "equipo",
+          "facturación",
+        ],
+        subpaginas: { documentos: "Documentos", equipo: "Equipo" },
+      },
     ],
   },
   {
@@ -180,7 +224,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
         permisos: ["medios.verificar", "anunciantes.verificar"],
         tiposRol: SOLO_INTERNOS,
         descripcion:
-          "Colas de medios, cuentas, documentos y solicitudes por revisar",
+          "Colas de medios, anunciantes, cuentas, documentos y solicitudes",
         palabrasClave: [
           "revisión",
           "aprobar",
@@ -188,7 +232,36 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
           "solicitudes",
           "vinculación",
           "pendientes",
+          "anunciantes",
         ],
+      },
+      {
+        id: "moderacion",
+        titulo: "Moderación",
+        href: ruta("/operacion/moderacion"),
+        icono: ClipboardCheck,
+        permisos: ["ofertas.moderar"],
+        tiposRol: SOLO_INTERNOS,
+        descripcion: "Ofertas en revisión para publicar, devolver o rechazar",
+        palabrasClave: [
+          "ofertas",
+          "revisión",
+          "publicar",
+          "devolver",
+          "aprobar",
+        ],
+      },
+      {
+        id: "ofertas",
+        titulo: "Ofertas",
+        href: ruta("/operacion/ofertas"),
+        icono: Megaphone,
+        permisos: ["ofertas.ver"],
+        tiposRol: SOLO_INTERNOS,
+        descripcion:
+          "Ficha completa de una oferta: segmentación, creativos e historial",
+        palabrasClave: ["oferta", "creativos", "moderación"],
+        enMenu: false,
       },
       {
         id: "medios",
@@ -376,7 +449,9 @@ export function filtrarNavegacion(
 ): GrupoNavegacion[] {
   return NAVEGACION.map((grupo) => ({
     ...grupo,
-    items: grupo.items.filter((item) => puedeVerItem(item, usuario)),
+    items: grupo.items.filter(
+      (item) => item.enMenu !== false && puedeVerItem(item, usuario)
+    ),
   })).filter((grupo) => grupo.items.length > 0)
 }
 
