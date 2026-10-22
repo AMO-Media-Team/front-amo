@@ -38,6 +38,8 @@ interface CabeceraFichaProps {
   visual?: ReactNode
   /** Columna derecha: fechas, enlaces relacionados. */
   lateral?: ReactNode
+  /** Botones de gestión (editar, invitar…), arriba de la columna derecha. */
+  acciones?: ReactNode
   /** Aviso de estado bajo la cabecera (suspendido, rechazado…). */
   aviso?: ReactNode
 }
@@ -55,6 +57,7 @@ export function CabeceraFicha({
   distintivos,
   visual,
   lateral,
+  acciones,
   aviso,
 }: CabeceraFichaProps) {
   return (
@@ -98,8 +101,14 @@ export function CabeceraFicha({
               ) : null}
             </div>
           </div>
-          {lateral ? (
+          {lateral || acciones ? (
             <div className="flex min-w-0 shrink-0 flex-col gap-1.5 text-xs text-muted-foreground lg:items-end lg:text-right">
+              {acciones ? (
+                // `text-foreground`: los botones outline heredarían el tono atenuado.
+                <div className="mb-1 text-sm text-foreground empty:hidden">
+                  {acciones}
+                </div>
+              ) : null}
               {lateral}
             </div>
           ) : null}

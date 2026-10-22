@@ -16,6 +16,8 @@ const fila = {
   titulo: "Nueva oferta",
   mensaje: "Hay una oferta para tu medio.",
   url: "/operacion/campanas/abc",
+  entidad: "ofertas",
+  entidad_id: "0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a01",
   prioridad: 1,
   leida: false,
   created_at: "2026-09-30T15:00:00Z",
@@ -28,11 +30,17 @@ describe("categoriaDe", () => {
     expect(categoriaDe("metricas.rechazadas")).toBe("ejecucion")
     expect(categoriaDe("liquidacion.pagada")).toBe("pagos")
     expect(categoriaDe("seguridad.pais_inusual")).toBe("seguridad")
+    expect(categoriaDe("factura.emitida")).toBe("pagos")
+    expect(categoriaDe("campana.finalizada")).toBe("ofertas")
+    expect(categoriaDe("medio.verificado")).toBe("verificacion")
+    expect(categoriaDe("documento.rechazado")).toBe("verificacion")
+    expect(categoriaDe("cola.oferta_revision")).toBe("pendientes")
     expect(categoriaDe("algo.nuevo")).toBe("otras")
   })
 
   it("da un nombre visible a cada categoría", () => {
-    expect(etiquetaCategoria("liquidacion.pagada")).toBe("Pagos y tarifas")
+    expect(etiquetaCategoria("liquidacion.pagada")).toBe("Pagos y facturas")
+    expect(etiquetaCategoria("cola.metricas")).toBe("Pendientes del equipo")
     expect(etiquetaCategoria("desconocida")).toBe("General")
   })
 
@@ -57,7 +65,18 @@ describe("aNotificacion", () => {
   it("descarta enlaces externos o de protocolo relativo", () => {
     expect(aNotificacion({ ...fila, url: "https://evil.test" }).url).toBeNull()
     expect(aNotificacion({ ...fila, url: "//evil.test/x" }).url).toBeNull()
-    expect(aNotificacion({ ...fila, url: null }).url).toBeNull()
+  })
+
+  it("sin url, enlaza al resolvedor por entidad (solo entidades conocidas)", () => {
+    expect(aNotificacion({ ...fila, url: null }).url).toBe(
+      "/ir/ofertas/0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a01"
+    )
+    expect(
+      aNotificacion({ ...fila, url: null, entidad: "tabla_rara" }).url
+    ).toBeNull()
+    expect(
+      aNotificacion({ ...fila, url: null, entidad: null, entidad_id: null }).url
+    ).toBeNull()
   })
 })
 

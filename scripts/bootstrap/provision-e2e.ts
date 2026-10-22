@@ -9,6 +9,7 @@
  * suspendida o desactivada, por `transicionar_srv` con un operador temporal.
  */
 import { type EstadoPerfil, transicionesParaRestaurar } from "./estado-perfil"
+import { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
 import { enrolarTotpEnSesion } from "./mfa"
 import { conOperadorTemporal } from "./operador-temporal"
 import { organizacionDe, type RolCuentaPrueba } from "./organizacion"
@@ -26,10 +27,13 @@ import {
   idDeRol,
   rutaConfirmacion,
 } from "./supabase"
+import { aceptarTerminosVigentes, tipoRolExterno } from "./terminos-e2e"
 
 export { codigoTotpEstable } from "./mfa"
 
 export { ANUNCIANTE_E2E_ID } from "./organizacion"
+
+export { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
 
 export interface CuentaE2E {
   clave: string
@@ -74,6 +78,30 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     variableEmail: "E2E_CAMBIO_EMAIL",
     variablePassword: "E2E_CAMBIO_PASSWORD",
     debeCambiarPassword: true,
+    conTotp: false,
+  },
+  {
+    // «Medio E2E»: VERIFICADO nivel 1 con cuenta, pago y documentos (medios-e2e.ts).
+    clave: "MEDIO",
+    rol: "MEDIO",
+    medioId: MEDIO_E2E_ID,
+    nombre: "Medio E2E",
+    emailPorDefecto: "e2e.medio@amo.test",
+    variableEmail: "E2E_MEDIO_EMAIL",
+    variablePassword: "E2E_MEDIO_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: false,
+  },
+  {
+    // «Medio Nuevo E2E»: PENDIENTE recién registrado; cada corrida lo reinicia.
+    clave: "MEDIO_NUEVO",
+    rol: "MEDIO",
+    medioId: MEDIO_NUEVO_E2E_ID,
+    nombre: "Medio Nuevo E2E",
+    emailPorDefecto: "e2e.medio.nuevo@amo.test",
+    variableEmail: "E2E_MEDIO_NUEVO_EMAIL",
+    variablePassword: "E2E_MEDIO_NUEVO_PASSWORD",
+    debeCambiarPassword: false,
     conTotp: false,
   },
 ]
@@ -228,6 +256,15 @@ export async function prepararCuenta(
 ): Promise<string> {
   const usuarioId = await asegurarUsuario(servicio, cuenta, password)
   await asegurarPerfil(servicio, usuarioId, cuenta)
+  // Una cuenta externa entra sin pasar por la compuerta de términos (AUT-012).
+  const tipoRol = tipoRolExterno(cuenta.rol)
+  if (tipoRol) {
+    await aceptarTerminosVigentes(servicio, {
+      id: usuarioId,
+      email: emailDe(cuenta),
+      tipoRol,
+    })
+  }
   return usuarioId
 }
 

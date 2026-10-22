@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
+import { useGuardiaSalida } from "@/components/asistente/use-guardia-salida"
 import { DialogoConfirmacion } from "@/components/feedback/dialogo-confirmacion"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { useEsApple } from "@/components/layout/use-plataforma"
@@ -53,7 +54,6 @@ import { DialogoRevision } from "./dialogo-revision"
 import { BarraCobertura } from "./distintivos-rol"
 import type { CambioPermiso } from "./fila-permiso"
 import { ModuloPermisos } from "./modulo-permisos"
-import { useGuardiaSalida } from "./use-guardia-salida"
 
 type Filtro = "todos" | "otorgados" | "sin_otorgar" | "sensibles"
 

@@ -8,8 +8,8 @@ import {
   PencilLine,
   Send,
 } from "lucide-react"
-import { useSyncExternalStore } from "react"
 
+import { useAhora } from "@/components/tiempo/use-ahora"
 import { formatearFechaHora } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -20,28 +20,6 @@ import {
   etiquetaAccion,
   type Urgencia,
 } from "../datos"
-
-const PASO_RELOJ_MS = 30_000
-
-function suscribirReloj(avisar: () => void) {
-  const id = setInterval(avisar, PASO_RELOJ_MS)
-  return () => clearInterval(id)
-}
-
-/** Instante redondeado al paso del reloj: estable entre lecturas del mismo tramo. */
-function instanteActual(): number {
-  return Math.floor(Date.now() / PASO_RELOJ_MS) * PASO_RELOJ_MS
-}
-
-/**
- * Reloj que avanza cada 30 s. En la hidratación usa la hora del servidor (sin
- * desajustes) y luego la del dispositivo.
- */
-function useAhora(servidor: number): Date {
-  return new Date(
-    useSyncExternalStore(suscribirReloj, instanteActual, () => servidor)
-  )
-}
 
 function IconoAccion({ accion }: { accion: string }) {
   if (accion === "DESCARGAR") return <Download className="size-4" />

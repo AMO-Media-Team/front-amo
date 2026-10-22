@@ -15,6 +15,7 @@ import {
   Target,
   UsersRound,
 } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { banderaEmoji } from "@/features/accesos/catalogo"
@@ -114,10 +115,17 @@ function AvisoEstadoMedio({ medio }: { medio: MedioDetalle }) {
   }
 }
 
-export function CabeceraMedio({ medio }: { medio: MedioDetalle }) {
+export function CabeceraMedio({
+  medio,
+  acciones,
+}: {
+  medio: MedioDetalle
+  acciones?: ReactNode
+}) {
   const lugar = ubicacion(medio)
   return (
     <CabeceraFicha
+      acciones={acciones}
       volver={{ href: RUTAS_OPERACION.medios, titulo: "Medios" }}
       antetitulo={TIPOS_MEDIO[medio.tipo]}
       titulo={medio.nombre}

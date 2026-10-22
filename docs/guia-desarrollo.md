@@ -11,8 +11,8 @@
 - **Repo**: Next.js 16.3.7 (App Router, `src/`), React 19.3.0, Tailwind v4, TypeScript 5.9, pnpm 12,
   Node ≥ 22.12. Despliegue en Vercel (región `yul1`, Montreal), dominio `https://front-amo.vercel.app`.
 - **Backend**: Supabase (Postgres 17): Auth, Postgres con RLS, Storage. Producción
-  `oriuuuaczpncmtglfgpv` (ca-central-1; `.env.produccion`) y desarrollo `zygfqfvqwfvhbirmjojp` (datos
-  demo; `.env.local`). Migraciones en `supabase/migrations/`.
+  `oriuuuaczpncmtglfgpv` (ca-central-1; `.env.produccion`), develop `depbmnlpfnrcsbqlwxxd`
+  (`baas-amo-develop`) y la base local de Docker (`.env.local`, datos demo). Migraciones en `supabase/migrations/`.
 - **Documentación oficial de Next instalada**: `node_modules/next/dist/docs/` — consúltala antes de
   usar una API de Next; esta versión difiere de versiones anteriores.
 
@@ -103,17 +103,46 @@ supabase/{migrations,seed,tests}/   e2e/   docs/
 
 1. Crear el archivo con `supabase migration new <nombre>` (queda como
    `supabase/migrations/<versión>_<nombre>.sql`) y escribir el SQL.
-2. Aplicarlo **primero en desarrollo** y luego en producción con
-   `supabase db push --db-url "$SUPABASE_DB_URL" --skip-vault` (URL del _Session pooler_ de cada
-   proyecto, usuario `postgres.<ref>`, guardada en un `.env.db*` que git ignora; contraseña
-   alfanumérica o codificada). Así `session_user` es `postgres`, como exigen `private.modo_carga()` y
-   las guardas de roles; con `--linked` el CLI entra como `cli_login_*` y esas migraciones fallan. No
-   se usa MCP `apply_migration`: numera por su cuenta y desalinea el historial con los archivos. El MCP
-   del repositorio apunta a producción y es solo para leer.
-3. **Nunca** editar una migración aplicada: se corrige con una nueva.
-4. Pruebas en `supabase/tests/*.sql` dentro de `begin … rollback`.
-5. Revisar advisors (0 ERROR) y regenerar `src/types/database.types.ts` (`pnpm db:types`).
-6. Mantener `docs/modelo-datos.md` sincronizado (las desviaciones están en su §11.2).
+2. Probarlo en la **base local** (ver «Base local» abajo): `supabase migration up --local` o `pnpm db:local`,
+   y `pnpm db:suites local`.
+3. Aplicarlo en **develop** y luego en **producción** con `pnpm db:push <develop|produccion>` (`--dry-run` lista
+   lo pendiente; producción exige `--confirmar-produccion`). Por dentro es
+   `supabase db push --db-url` con la URL del _Session pooler_ de cada proyecto (usuario `postgres.<ref>`,
+   contraseña alfanumérica) guardada en `.env.db.<entorno>` (0600, git lo ignora). Así `session_user` es
+   `postgres`, como exigen `private.modo_carga()` y las guardas de roles; con `--linked` el CLI entra como
+   `cli_login_*` y esas migraciones fallan. No se usa MCP `apply_migration`: numera por su cuenta y desalinea
+   el historial con los archivos. El MCP del repositorio ve producción y develop; en producción es solo para
+   leer.
+4. **Nunca** editar una migración aplicada en un proyecto remoto: se corrige con una nueva. (Una migración que
+   solo existe en local puede corregirse mientras no se haya aplicado en develop ni en producción.)
+5. Pruebas en `supabase/tests/*.sql` dentro de `begin … rollback`: `pnpm db:suites <local|develop|produccion>`.
+   `humo_bitacora_indice` a02 depende del volumen (falla en bases casi vacías sin que haya defecto).
+6. Revisar advisors (0 ERROR) y regenerar `src/types/database.types.ts` (`pnpm db:types`, o
+   `pnpm db:types local` para migraciones que aún no están en ningún proyecto remoto).
+7. Mantener `docs/modelo-datos.md` sincronizado (las desviaciones están en su §11.2).
+
+### Base local
+
+Pila completa de Supabase en Docker (Colima en macOS): Postgres 17, Auth, PostgREST y Storage, configurados por
+`supabase/config.toml` (registro público cerrado, contraseña ≥ 12 con todas las clases, MFA TOTP, JWT de 10 min).
+
+```bash
+colima start                       # una vez por sesión del equipo
+supabase start -x studio,logflare,vector,edge-runtime,realtime,imgproxy,mailpit,postgres-meta
+pnpm db:local                      # reset + Vault + superadmin + 15 meses de demo + cuentas E2E (~1 min)
+pnpm db:local --sin-demo           # igual, sin datos demo
+pnpm db:suites local               # suites SQL
+supabase stop                      # al terminar (conserva los datos); colima stop apaga la VM
+```
+
+- `.env.local` debe apuntar a la pila (`supabase status -o env`: `API_URL`, `PUBLISHABLE_KEY`, `SECRET_KEY`); esas
+  claves son las públicas por defecto de la CLI. `pnpm db:local` se niega a correr si `.env.local` apunta a otro
+  proyecto.
+- En local no hay correo: `AMO_SMTP_CONFIGURADO=false` (la app muestra los enlaces) y `pnpm db:local` activa al
+  superadministrador sin el enlace de confirmación.
+- La base (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) acepta `psql` dentro del contenedor:
+  `docker exec -i supabase_db_front-amo psql -U postgres -d postgres`.
+- `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop.
 
 ## Identidad visual
 

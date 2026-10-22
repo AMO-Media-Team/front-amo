@@ -11,8 +11,8 @@ es para producción real**: los scripts exigen `--forzar` si `NEXT_PUBLIC_SITE_U
 Los interruptores `amo.modo_carga`, `amo.reloj` y `amo.purga` solo tienen efecto con `session_user = postgres`. Por
 PostgREST (incluso con la secret key) la sesión es `authenticator`, y el proyecto no tiene driver de Postgres. Por eso:
 
-- **SQL** → sobre el proyecto de **desarrollo** (`zygfqfvqwfvhbirmjojp`) con una conexión como `postgres` (MCP
-  `execute_sql` conectado a ese proyecto, o un cliente con su URL del *Session pooler*), siempre dentro de
+- **SQL** → sobre la base **local** (`pnpm db:local` hace todo el proceso) o sobre **develop** con una conexión como
+  `postgres` (cliente con la URL del *Session pooler* de `.env.db.develop`), siempre dentro de
   `begin; set local amo.modo_carga = 'on'; set local statement_timeout = '110s'; …; commit;`.
 - **Usuarios de Auth y Storage** → scripts TS con la Admin API (`pnpm demo:generar`, `pnpm demo:purgar`).
 

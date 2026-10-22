@@ -43,8 +43,8 @@ begin
                (u_anb, 'humo6.anb@amo.test'), (u_mea, 'humo6.mea@amo.test'), (u_meb, 'humo6.meb@amo.test'),
                (u_tmp, 'humo6.tmp@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo)
-  values (an_a, 'Humo A S.A.S.', 'Humo A', '900000101', '1', v_sector, '11001'),
-         (an_b, 'Humo B S.A.S.', 'Humo B', '900000102', '1', v_sector, '05001');
+  values (an_a, 'Humo A S.A.S.', 'Humo A', '900000101', '0', v_sector, '11001'),
+         (an_b, 'Humo B S.A.S.', 'Humo B', '900000102', '8', v_sector, '05001');
   insert into public.medios (id, nombre, tipo, municipio_codigo, lon, lat)
   values (me_a, 'Noticias Humo A', 'PAGINA_NOTICIAS', '05001', -75.5812, 6.2442),
          (me_b, 'Noticias Humo B', 'CREADOR', '76001', -76.5320, 3.4516);
@@ -86,11 +86,13 @@ begin
   get diagnostics v_n = row_count;                                      r := r || jsonb_build_object('a5_edita_su_empresa', v_n = 1);
   update public.anunciantes set nombre_comercial = 'Secuestro' where id = an_b;
   get diagnostics v_n = row_count;                                      r := r || jsonb_build_object('a6_no_edita_la_ajena', v_n = 0);
+  -- Desde 20261022024336 la columna tiene GRANT (la corrige el equipo AMO) y el trigger frena al propio anunciante.
   begin
     update public.anunciantes set nit = '900000999' where id = an_a;
-    r := r || jsonb_build_object('a7_nit_solo_servidor', 'NO FALLÓ');
-  exception when insufficient_privilege then
-    r := r || jsonb_build_object('a7_nit_solo_servidor', true);
+    r := r || jsonb_build_object('a7_nit_solo_equipo_amo', 'NO FALLÓ');
+  exception when others then
+    r := r || jsonb_build_object('a7_nit_solo_equipo_amo',
+      case when sqlerrm = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(sqlerrm) end);
   end;
   begin
     update public.anunciantes set deleted_at = now() where id = an_a;

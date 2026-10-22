@@ -10,16 +10,21 @@
  *    `insufficient_aal` si la cuenta tiene un factor verificado.
  * 4. `debe_cambiar_password` → cambio de contraseña.
  * 5. El rol exige MFA y no hay factor → configurar MFA.
- * 6. Permiso de la página o acción — lo resuelve el DAL.
+ * 6. Rol externo (anunciante o medio) con términos vigentes sin aceptar →
+ *    aceptar términos (AUT-012). Va al final: la aceptación queda ligada a
+ *    una cuenta ya asegurada (contraseña propia y, si aplica, segundo factor).
+ * 7. Permiso de la página o acción — lo resuelve el DAL.
  */
 import type { JwtPayload } from "@supabase/supabase-js"
 import type { Route } from "next"
 
-import { destinoTrasIngreso } from "./navegacion"
-import type { NivelAutenticacion } from "./tipos"
+import type { Database } from "@/types/database.types"
+
+import { destinoTrasIngreso, RUTA_INICIO } from "./navegacion"
+import type { NivelAutenticacion, TipoRol } from "./tipos"
 
 export type PasoPendiente =
-  "mfa-verificar" | "cambiar-contrasena" | "mfa-configurar"
+  "mfa-verificar" | "cambiar-contrasena" | "mfa-configurar" | "aceptar-terminos"
 
 export interface EstadoCuenta {
   /** Perfil en estado ACTIVO, con rol y sin borrar. */
@@ -28,6 +33,12 @@ export interface EstadoCuenta {
   rolRequiereMfa: boolean
   aal: NivelAutenticacion
   tieneFactorVerificado: boolean
+  /**
+   * Hay versiones vigentes de términos sin aceptar (solo roles externos). Sin
+   * valor equivale a `false`: quien no lo consultó deja que el DAL de la
+   * página destino lo resuelva en la siguiente solicitud.
+   */
+  terminosPendientes?: boolean
 }
 
 export type DecisionCompuertas =
@@ -46,6 +57,9 @@ export function resolverCompuertas(estado: EstadoCuenta): DecisionCompuertas {
   if (estado.rolRequiereMfa && !estado.tieneFactorVerificado) {
     return { tipo: "pendiente", paso: "mfa-configurar" }
   }
+  if (estado.terminosPendientes) {
+    return { tipo: "pendiente", paso: "aceptar-terminos" }
+  }
   return { tipo: "listo" }
 }
 
@@ -53,16 +67,89 @@ export const RUTAS_PASO = {
   "mfa-verificar": "/mfa/verificar",
   "cambiar-contrasena": "/cambiar-contrasena",
   "mfa-configurar": "/mfa/configurar",
+  "aceptar-terminos": "/aceptar-terminos",
 } as const satisfies Record<PasoPendiente, Route>
 
 /**
- * Ruta del paso. Solo la verificación MFA conserva el destino (`?next=`): es
- * el único paso que se repite en cada ingreso, y el destino ya es seguro.
+ * Pasos que conservan el destino (`?next=`): los que se repiten después del
+ * primer ingreso. La verificación MFA, en cada ingreso; los términos, cada vez
+ * que se publica una versión nueva (la persona llega con un enlace en mano).
  */
+const PASOS_CON_DESTINO: ReadonlySet<PasoPendiente> = new Set([
+  "mfa-verificar",
+  "aceptar-terminos",
+])
+
+/** Ruta del paso, con el destino si el paso lo conserva (ya es seguro). */
 export function rutaDePaso(paso: PasoPendiente, siguiente?: string): Route {
   const ruta = RUTAS_PASO[paso]
-  if (paso !== "mfa-verificar" || !siguiente) return ruta
+  if (!PASOS_CON_DESTINO.has(paso) || !siguiente) return ruta
   return `${ruta}?${new URLSearchParams({ next: siguiente })}` as Route
+}
+
+/**
+ * Cabecera de la solicitud con la ruta pedida (`pathname` + `search`). Un
+ * Server Component no conoce su URL: si el proxy la agrega, el DAL lleva al
+ * paso pendiente sin perder a dónde iba la persona (p. ej. el enlace de una
+ * notificación cuando se publican términos nuevos). Sin ella, el paso termina
+ * en Inicio. Viene del cliente si el proxy no la reescribe: se valida como
+ * cualquier `?next=`.
+ */
+export const CABECERA_RUTA_SOLICITADA = "x-amo-ruta"
+
+/**
+ * Destino que conserva un paso pendiente al que el DAL redirige: la ruta
+ * pedida si es interna y privada. Inicio no se anota (es el destino por
+ * defecto) para no alargar la URL.
+ */
+export function destinoDeSolicitud(
+  rutaSolicitada: string | null | undefined
+): Route | undefined {
+  const destino = destinoTrasIngreso(rutaSolicitada)
+  return destino === RUTA_INICIO ? undefined : destino
+}
+
+// ── Términos y política de datos (AUT-012) ───────────────────────────────────
+
+export type TipoTerminos = Database["public"]["Enums"]["terminos_tipo"]
+
+/** Versión vigente de un documento legal que la persona aún no acepta. */
+export interface TerminoPendiente {
+  id: string
+  tipo: TipoTerminos
+  version: string
+  /** ISO 8601. */
+  vigenteDesde: string
+  /** SHA-256 del texto: identifica exactamente lo que se acepta. */
+  hashSha256: string
+  contenidoMd: string
+}
+
+type FilaTerminoPendiente =
+  Database["public"]["Functions"]["terminos_pendientes"]["Returns"][number]
+
+/**
+ * Solo los portales externos (anunciante y medio) aceptan términos. La BD
+ * aplica la misma regla (`terminos_pendientes()`); aquí evita consultarla en
+ * cada solicitud de un usuario interno.
+ */
+const TIPOS_ROL_CON_TERMINOS: readonly TipoRol[] = ["ANUNCIANTE", "MEDIO"]
+
+export function exigeAceptarTerminos(tipo: TipoRol): boolean {
+  return TIPOS_ROL_CON_TERMINOS.includes(tipo)
+}
+
+export function aTerminoPendiente(
+  fila: FilaTerminoPendiente
+): TerminoPendiente {
+  return {
+    id: fila.id,
+    tipo: fila.tipo,
+    version: fila.version,
+    vigenteDesde: fila.vigente_desde,
+    hashSha256: fila.hash_sha256,
+    contenidoMd: fila.contenido_md,
+  }
 }
 
 // ── Claims del JWT ───────────────────────────────────────────────────────────

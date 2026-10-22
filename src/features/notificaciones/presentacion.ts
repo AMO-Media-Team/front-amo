@@ -5,6 +5,7 @@
 import { tz } from "@date-fns/tz"
 import { differenceInCalendarDays } from "date-fns"
 
+import { enlaceNotificacion } from "@/features/enlaces/destinos"
 import { rutaInternaSegura } from "@/lib/auth/navegacion"
 import { ZONA } from "@/lib/fechas"
 
@@ -15,8 +16,10 @@ export const CLAVES_CATEGORIA = [
   "asignaciones",
   "ejecucion",
   "pagos",
+  "verificacion",
   "cuentas",
   "disputas",
+  "pendientes",
   "seguridad",
 ] as const
 
@@ -29,18 +32,26 @@ export type ClaveCategoria = (typeof CLAVES_CATEGORIA)[number]
 export const CATEGORIAS: Readonly<
   Record<ClaveCategoria, { etiqueta: string; prefijos: readonly string[] }>
 > = {
-  ofertas: { etiqueta: "Ofertas", prefijos: ["oferta", "creativo"] },
+  ofertas: {
+    etiqueta: "Ofertas y campañas",
+    prefijos: ["oferta", "creativo", "campana"],
+  },
   asignaciones: { etiqueta: "Asignaciones", prefijos: ["asignacion"] },
   ejecucion: {
     etiqueta: "Evidencias y métricas",
     prefijos: ["evidencia", "metricas"],
   },
   pagos: {
-    etiqueta: "Pagos y tarifas",
-    prefijos: ["liquidacion", "multiplicador"],
+    etiqueta: "Pagos y facturas",
+    prefijos: ["liquidacion", "multiplicador", "factura"],
+  },
+  verificacion: {
+    etiqueta: "Verificación",
+    prefijos: ["medio", "anunciante", "documento"],
   },
   cuentas: { etiqueta: "Cuentas sociales", prefijos: ["cuenta"] },
   disputas: { etiqueta: "Disputas", prefijos: ["disputa"] },
+  pendientes: { etiqueta: "Pendientes del equipo", prefijos: ["cola"] },
   seguridad: { etiqueta: "Seguridad", prefijos: ["seguridad", "usuario"] },
 }
 
@@ -80,19 +91,26 @@ type FilaLeida = Pick<
   | "titulo"
   | "mensaje"
   | "url"
+  | "entidad"
+  | "entidad_id"
   | "prioridad"
   | "leida"
   | "created_at"
 >
 
-/** Fila → DTO. Un enlace que no sea ruta interna se descarta (nunca redirige fuera). */
+/**
+ * Fila → DTO. Un enlace que no sea ruta interna se descarta (nunca redirige
+ * fuera). Sin `url`, la entidad decide el destino por rol (`/ir/…`).
+ */
 export function aNotificacion(fila: FilaLeida): Notificacion {
   return {
     id: fila.id,
     tipo: fila.tipo,
     titulo: fila.titulo,
     mensaje: fila.mensaje,
-    url: rutaInternaSegura(fila.url),
+    url: fila.url
+      ? rutaInternaSegura(fila.url)
+      : enlaceNotificacion(fila.entidad, fila.entidad_id),
     prioridad: prioridadDe(fila.prioridad),
     leida: fila.leida,
     creadaAt: fila.created_at,

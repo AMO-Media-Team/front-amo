@@ -1,7 +1,9 @@
 import {
+  BadgeCheck,
   Bell,
   CalendarClock,
   ChartColumnBig,
+  Inbox,
   type LucideIcon,
   Megaphone,
   Scale,
@@ -22,8 +24,10 @@ export const ESTILOS_CATEGORIA: Readonly<
   asignaciones: { icono: CalendarClock, clase: "bg-info/12 text-info" },
   ejecucion: { icono: ChartColumnBig, clase: "bg-warning/14 text-warning" },
   pagos: { icono: Wallet, clase: "bg-success/12 text-success" },
+  verificacion: { icono: BadgeCheck, clase: "bg-primary/12 text-primary" },
   cuentas: { icono: UserRoundCheck, clase: "bg-info/12 text-info" },
   disputas: { icono: Scale, clase: "bg-destructive/12 text-destructive" },
+  pendientes: { icono: Inbox, clase: "bg-warning/14 text-warning" },
   seguridad: {
     icono: ShieldAlert,
     clase: "bg-destructive/12 text-destructive",

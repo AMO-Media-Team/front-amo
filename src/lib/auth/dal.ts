@@ -6,6 +6,7 @@ import {
   isAuthSessionMissingError,
 } from "@supabase/supabase-js"
 import type { Route } from "next"
+import { headers } from "next/headers"
 import { forbidden, redirect } from "next/navigation"
 import { cache } from "react"
 
@@ -14,7 +15,9 @@ import { crearClienteServidor } from "@/lib/supabase/server"
 
 import { conNivel, esDeTipoRol, tieneAlgunPermiso } from "./autorizacion"
 import {
+  CABECERA_RUTA_SOLICITADA,
   type ClaimsSesion,
+  destinoDeSolicitud,
   destinoFinal,
   esSesionDeEnlace,
   type EstadoCuenta,
@@ -23,9 +26,10 @@ import {
   resolverCompuertas,
   RUTA_RESTABLECER,
   rutaDePaso,
+  type TerminoPendiente,
 } from "./compuertas"
 import { RUTA_INGRESO, RUTA_INICIO } from "./navegacion"
-import { leerPerfilSesion } from "./perfil-sesion"
+import { leerPerfilSesion, leerTerminosPendientes } from "./perfil-sesion"
 import type { ClavePermiso } from "./permisos"
 import { RegistroToques } from "./registro-toques"
 import type { TipoRol, UsuarioSesion } from "./tipos"
@@ -48,6 +52,12 @@ interface AccesoConUsuario {
   claims: ClaimsSesion
   usuario: UsuarioSesion
   cuenta: EstadoCuenta
+  /**
+   * Versiones vigentes de términos que el usuario externo aún no acepta
+   * (AUT-012). La pantalla `/aceptar-terminos` las pinta y su acción las
+   * inserta sin volver a consultarlas.
+   */
+  terminosPorAceptar: readonly TerminoPendiente[]
 }
 
 export type EstadoAcceso =
@@ -99,15 +109,17 @@ async function evaluarAccesoSinCache(): Promise<EstadoAcceso> {
   const claims = await obtenerClaims()
   if (!claims) return { tipo: "sin-sesion" }
 
-  const perfil = await leerPerfilSesion(
-    await clienteSolicitud(),
-    claims.usuarioId
-  )
+  const cliente = await clienteSolicitud()
+  const perfil = await leerPerfilSesion(cliente, claims.usuarioId)
   if (!perfil?.activo) {
     return { tipo: "salir", claims, motivo: "cuenta-inactiva" }
   }
 
-  const factor = claims.aal === "aal2" ? true : await obtenerFactorVerificado()
+  // Independientes entre sí: el factor (Auth) y los términos (BD) a la vez.
+  const [factor, terminosPorAceptar] = await Promise.all([
+    claims.aal === "aal2" ? true : obtenerFactorVerificado(),
+    leerTerminosPendientes(cliente, perfil.usuario.rol.tipo),
+  ])
   if (factor === null) {
     return { tipo: "salir", claims, motivo: "sesion-expirada" }
   }
@@ -118,23 +130,44 @@ async function evaluarAccesoSinCache(): Promise<EstadoAcceso> {
     rolRequiereMfa: perfil.usuario.rol.requiereMfa,
     aal: claims.aal,
     tieneFactorVerificado: factor,
+    terminosPendientes: terminosPorAceptar.length > 0,
   }
-  const usuario = conNivel(perfil, claims.aal)
+  const acceso = {
+    claims,
+    usuario: conNivel(perfil, claims.aal),
+    cuenta,
+    terminosPorAceptar,
+  }
   const decision = resolverCompuertas(cuenta)
   switch (decision.tipo) {
     case "salir":
       return { tipo: "salir", claims, motivo: "cuenta-inactiva" }
     case "pendiente":
-      return { tipo: "pendiente", paso: decision.paso, claims, usuario, cuenta }
+      return { tipo: "pendiente", paso: decision.paso, ...acceso }
     case "listo":
-      return { tipo: "listo", claims, usuario, cuenta }
+      return { tipo: "listo", ...acceso }
   }
 }
 
-/** Compuertas 1–5 de §2.6 para la solicitud en curso. */
+/**
+ * Compuertas 1–6 de §2.6 para la solicitud en curso: una sola evaluación (y
+ * una sola consulta de términos) por solicitud.
+ */
 export const evaluarAcceso = cache(evaluarAccesoSinCache)
 
-function redirigirSegun(acceso: EstadoNoListo): never {
+/**
+ * A dónde iba la persona, si el proxy lo informó (`CABECERA_RUTA_SOLICITADA`):
+ * el paso pendiente lo conserva y, al cumplirlo, la lleva allí.
+ */
+async function destinoSolicitado(): Promise<string | undefined> {
+  return destinoDeSolicitud((await headers()).get(CABECERA_RUTA_SOLICITADA))
+}
+
+/**
+ * `siguiente`: destino ya validado que conservan los pasos que lo admiten
+ * (`rutaDePaso`); sin él, al cumplir el paso se llega a Inicio.
+ */
+function redirigirSegun(acceso: EstadoNoListo, siguiente?: string): never {
   switch (acceso.tipo) {
     case "sin-sesion":
       redirect(RUTA_INGRESO)
@@ -142,7 +175,7 @@ function redirigirSegun(acceso: EstadoNoListo): never {
       // Un Server Component no puede borrar cookies: lo hace el Route Handler.
       redirect(RUTA_SALIR)
     case "pendiente":
-      redirect(rutaDePaso(acceso.paso))
+      redirect(rutaDePaso(acceso.paso, siguiente))
   }
 }
 
@@ -195,8 +228,8 @@ export async function verificarVigencia(
 
 export interface OpcionesRequerirUsuario {
   /**
-   * Devuelve también usuarios con un paso pendiente (MFA o cambio de
-   * contraseña). Solo para las pantallas y acciones de esos pasos.
+   * Devuelve también usuarios con un paso pendiente (MFA, cambio de
+   * contraseña o términos). Solo para las pantallas y acciones de esos pasos.
    */
   permitirPendientes?: boolean
 }
@@ -209,7 +242,7 @@ export async function requerirUsuario(
   if (acceso.tipo === "pendiente" && opciones.permitirPendientes) {
     return acceso.usuario
   }
-  if (acceso.tipo !== "listo") redirigirSegun(acceso)
+  if (acceso.tipo !== "listo") redirigirSegun(acceso, await destinoSolicitado())
   if ((await verificarVigencia(acceso.claims)) !== "VIGENTE") {
     redirect(RUTA_SALIR)
   }
@@ -240,8 +273,8 @@ export async function requerirTipoRol(
 
 /**
  * Para las pantallas y acciones de un paso pendiente (`/mfa/*`,
- * `/cambiar-contrasena`): devuelve el acceso si toca alguno de esos pasos; si
- * no, lleva al que toca o, con todo al día, al destino.
+ * `/cambiar-contrasena`, `/aceptar-terminos`): devuelve el acceso si toca
+ * alguno de esos pasos; si no, lleva al que toca o, con todo al día, al destino.
  */
 export async function requerirPaso(
   pasos: PasoPendiente | readonly PasoPendiente[],
@@ -252,7 +285,8 @@ export async function requerirPaso(
     return acceso
   }
   if (acceso.tipo === "listo") redirect(destinoFinal(siguiente, acceso.claims))
-  redirigirSegun(acceso)
+  // Otro paso pendiente: conserva el destino que este ya traía.
+  redirigirSegun(acceso, destinoDeSolicitud(siguiente))
 }
 
 /**
@@ -278,7 +312,7 @@ export async function requerirSesionDeEnlace(): Promise<AccesoConUsuario> {
 /** Para el layout de `(app)`: el usuario del shell (las páginas autorizan aparte). */
 export async function obtenerUsuarioShell(): Promise<UsuarioSesion> {
   const acceso = await evaluarAcceso()
-  if (acceso.tipo !== "listo") redirigirSegun(acceso)
+  if (acceso.tipo !== "listo") redirigirSegun(acceso, await destinoSolicitado())
   return acceso.usuario
 }
 

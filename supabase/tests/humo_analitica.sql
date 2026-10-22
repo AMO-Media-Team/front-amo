@@ -81,8 +81,8 @@ begin
                (u_anb, 'humo9.anb@amo.test'), (u_mea, 'humo9.mea@amo.test'), (u_meb, 'humo9.meb@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
-  values (an_a, 'Humo Nueve A S.A.S.', 'Humo Nueve A', '900000901', '1', v_sector, '11001', 'VERIFICADO', '2026-06-01'),
-         (an_b, 'Humo Nueve B S.A.S.', 'Humo Nueve B', '900000902', '1', v_sector, '05001', 'VERIFICADO', '2026-06-01');
+  values (an_a, 'Humo Nueve A S.A.S.', 'Humo Nueve A', '900000901', '6', v_sector, '11001', 'VERIFICADO', '2026-06-01'),
+         (an_b, 'Humo Nueve B S.A.S.', 'Humo Nueve B', '900000902', '3', v_sector, '05001', 'VERIFICADO', '2026-06-01');
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Medio Nueve A', 'PAGINA_NOTICIAS', '05001', 'VERIFICADO', 1, '2026-08-01 15:00+00'),
          (me_b, 'Medio Nueve B', 'CREADOR', '76001', 'VERIFICADO', 1, '2026-06-01 15:00+00');

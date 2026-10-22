@@ -1,8 +1,23 @@
-import { FileText, Handshake, LayoutDashboard, UsersRound } from "lucide-react"
+import {
+  BadgeCheck,
+  Contact,
+  FileText,
+  Handshake,
+  LayoutDashboard,
+  MapPinned,
+  UsersRound,
+} from "lucide-react"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { AccionesFichaMedio } from "@/features/gestion-medios/components/acciones-ficha-medio"
+import { SeccionUsuariosMedio } from "@/features/gestion-medios/components/usuarios-medio"
+import { PESTANA_USUARIOS } from "@/features/gestion-medios/presentacion"
+import {
+  categoriasEdicion,
+  medioEditable,
+} from "@/features/gestion-medios/queries"
 import { CuentasSociales } from "@/features/operacion/components/cuentas-sociales"
 import { EsqueletoIndicadores } from "@/features/operacion/components/esqueletos"
 import { Diferida, UUID } from "@/features/operacion/components/ficha"
@@ -21,6 +36,19 @@ import {
   cuentasDelMedio,
   obtenerMedio,
 } from "@/features/operacion/queries/medios"
+import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
+import { cargarDatosGestion } from "@/features/usuarios/gestion"
+import type { OrganizacionFija } from "@/features/usuarios/tipos"
+import {
+  PESTANA_PERTINENCIA,
+  PESTANA_VERIFICACION,
+} from "@/features/verificacion/colas"
+import {
+  EsqueletoExpediente,
+  EsqueletoPertinencia,
+} from "@/features/verificacion/components/esqueletos"
+import { SeccionPertinenciaMedio } from "@/features/verificacion/components/seccion-pertinencia"
+import { SeccionVerificacionMedio } from "@/features/verificacion/components/seccion-verificacion"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -33,9 +61,11 @@ export async function generateMetadata({
 }
 
 /**
- * Ficha de un medio (consulta): cabecera e indicadores, y pestañas Resumen,
- * Cuentas sociales, Asignaciones y Documentos. Cada sección consulta por su
- * cuenta y llega en streaming; lo que el rol no puede ver no se consulta.
+ * Ficha de un medio: cabecera e indicadores, y pestañas Resumen, Verificación,
+ * Cuentas sociales, Asignaciones, Documentos, Pertinencia y Usuarios. El
+ * equipo AMO edita sus datos, lo verifica e invita a su equipo desde aquí.
+ * Cada sección consulta por su cuenta y llega en streaming; lo que el rol no
+ * puede ver o hacer no se consulta.
  */
 export default async function PaginaMedio({
   params,
@@ -49,12 +79,26 @@ export default async function PaginaMedio({
   const verVerificaciones = tieneAlgunPermiso(usuario, ["medios.verificar"])
   // La RLS de documentos exige ambos permisos.
   const verDocumentos = verVerificaciones && verSensibles
+  const puedeEditar = tieneAlgunPermiso(usuario, ["medios.editar"])
+  const verUsuarios = tieneAlgunPermiso(usuario, ["usuarios.ver"])
+  const puedeInvitar = tieneAlgunPermiso(usuario, ["usuarios.invitar"])
+  const puedeClasificar = tieneAlgunPermiso(usuario, [
+    "medios.clasificar_pertinencia",
+  ])
 
-  const [medio, cuentas] = await Promise.all([
+  const [medio, cuentas, categorias, gestion] = await Promise.all([
     obtenerMedio(id),
     cuentasDelMedio(id, { verVerificaciones }),
+    puedeEditar ? categoriasEdicion(id) : null,
+    puedeInvitar
+      ? cargarDatosGestion(usuario, { organizaciones: false })
+      : null,
   ])
   if (!medio) notFound()
+
+  const invitarA: OrganizacionFija | null = gestion
+    ? { tipo: "MEDIO", id: medio.id, nombre: medio.nombre }
+    : null
 
   const pestanas: PestanaFicha[] = [
     {
@@ -67,6 +111,28 @@ export default async function PaginaMedio({
         </Diferida>
       ),
     },
+    // ADM-001: expediente y decisión (las colas de verificación enlazan aquí).
+    ...(verVerificaciones
+      ? [
+          {
+            clave: PESTANA_VERIFICACION,
+            titulo: "Verificación",
+            icono: <BadgeCheck aria-hidden />,
+            contenido: (
+              <Diferida
+                recurso="el expediente de verificación"
+                respaldo={<EsqueletoExpediente />}
+              >
+                <SeccionVerificacionMedio
+                  medio={medio}
+                  verDocumentos={verDocumentos}
+                  verSensibles={verSensibles}
+                />
+              </Diferida>
+            ),
+          },
+        ]
+      : []),
     {
       clave: "cuentas",
       titulo: "Cuentas sociales",
@@ -103,10 +169,51 @@ export default async function PaginaMedio({
       ),
     })
   }
+  // ADM-006: la consulta quien ve el medio; la clasifica quien tiene el permiso.
+  pestanas.push({
+    clave: PESTANA_PERTINENCIA,
+    titulo: "Pertinencia",
+    icono: <MapPinned aria-hidden />,
+    contenido: (
+      <Diferida
+        recurso="la pertinencia geográfica"
+        respaldo={<EsqueletoPertinencia />}
+      >
+        <SeccionPertinenciaMedio medio={medio} puedeEditar={puedeClasificar} />
+      </Diferida>
+    ),
+  })
+  if (verUsuarios) {
+    pestanas.push({
+      clave: PESTANA_USUARIOS,
+      titulo: "Usuarios",
+      icono: <Contact aria-hidden />,
+      contenido: (
+        <Diferida recurso="las personas del medio">
+          <SeccionUsuariosMedio medioId={medio.id} invitarA={invitarA} />
+        </Diferida>
+      ),
+    })
+  }
 
-  return (
+  const ficha = (
     <ContenedorPagina>
-      <CabeceraMedio medio={medio} />
+      <CabeceraMedio
+        medio={medio}
+        acciones={
+          <AccionesFichaMedio
+            edicion={
+              categorias
+                ? {
+                    medio: medioEditable(medio, categorias.categoriaIds),
+                    categorias: categorias.opciones,
+                  }
+                : null
+            }
+            invitarA={invitarA}
+          />
+        }
+      />
       <Diferida
         recurso="los indicadores del medio"
         respaldo={<EsqueletoIndicadores cantidad={5} />}
@@ -119,5 +226,11 @@ export default async function PaginaMedio({
       </Diferida>
       <PestanasFicha pestanas={pestanas} />
     </ContenedorPagina>
+  )
+
+  return gestion ? (
+    <ProveedorGestionUsuarios datos={gestion}>{ficha}</ProveedorGestionUsuarios>
+  ) : (
+    ficha
   )
 }

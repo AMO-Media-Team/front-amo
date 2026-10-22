@@ -5,10 +5,12 @@ import {
   supabaseUrlDe,
 } from "./scripts/bootstrap/produccion"
 import {
+  PROYECTO_ALTA_MEDIO,
   PROYECTO_ESCRITORIO,
   PROYECTO_MOVIL,
   PROYECTO_PREPARACION,
   PROYECTO_TABLET,
+  SPECS_ALTA_MEDIO,
 } from "./e2e/utilidades/proyectos"
 
 /**
@@ -80,6 +82,19 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 834, height: 1112 },
         hasTouch: true,
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // Las pruebas que escriben del alta del medio, en serie (comparten «Medio
+      // Nuevo E2E»); sus pruebas de solo lectura corren también en los demás.
+      name: PROYECTO_ALTA_MEDIO,
+      dependencies: [PROYECTO_PREPARACION],
+      testMatch: SPECS_ALTA_MEDIO,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
         launchOptions: OPCIONES_LANZAMIENTO,
       },
     },

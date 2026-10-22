@@ -75,6 +75,12 @@ describe("construirCsp", () => {
     expect(directiva(produccion, "worker-src")).toBe("worker-src 'self' blob:")
   })
 
+  it("reproduce videos locales y firmados de Storage, nada más", () => {
+    expect(directiva(produccion, "media-src")).toBe(
+      "media-src 'self' blob: https://proyectoprueba.supabase.co"
+    )
+  })
+
   it("bloquea marcos, objetos y bases ajenas y reporta violaciones", () => {
     expect(directiva(produccion, "frame-ancestors")).toBe(
       "frame-ancestors 'none'"
@@ -122,6 +128,7 @@ describe("origenesSupabase", () => {
     })
     expect(directiva(politica, "connect-src")).not.toContain("supabase")
     expect(directiva(politica, "img-src")).not.toContain("supabase")
+    expect(directiva(politica, "media-src")).toBe("media-src 'self' blob:")
   })
 })
 

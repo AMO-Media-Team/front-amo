@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import { CABECERA_RUTA_SOLICITADA } from "@/lib/auth/compuertas"
 import { type DecisionAcceso, resolverAcceso } from "@/lib/auth/navegacion"
 import {
   cabeceraEndpointsReporte,
@@ -30,10 +31,16 @@ export async function proxy(request: NextRequest) {
     modoCspDesdeEntorno(process.env.AMO_CSP_MODO)
   )
 
+  // Ruta pedida (sin `_rsc`), para que el DAL conserve el destino si manda a
+  // un paso pendiente (`?next=`). Pisa lo que mande el cliente; el DAL la valida.
+  const pedida = request.nextUrl.clone()
+  pedida.searchParams.delete("_rsc")
+
   // Next toma el nonce de la CSP de la solicitud y lo aplica a sus scripts.
   const { respuesta, claims } = await updateSession(request, {
     "x-nonce": nonce,
     [cabeceraCsp]: politica,
+    [CABECERA_RUTA_SOLICITADA]: pedida.pathname + pedida.search,
   })
 
   const decision = resolverAcceso({

@@ -6,6 +6,7 @@
 import { etiquetaRango } from "@/features/auditoria/periodo"
 import { diasEnRango, parsearFecha, ZONA } from "@/lib/fechas"
 import { formatearFechaHora, formatearNumero } from "@/lib/format"
+import { normalizarNombreGeo } from "@/lib/geo/normalizar"
 
 /** Dígitos mínimos para que un texto cuente como búsqueda por NIT. */
 export const DIGITOS_MINIMOS_NIT = 4
@@ -36,15 +37,8 @@ export function formatearNit(
  * resultado solo tiene letras, números y espacios: no admite comodines.
  */
 export function normalizarBusqueda(texto: string): string {
-  return texto
-    .replace(/¥/g, "ñ")
-    .replace(/&/g, " y ")
-    .toLocaleLowerCase("es")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .replace(/[.'’‘`´]/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
+  // Es la misma función (también quita «D.C.» y «Distrito Capital» finales).
+  return normalizarNombreGeo(texto)
 }
 
 /** Patrón `ilike` para PostgREST a partir de una búsqueda ya normalizada. */
@@ -62,6 +56,16 @@ export function textoParaFiltro(texto: string): string {
     .replace(/[,()*%_\\"'.:]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+/**
+ * Patrón `ilike` sobre el texto tal cual (nombre o marca): las palabras en
+ * orden con cualquier cosa entre ellas, así el nombre exacto se encuentra
+ * aunque traiga la puntuación que `textoParaFiltro` quita («Promo (13)»).
+ */
+export function patronLiteral(texto: string): string | null {
+  const limpio = textoParaFiltro(texto)
+  return limpio ? `%${limpio.replace(/ /g, "%")}%` : null
 }
 
 /**
