@@ -11,9 +11,9 @@ import {
   codigoVencido,
   esElegible,
   type EstadoCuenta,
-  franjaPara,
   requiereAccion,
 } from "./estado-cuenta"
+import { enFrase, franjaPara } from "./franjas"
 import type {
   CuentaMedio,
   FranjaSeguidores,
@@ -303,11 +303,6 @@ export function seguidoresIntento(
 }
 
 // ── Franja según los seguidores ─────────────────────────────────────────────
-
-/** «Más de 120.000» dentro de una frase: «más de 120.000». */
-function enFrase(nombre: string): string {
-  return nombre.charAt(0).toLocaleLowerCase("es-CO") + nombre.slice(1)
-}
 
 export interface PistaFranja {
   tono: Tono

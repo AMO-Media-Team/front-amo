@@ -4,6 +4,7 @@ import { EncabezadoAuth } from "@/features/auth/components/encabezado-auth"
 import { FormularioIngreso } from "@/features/auth/components/formulario-ingreso"
 import { mensajeDeMotivo } from "@/features/auth/components/motivos"
 import { primerValor } from "@/features/auth/components/parametros"
+import { EnlaceVincular } from "@/features/vinculacion/components/enlace-vincular"
 import { rutaInternaSegura } from "@/lib/auth/navegacion"
 
 export const metadata: Metadata = { title: "Ingresar" }
@@ -24,6 +25,7 @@ export default async function PaginaIngresar({
         siguiente={siguiente}
         aviso={mensajeDeMotivo(motivo)}
       />
+      <EnlaceVincular />
     </div>
   )
 }

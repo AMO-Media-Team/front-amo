@@ -109,8 +109,8 @@ export function PanelDocumentos({ datos }: { datos: DatosDocumentosMedio }) {
   useGuardiaSalida(subidas.hay, setSalida)
 
   const situaciones = useMemo(
-    () => situacionesPorTipo(documentos, hoy),
-    [documentos, hoy]
+    () => situacionesPorTipo(documentos, hoy, perfil),
+    [documentos, hoy, perfil]
   )
   const pagoPendiente = perfil.metodoPago === null
   const exigidosDe = (consultado: NivelVerificacion) =>

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import { TIPOS_DOCUMENTO_MEDIO } from "@/features/operacion/estados"
 
 import {
-  enFrase,
   etiquetaNivelCompleta,
   GUIA_DOCUMENTO,
   humanizarDetalle,
@@ -97,18 +96,5 @@ describe("ORDEN_TIPOS_DOCUMENTO", () => {
       Object.keys(TIPOS_DOCUMENTO_MEDIO).length
     )
     expect(ORDEN_TIPOS_DOCUMENTO[0]).toBe("CEDULA_FRENTE")
-  })
-})
-
-describe("enFrase", () => {
-  it("pone en minúscula solo la inicial", () => {
-    expect(enFrase("Cédula (frente)")).toBe("cédula (frente)")
-    expect(enFrase("Integración (API)")).toBe("integración (API)")
-    expect(enFrase("Cámara de comercio")).toBe("cámara de comercio")
-  })
-
-  it("conserva las siglas", () => {
-    expect(enFrase("RUT")).toBe("RUT")
-    expect(enFrase("RUT de la sociedad")).toBe("RUT de la sociedad")
   })
 })

@@ -60,6 +60,11 @@ export type PagoResumen = {
   documentoRegistrado: boolean
   /** Hay cuenta cifrada completa. */
   cuentaRegistrada: boolean
+  /**
+   * Último cambio de método o de cuenta: el certificado de pago debe ser
+   * posterior (`esDeCuentaAnterior`).
+   */
+  datosPagoCambiadosAt: string | null
   actualizadoAt: string | null
 }
 

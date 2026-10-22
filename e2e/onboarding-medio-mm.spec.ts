@@ -3,7 +3,7 @@ import {
   ingresarComoMedio,
   restablecerMedioNuevoE2E,
 } from "./utilidades/medios"
-import { PROYECTO_CON_CUENTAS } from "./utilidades/proyectos"
+import { PROYECTO_ALTA_MEDIO } from "./utilidades/proyectos"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
 
 /**
@@ -40,7 +40,10 @@ async function elegirOpcion(
 ): Promise<void> {
   await page.getByRole("combobox", { name: campo }).click()
   await page.getByRole("option", { name: opcion, exact: true }).click()
-  await expect(page.getByRole("combobox", { name: campo })).toHaveText(opcion)
+  // `toContainText`: Base UI deja «▼» como texto (invisible) dentro del chevron.
+  await expect(page.getByRole("combobox", { name: campo })).toContainText(
+    opcion
+  )
 }
 
 /** Diez dígitos que no chocan con otra corrida (huella única entre medios). */
@@ -117,13 +120,13 @@ test.describe("mi medio · alta de un medio nuevo", () => {
   // Playwright exige desestructurar los fixtures aunque no se usen.
   test.beforeAll(async ({}, info) => {
     info.skip(
-      info.project.name !== PROYECTO_CON_CUENTAS,
-      "Cambia el medio nuevo: corre solo en el proyecto con cuentas."
+      info.project.name !== PROYECTO_ALTA_MEDIO,
+      "Cambia el medio nuevo: corre solo en el proyecto «alta-medio», en serie."
     )
     await restablecerMedioNuevoE2E()
   })
   test.afterAll(async ({}, info) => {
-    if (info.project.name === PROYECTO_CON_CUENTAS) {
+    if (info.project.name === PROYECTO_ALTA_MEDIO) {
       await restablecerMedioNuevoE2E()
     }
   })
@@ -185,6 +188,10 @@ test.describe("mi medio · alta de un medio nuevo", () => {
     await expect(barraGuardar(page)).toHaveCount(0)
 
     await page.reload()
+    // Igual que tras el ingreso: un instante puede haber dos copias del formulario.
+    await expect(
+      page.locator('textarea[name="descripcionAudiencia"]')
+    ).toHaveCount(1)
     await expect(page.getByLabel("Describe a tu audiencia")).toHaveValue(
       descripcion
     )
@@ -206,7 +213,13 @@ test.describe("mi medio · alta de un medio nuevo", () => {
       cuenta: "MEDIO_NUEVO",
       destino: "/mi-medio/pago",
     })
-    await expect(page.getByText("Tus datos van cifrados")).toBeVisible()
+    // Tras el ingreso, el render del cliente reemplaza al del servidor y por un
+    // instante conviven dos formularios: se espera a que quede uno.
+    await expect(page.locator('input[name="titularNombre"]')).toHaveCount(1)
+    const formulario = page.getByRole("form", {
+      name: "Datos de pago y condición",
+    })
+    await expect(formulario.getByText("Tus datos van cifrados")).toBeVisible()
 
     await page.getByLabel("Nombre del titular").fill("Titular Medio Nuevo E2E")
     await elegirOpcion(page, "Tipo de documento", "Cédula de ciudadanía")

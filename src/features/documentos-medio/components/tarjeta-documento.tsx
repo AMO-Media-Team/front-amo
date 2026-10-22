@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { ListaSubidas } from "@/components/archivos/lista-subidas"
 import { Button } from "@/components/ui/button"
+import { TEXTO_CERTIFICADO_CUENTA_ANTERIOR } from "@/features/mi-medio/requisitos"
 import { InsigniaTono } from "@/features/operacion/components/distintivos"
 import { cn } from "@/lib/utils"
 
@@ -45,6 +46,13 @@ function Notas({
 }) {
   switch (situacion.tipo) {
     case "falta":
+      if (situacion.deCuentaAnterior) {
+        return (
+          <Nota tono="aviso" icono={TriangleAlert}>
+            {TEXTO_CERTIFICADO_CUENTA_ANTERIOR}
+          </Nota>
+        )
+      }
       return esVoluntario(tipo) ? <AvisoPruebaVida compacto /> : null
     case "rechazado":
       return <NotaRechazo observaciones={situacion.documento.observaciones} />

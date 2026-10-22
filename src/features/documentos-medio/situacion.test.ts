@@ -66,7 +66,10 @@ describe("estaVigente", () => {
 
 describe("situacionDe", () => {
   it("sin cargas falta", () => {
-    expect(situacionDe([], HOY)).toEqual({ tipo: "falta" })
+    expect(situacionDe([], HOY)).toEqual({
+      tipo: "falta",
+      deCuentaAnterior: false,
+    })
   })
 
   it("la carga más reciente pendiente está en revisión (sin aprobado previo)", () => {
@@ -185,7 +188,8 @@ describe("situacionesPorTipo", () => {
         documento({ tipo: "RUT", estado: "APROBADO" }),
         documento({ tipo: "CEDULA_FRENTE" }),
       ],
-      HOY
+      HOY,
+      null
     )
     expect(situacionDeTipo(situaciones, "RUT").tipo).toBe("aprobado")
     expect(situacionDeTipo(situaciones, "CEDULA_FRENTE").tipo).toBe(
@@ -193,6 +197,87 @@ describe("situacionesPorTipo", () => {
     )
     expect(situacionDeTipo(situaciones, "CAMARA_COMERCIO")).toEqual({
       tipo: "falta",
+      deCuentaAnterior: false,
+    })
+  })
+})
+
+describe("certificado de la cuenta de pago anterior", () => {
+  const CUENTA = {
+    metodoPago: "BANCARIO" as const,
+    datosPagoCambiadosAt: "2026-10-10T15:00:00+00:00",
+  }
+  const anterior = documento({
+    tipo: "CERT_BANCARIA",
+    estado: "APROBADO",
+    cargadoAt: "2026-10-01T15:00:00Z",
+  })
+
+  it("si solo hay el de la cuenta anterior, aunque esté aprobado, falta", () => {
+    expect(situacionDe([anterior], HOY, CUENTA)).toEqual({
+      tipo: "falta",
+      deCuentaAnterior: true,
+    })
+    // Sin la cuenta (o antes de registrarla) no se descarta nada.
+    expect(situacionDe([anterior], HOY).tipo).toBe("aprobado")
+  })
+
+  it("el nuevo en revisión ya no tiene un aprobado que lo respalde", () => {
+    const nuevo = documento({
+      tipo: "CERT_BANCARIA",
+      cargadoAt: "2026-10-12T15:00:00Z",
+    })
+    expect(situacionDe([anterior, nuevo], HOY, CUENTA)).toEqual({
+      tipo: "en-revision",
+      documento: nuevo,
+      vigente: null,
+    })
+  })
+
+  it("solo descarta el certificado del método vigente", () => {
+    const situaciones = situacionesPorTipo(
+      [
+        anterior,
+        documento({
+          tipo: "CERT_BILLETERA",
+          estado: "APROBADO",
+          cargadoAt: "2026-09-01T15:00:00Z",
+        }),
+        documento({
+          tipo: "CEDULA_FRENTE",
+          estado: "APROBADO",
+          cargadoAt: "2026-09-01T15:00:00Z",
+        }),
+      ],
+      HOY,
+      CUENTA
+    )
+    expect(situacionDeTipo(situaciones, "CERT_BANCARIA")).toEqual({
+      tipo: "falta",
+      deCuentaAnterior: true,
+    })
+    expect(situacionDeTipo(situaciones, "CERT_BILLETERA").tipo).toBe("aprobado")
+    expect(situacionDeTipo(situaciones, "CEDULA_FRENTE").tipo).toBe("aprobado")
+  })
+
+  it("en el resumen cuenta como un documento que falta", () => {
+    const situaciones = situacionesPorTipo([anterior], HOY, CUENTA)
+    expect(resumirDocumentos(["CERT_BANCARIA"], situaciones)).toMatchObject({
+      aprobados: 0,
+      faltan: 1,
+      completo: false,
+      todoCargado: false,
+    })
+  })
+
+  it("se presenta como sin cargar y pide la acción", () => {
+    expect(
+      presentarSituacion({ tipo: "falta", deCuentaAnterior: true })
+    ).toEqual({
+      etiqueta: "Sin cargar",
+      tono: "neutro",
+      accion: "cargar",
+      requiereAccion: true,
     })
   })
 })
@@ -214,7 +299,8 @@ describe("resumirDocumentos", () => {
         // Fuera de lo exigido: no cuenta.
         documento({ tipo: "RUT", estado: "RECHAZADO" }),
       ],
-      HOY
+      HOY,
+      null
     )
     expect(resumirDocumentos(exigidos, situaciones)).toEqual({
       total: 4,
@@ -236,7 +322,8 @@ describe("resumirDocumentos", () => {
         documento({ tipo: "CEDULA_REVERSO" }),
         documento({ tipo: "CERT_BANCARIA", estado: "APROBADO" }),
       ],
-      HOY
+      HOY,
+      null
     )
     const resumen = resumirDocumentos(exigidos, situaciones)
     expect(resumen).toMatchObject({ voluntarios: 1, faltan: 0 })
@@ -252,7 +339,8 @@ describe("resumirDocumentos", () => {
         documento({ tipo: "PRUEBA_VIDA", estado: "RECHAZADO" }),
         documento({ tipo: "CERT_BANCARIA", estado: "APROBADO" }),
       ],
-      HOY
+      HOY,
+      null
     )
     const resumen = resumirDocumentos(exigidos, situaciones)
     expect(resumen).toMatchObject({ porCorregir: 1, voluntarios: 0 })
@@ -277,7 +365,8 @@ describe("resumirDocumentos", () => {
           venceEl: "2026-11-01",
         }),
       ],
-      HOY
+      HOY,
+      null
     )
     expect(resumirDocumentos(exigidos, situaciones)).toMatchObject({
       aprobados: 4,
@@ -297,7 +386,8 @@ describe("resumirDocumentos", () => {
         }),
         documento({ tipo: "CEDULA_FRENTE", cargadoAt: "2026-10-21T12:00:00Z" }),
       ],
-      HOY
+      HOY,
+      null
     )
     expect(resumirDocumentos(["CEDULA_FRENTE"], situaciones)).toMatchObject({
       aprobados: 1,
@@ -311,7 +401,8 @@ describe("resumirDocumentos", () => {
       ["CEDULA_FRENTE"],
       situacionesPorTipo(
         [documento({ tipo: "CEDULA_FRENTE", estado: "APROBADO" })],
-        HOY
+        HOY,
+        null
       ),
       { pagoPendiente: true }
     )
@@ -347,20 +438,25 @@ describe("presentarSituacion", () => {
     }) satisfies Situacion
 
   it("lo que falta pide cargarlo, salvo lo voluntario", () => {
-    expect(presentarSituacion({ tipo: "falta" })).toEqual({
+    expect(
+      presentarSituacion({ tipo: "falta", deCuentaAnterior: false })
+    ).toEqual({
       etiqueta: "Sin cargar",
       tono: "neutro",
       accion: "cargar",
       requiereAccion: true,
     })
-    expect(presentarSituacion({ tipo: "falta" }, { voluntario: true })).toEqual(
-      {
-        etiqueta: "Opcional",
-        tono: "neutro",
-        accion: "cargar",
-        requiereAccion: false,
-      }
-    )
+    expect(
+      presentarSituacion(
+        { tipo: "falta", deCuentaAnterior: false },
+        { voluntario: true }
+      )
+    ).toEqual({
+      etiqueta: "Opcional",
+      tono: "neutro",
+      accion: "cargar",
+      requiereAccion: false,
+    })
   })
 
   it("en revisión se puede reemplazar sin pedir atención", () => {

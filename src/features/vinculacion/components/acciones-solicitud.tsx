@@ -92,6 +92,7 @@ export function AccionesSolicitud({
         titulo={`¿Descartar la solicitud de ${solicitud.nombreMedio}?`}
         descripcion={`Saldrá de la cola y no se registrará el medio. No le avisaremos a ${solicitud.contactoNombre}; si quieres explicarle, escríbele tú.`}
         ayuda="El motivo queda en la bitácora y lo ve el equipo AMO."
+        placeholder="Ej.: no es un medio hiperlocal, solicitud repetida, cuenta personal…"
         textoConfirmar="Descartar"
         destructivo
         onConfirmar={descartar}

@@ -155,7 +155,10 @@ function agruparPorCuenta(
   return porCuenta
 }
 
-/** Franjas activas de seguidores, de la menor a la mayor. */
+/**
+ * Franjas activas de seguidores, de la menor a la mayor. Las comparten «Mis
+ * cuentas» y la verificación del equipo AMO (cada uno con su sesión).
+ */
 export const franjasActivas = cache(async (): Promise<FranjaSeguidores[]> => {
   const supabase = await crearClienteServidor()
   const { data, error } = await supabase

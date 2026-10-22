@@ -14,6 +14,7 @@ import {
   type EstadoRequisito,
   requisitoCubierto,
   requisitosParaEnviar,
+  TEXTO_CERTIFICADO_CUENTA_ANTERIOR,
 } from "./requisitos"
 
 // ── Rutas de «Mi medio» (contrato con el resolvedor `/ir` y los demás paquetes) ─
@@ -179,7 +180,10 @@ function pasoDocumentos({ documentos }: DatosAlta): PasoAlta {
   const exigibles = requisitosParaEnviar(documentos.requisitos)
   const cubiertos = exigibles.filter(requisitoCubierto)
   const conProblema = documentos.requisitos.filter(
-    (r) => r.situacion === "rechazado" || r.situacion === "vencido"
+    (r) =>
+      r.situacion === "rechazado" ||
+      r.situacion === "vencido" ||
+      r.deCuentaAnterior
   )
   const enRevision = cubiertos.filter((r) => r.situacion === "en-revision")
   const porVencer = cubiertos.filter(
@@ -191,7 +195,10 @@ function pasoDocumentos({ documentos }: DatosAlta): PasoAlta {
 
   let estado: EstadoPaso
   let detalle: string
-  if (conProblema.length > 0) {
+  if (conProblema.length === 1 && conProblema[0].deCuentaAnterior) {
+    estado = "atencion"
+    detalle = TEXTO_CERTIFICADO_CUENTA_ANTERIOR
+  } else if (conProblema.length > 0) {
     estado = "atencion"
     detalle = `${plural(conProblema.length, "documento necesita que lo cargues", "documentos necesitan que los cargues")} de nuevo.`
   } else if (completo && porVencer.length > 0) {

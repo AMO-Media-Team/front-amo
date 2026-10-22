@@ -60,7 +60,10 @@ beforeEach(() => {
 
 describe("TarjetaDocumento", () => {
   it("un documento sin cargar explica qué es y ofrece cargarlo", async () => {
-    const { onActividad } = dibujar("CEDULA_FRENTE", { tipo: "falta" })
+    const { onActividad } = dibujar("CEDULA_FRENTE", {
+      tipo: "falta",
+      deCuentaAnterior: false,
+    })
     const tarjeta = screen.getByRole("article", {
       name: "Documento de identidad (frente)",
     })
@@ -88,7 +91,7 @@ describe("TarjetaDocumento", () => {
   })
 
   it("la prueba de vida se ofrece como opcional, con la alternativa de videollamada", async () => {
-    dibujar("PRUEBA_VIDA", { tipo: "falta" })
+    dibujar("PRUEBA_VIDA", { tipo: "falta", deCuentaAnterior: false })
     const tarjeta = screen.getByRole("article", { name: "Prueba de vida" })
     expect(within(tarjeta).getByText("Opcional")).toBeInTheDocument()
     expect(within(tarjeta).getByText(/videollamada corta/)).toBeVisible()
@@ -99,6 +102,22 @@ describe("TarjetaDocumento", () => {
     const hoja = await screen.findByRole("dialog", { name: "Prueba de vida" })
     expect(within(hoja).getByText("Enviarla es voluntario")).toBeVisible()
     expect(within(hoja).getByText(/dato biométrico/)).toBeVisible()
+  })
+
+  it("el certificado de la cuenta anterior pide el de la cuenta nueva", () => {
+    dibujar("CERT_BANCARIA", { tipo: "falta", deCuentaAnterior: true })
+    const tarjeta = screen.getByRole("article", {
+      name: "Certificación bancaria",
+    })
+    expect(within(tarjeta).getByText("Sin cargar")).toBeInTheDocument()
+    expect(
+      within(tarjeta).getByText(
+        "Cambiaste tu cuenta de pago: carga el certificado de la cuenta nueva."
+      )
+    ).toBeVisible()
+    expect(
+      within(tarjeta).getByRole("button", { name: "Cargar" })
+    ).toBeVisible()
   })
 
   it("un rechazo muestra el motivo y pide cargarlo de nuevo", () => {

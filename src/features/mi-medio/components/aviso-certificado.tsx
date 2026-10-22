@@ -29,8 +29,10 @@ function presentar(requisito: EstadoRequisito): Presentacion | null {
   switch (requisito.situacion) {
     case "falta":
       return {
-        titulo: `Falta la ${nombre} de tu cuenta`,
-        texto: AYUDA_DOCUMENTO[requisito.tipo],
+        titulo: requisito.deCuentaAnterior
+          ? `Falta la ${nombre} de tu cuenta nueva`
+          : `Falta la ${nombre} de tu cuenta`,
+        texto: nota ?? AYUDA_DOCUMENTO[requisito.tipo],
         icono: CircleAlert,
         clases: aviso,
         conEnlace: true,

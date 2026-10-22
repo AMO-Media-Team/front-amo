@@ -5,6 +5,7 @@ medio), y dejar listos los bloques que usarán todas las fases siguientes. Lee p
 [`README.md`](README.md) (reglas de propiedad y verificación).
 
 Ya hecho por el líder (no lo rehagas):
+
 - Migración `supabase/migrations/20261022024336_e2_desbloqueo.sql`: ROL-008 (`private.puede_gestionar` ignora
   los permisos «propios» de los roles externos) y la validación del NIT (`private.digito_verificacion_nit`,
   trigger `trg_anunciantes_b_identificacion`: DV obligatorio y correcto para Colombia, error
@@ -13,7 +14,7 @@ Ya hecho por el líder (no lo rehagas):
 - `BotonCrearUsuario` (`src/features/usuarios/components/hoja-crear-usuario.tsx`) acepta
   `organizacion?: OrganizacionFija` (`{ tipo: "ANUNCIANTE" | "MEDIO"; id; nombre }` de
   `src/features/usuarios/tipos.ts`), `texto?` y `variante?`. Necesita `<ProveedorGestionUsuarios
-  datos={await cargarDatosGestion(usuario)}>` (`src/features/usuarios/components/contexto-gestion.tsx`,
+datos={await cargarDatosGestion(usuario)}>` (`src/features/usuarios/components/contexto-gestion.tsx`,
   `src/features/usuarios/gestion.ts`) alrededor.
 - El aviso de la hoja de usuarios ya enlaza a `/operacion/medios?registrar=1` y
   `/operacion/anunciantes?registrar=1`: esos parámetros deben abrir la hoja de registro al llegar.
@@ -122,7 +123,7 @@ pruebas), `src/app/(app)/operacion/medios/page.tsx`, `src/app/(app)/operacion/me
 `scripts/db/transiciones-ts.ts`.
 
 - `src/lib/cifrado.ts` (`server-only`): AES-256-GCM con la llave de `AMO_CIFRADO_KEY` (formato `k<n>:<base64 de
-  32 bytes>`, ver `src/lib/env-esquema.ts`) y `AMO_CIFRADO_KEY_ANTERIOR` opcional para rotar. API:
+32 bytes>`, ver `src/lib/env-esquema.ts`) y `AMO_CIFRADO_KEY_ANTERIOR` opcional para rotar. API:
   `cifrar(texto) → "v<n>:<iv>:<ct>:<tag>"` (base64url), `descifrar(valor)` (elige la llave por versión),
   `huella(texto)` (HMAC-SHA256 hex con subllave HKDF, para unicidad sin revelar), `ultimos4(texto)`. Lee el
   CHECK de `medios_privado` en la migración `20260930222842_negocio_actores.sql` y respeta su formato

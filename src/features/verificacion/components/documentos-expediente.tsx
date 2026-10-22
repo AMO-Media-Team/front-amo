@@ -13,6 +13,7 @@ import { useState } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { Button } from "@/components/ui/button"
+import { enFrase } from "@/features/cuentas-medio/franjas"
 import {
   InsigniaEstado,
   InsigniaTono,
@@ -26,7 +27,6 @@ import { instanteDeDia } from "@/features/operacion/formato"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
 
 import {
-  enFrase,
   ORDEN_TIPOS_DOCUMENTO,
   SITUACIONES_REQUISITO,
   tituloRequisito,

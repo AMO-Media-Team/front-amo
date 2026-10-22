@@ -169,7 +169,7 @@ describe("explicarNivelElegido", () => {
 
 describe("lineaFechas", () => {
   it("lo que falta no tiene fechas", () => {
-    expect(lineaFechas({ tipo: "falta" })).toBeNull()
+    expect(lineaFechas({ tipo: "falta", deCuentaAnterior: false })).toBeNull()
   })
 
   it("en revisión: solo la carga", () => {

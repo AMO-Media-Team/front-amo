@@ -21,6 +21,7 @@ import {
 } from "@/features/operacion/components/distintivos"
 import { TarjetaFicha } from "@/features/operacion/components/ficha"
 import type { Tono } from "@/features/operacion/estados"
+import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import {
   formatearCOPCompacto,
   formatearFechaHora,
@@ -37,12 +38,12 @@ import {
 import {
   MOTIVOS_CAMBIO_NIVEL,
   MOTIVOS_RECHAZO_MEDIO,
+  PLACEHOLDER_MOTIVO,
   SITUACIONES_REQUISITO,
   tituloRequisito,
 } from "../presentacion"
 import type { SituacionRequisito } from "../requisitos"
 import type { ExpedienteMedio, NivelExpediente } from "../tipos"
-import { DialogoMotivoVerificacion } from "./dialogo-motivo-verificacion"
 import { SelectorNivel } from "./selector-nivel"
 
 const CLASES_AVISO: Readonly<Record<Tono, string>> = {
@@ -277,7 +278,7 @@ export function DecisionMedio({
         }}
       />
 
-      <DialogoMotivoVerificacion
+      <DialogoMotivo
         abierto={dialogo === "rechazar"}
         onAbiertoChange={cerrar}
         destructivo
@@ -285,6 +286,7 @@ export function DecisionMedio({
         descripcion="El medio recibirá un aviso con el motivo. Cuando corrija y vuelva a enviar su perfil, regresará a la cola."
         ayuda="El medio lo verá tal cual; queda en la bitácora."
         sugerencias={MOTIVOS_RECHAZO_MEDIO}
+        placeholder={PLACEHOLDER_MOTIVO}
         textoConfirmar="Rechazar verificación"
         onConfirmar={async (motivo) => {
           const resultado = await rechazarMedio({ medioId: medio.id, motivo })
@@ -293,7 +295,7 @@ export function DecisionMedio({
         }}
       />
 
-      <DialogoMotivoVerificacion
+      <DialogoMotivo
         abierto={dialogo === "cambiar_nivel"}
         onAbiertoChange={cerrar}
         titulo={`¿Cambiar ${medio.nombre} del nivel ${medio.nivel} al ${nivel.nivel}?`}
@@ -305,6 +307,7 @@ export function DecisionMedio({
         etiqueta="Motivo del cambio"
         ayuda="Queda en la bitácora junto con el cambio."
         sugerencias={MOTIVOS_CAMBIO_NIVEL}
+        placeholder={PLACEHOLDER_MOTIVO}
         textoConfirmar={`Cambiar al nivel ${nivel.nivel}`}
         onConfirmar={async (motivo) => {
           const resultado = await cambiarNivelMedio({

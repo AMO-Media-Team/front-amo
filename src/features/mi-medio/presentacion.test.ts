@@ -19,6 +19,7 @@ function requisito(parcial: Partial<EstadoRequisito>): EstadoRequisito {
     observaciones: null,
     porVideollamada: false,
     renovacionEnRevision: false,
+    deCuentaAnterior: false,
     ...parcial,
   }
 }
@@ -96,6 +97,20 @@ describe("notaRequisito", () => {
       "Venció: carga uno vigente."
     )
     expect(notaRequisito(requisito({ situacion: "falta" }))).toBeNull()
+  })
+
+  it("el certificado de la cuenta anterior pide el de la cuenta nueva", () => {
+    expect(
+      notaRequisito(
+        requisito({
+          tipo: "CERT_BILLETERA",
+          situacion: "falta",
+          deCuentaAnterior: true,
+        })
+      )
+    ).toBe(
+      "Cambiaste tu cuenta de pago: carga el certificado de la cuenta nueva."
+    )
   })
 })
 

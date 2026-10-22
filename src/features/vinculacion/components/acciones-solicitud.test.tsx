@@ -272,6 +272,12 @@ describe("AccionesSolicitud · Descartar", () => {
     const dialogo = await screen.findByRole("alertdialog", {
       name: "¿Descartar la solicitud de Noticias Pasto?",
     })
+    // El ejemplo habla de solicitudes, no de usuarios; sin motivos frecuentes.
+    expect(within(dialogo).getByLabelText("Motivo")).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(/no es un medio hiperlocal/)
+    )
+    expect(within(dialogo).queryByText("Motivos frecuentes")).toBeNull()
     await usuario.click(
       within(dialogo).getByRole("button", { name: "Descartar" })
     )

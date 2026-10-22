@@ -1,18 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  franjaPara,
   parsearSeguidores,
-  type RangoFranja,
   UMBRAL_SALTO_SEGUIDORES,
   variacionSeguidores,
 } from "./seguidores"
-
-const FRANJAS: RangoFranja[] = [
-  { clave: "F1", nombre: "30.000 – 60.000", minimo: 30_000, maximo: 60_000 },
-  { clave: "F2", nombre: "60.001 – 120.000", minimo: 60_001, maximo: 120_000 },
-  { clave: "F3", nombre: "Más de 120.000", minimo: 120_001, maximo: null },
-]
 
 describe("variacionSeguidores", () => {
   it("sin verificación anterior no hay variación", () => {
@@ -45,20 +37,6 @@ describe("variacionSeguidores", () => {
       variacionSeguidores(base * (1 + UMBRAL_SALTO_SEGUIDORES), base).salto
     ).toBe(true)
     expect(variacionSeguidores(base * 1.19, base).salto).toBe(false)
-  })
-})
-
-describe("franjaPara", () => {
-  it("ubica la franja con límites inclusivos", () => {
-    expect(franjaPara(30_000, FRANJAS)?.clave).toBe("F1")
-    expect(franjaPara(60_000, FRANJAS)?.clave).toBe("F1")
-    expect(franjaPara(60_001, FRANJAS)?.clave).toBe("F2")
-    expect(franjaPara(5_000_000, FRANJAS)?.clave).toBe("F3")
-  })
-
-  it("por debajo del umbral no hay franja", () => {
-    expect(franjaPara(25_000, FRANJAS)).toBeNull()
-    expect(franjaPara(Number.NaN, FRANJAS)).toBeNull()
   })
 })
 

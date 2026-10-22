@@ -16,6 +16,7 @@ import { ZonaArchivos } from "@/components/archivos/zona-archivos"
 import { Button } from "@/components/ui/button"
 import { SheetClose } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
+import { TEXTO_CERTIFICADO_CUENTA_ANTERIOR } from "@/features/mi-medio/requisitos"
 import { formatearTamano } from "@/lib/archivos/formato"
 
 import { AYUDA_FORMATOS, FICHAS_DOCUMENTO, REGLAS_SELECCION } from "../catalogo"
@@ -52,7 +53,11 @@ function Contexto({ situacion }: { situacion: Situacion }) {
         </Nota>
       )
     case "falta":
-      return null
+      return situacion.deCuentaAnterior ? (
+        <Nota tono="aviso" icono={TriangleAlert}>
+          {TEXTO_CERTIFICADO_CUENTA_ANTERIOR}
+        </Nota>
+      ) : null
   }
 }
 

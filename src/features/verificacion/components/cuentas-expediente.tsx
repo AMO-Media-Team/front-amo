@@ -10,6 +10,7 @@ import { useState } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { Button } from "@/components/ui/button"
+import { enFrase } from "@/features/cuentas-medio/franjas"
 import {
   InsigniaEstado,
   MarcaPlataforma,
@@ -23,7 +24,6 @@ import {
 import { formatearHandle } from "@/features/operacion/formato"
 import { formatearFecha, formatearNumero } from "@/lib/format"
 
-import { enFrase } from "../presentacion"
 import type { CuentaExpediente, ExpedienteMedio } from "../tipos"
 import { HojaCuenta } from "./revision-cuenta"
 

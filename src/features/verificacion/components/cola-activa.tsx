@@ -5,6 +5,7 @@ import { Suspense } from "react"
 import { LimiteErrorTabla } from "@/components/data-table/limite-error-tabla"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { enFrase } from "@/features/cuentas-medio/franjas"
 import {
   ColaSolicitudes,
   EsqueletoColaSolicitudes,
@@ -12,7 +13,6 @@ import {
 
 import { type AccesoColas, type Cola, COLAS_VERIFICACION } from "../colas"
 import { MENSAJES_VERIFICACION } from "../errores"
-import { enFrase } from "../presentacion"
 import { ColaCuentas } from "./cola-cuentas"
 import { ColaDocumentos } from "./cola-documentos"
 import { ColaMedios } from "./cola-medios"

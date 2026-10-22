@@ -10,7 +10,7 @@ import {
   ingresarComoMedio,
   MEDIO_VERIFICADO,
 } from "./utilidades/medios"
-import { PROYECTO_CON_CUENTAS } from "./utilidades/proyectos"
+import { PROYECTO_ALTA_MEDIO } from "./utilidades/proyectos"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
 
 /**
@@ -45,6 +45,17 @@ async function abrirCuentas(page: Page): Promise<void> {
 
 function tarjeta(page: Page, red: string, handle: string): Locator {
   return page.getByRole("article", { name: `${red}: @${handle}`, exact: true })
+}
+
+/**
+ * La plataforma se elige tocando su tarjeta (la `<label>`); el radio va oculto
+ * (`sr-only`) y la etiqueta recibe el clic, como en el teléfono.
+ */
+async function elegirPlataforma(dialogo: Locator, nombre: string) {
+  // `has` se evalúa dentro de cada etiqueta: el radio se busca desde la página.
+  const radio = dialogo.page().getByRole("radio", { name: nombre })
+  await dialogo.locator("label").filter({ has: radio }).click()
+  await expect(dialogo.getByRole("radio", { name: nombre })).toBeChecked()
 }
 
 test.describe("cuentas sociales · medio verificado", () => {
@@ -133,15 +144,15 @@ test.describe("cuentas sociales · alta, verificación y baja", () => {
   // Playwright exige desestructurar los fixtures aunque no se usen.
   test.beforeAll(async ({}, info) => {
     info.skip(
-      info.project.name !== PROYECTO_CON_CUENTAS,
-      "Agrega y quita cuentas del Medio E2E: corre solo en escritorio."
+      info.project.name !== PROYECTO_ALTA_MEDIO,
+      "Agrega y quita cuentas del Medio E2E: corre solo en el proyecto «alta-medio», en serie."
     )
     servicio = await clienteComoSuperadmin(entorno)
     await borrarCuentasDePrueba()
   })
 
   test.afterAll(async ({}, info) => {
-    if (info.project.name !== PROYECTO_CON_CUENTAS || !servicio) return
+    if (info.project.name !== PROYECTO_ALTA_MEDIO || !servicio) return
     await borrarCuentasDePrueba()
   })
 
@@ -153,7 +164,7 @@ test.describe("cuentas sociales · alta, verificación y baja", () => {
 
     await page.getByRole("button", { name: "Agregar cuenta" }).click()
     const alta = page.getByRole("dialog", { name: "Agregar cuenta" })
-    await alta.getByRole("radio", { name: "TikTok" }).click()
+    await elegirPlataforma(alta, "TikTok")
     await alta
       .getByLabel("Usuario o enlace del perfil")
       .fill(`https://www.tiktok.com/@${handle}`)
@@ -273,7 +284,7 @@ test.describe("cuentas sociales · alta, verificación y baja", () => {
 
     await page.getByRole("button", { name: "Agregar cuenta" }).click()
     const alta = page.getByRole("dialog", { name: "Agregar cuenta" })
-    await alta.getByRole("radio", { name: "Facebook" }).click()
+    await elegirPlataforma(alta, "Facebook")
     await alta.getByLabel("Usuario o enlace del perfil").fill(handle)
     await alta.getByRole("button", { name: "Agregar cuenta" }).click()
     await expect(page.getByText(`Agregamos @${handle}`)).toBeVisible()
@@ -281,7 +292,8 @@ test.describe("cuentas sociales · alta, verificación y baja", () => {
 
     const nueva = tarjeta(page, "Facebook", handle)
     await expect(
-      nueva.getByText("Sin verificar", { exact: true })
+      // La insignia (el detalle de la tarjeta repite el estado).
+      nueva.getByTitle("Verifícala para empezar a recibir ofertas.")
     ).toBeVisible()
     await expect(
       nueva.getByRole("button", { name: "Verificar cuenta" })

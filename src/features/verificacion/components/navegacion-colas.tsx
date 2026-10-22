@@ -58,18 +58,20 @@ function EnlaceCola({
           "border-primary/50 bg-primary/6 ring-1 ring-primary/30 hover:bg-primary/10"
       )}
     >
-      <span className="flex w-full items-center justify-between gap-2">
+      {/* En el teléfono el número va a la derecha: el título cede espacio
+          (se recorta) y la cifra nunca se corta, tenga las que tenga. */}
+      <span className="flex min-w-0 flex-1 items-center justify-between gap-2 sm:w-full sm:flex-none">
         <span
           className={cn(
-            "flex items-center gap-2 text-sm font-medium",
+            "flex min-w-0 items-center gap-2 text-sm font-medium",
             activa ? "text-foreground" : "text-muted-foreground"
           )}
         >
           <Icono
             aria-hidden
-            className={cn("size-4", activa && "text-primary")}
+            className={cn("size-4 shrink-0", activa && "text-primary")}
           />
-          {titulo}
+          <span className="truncate">{titulo}</span>
         </span>
         {pendiente ? (
           <span
@@ -81,7 +83,7 @@ function EnlaceCola({
       <span
         aria-hidden
         className={cn(
-          "ml-auto text-2xl leading-none font-semibold cifras sm:ml-0 sm:text-[1.75rem]",
+          "ml-auto shrink-0 text-2xl leading-none font-semibold cifras sm:ml-0 sm:text-[1.75rem]",
           cantidad === null || cantidad === 0
             ? "text-muted-foreground"
             : "text-foreground"

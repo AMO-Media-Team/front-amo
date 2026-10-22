@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import type { FranjaSeguidores } from "@/features/cuentas-medio/tipos"
 import { MarcaPlataforma } from "@/features/operacion/components/distintivos"
 import { METODOS_VERIFICACION, PLATAFORMAS } from "@/features/operacion/estados"
 import { formatearHandle } from "@/features/operacion/formato"
@@ -17,7 +18,7 @@ import {
 
 import { momentoCaptura } from "../codigo"
 import { rutaRevisionMedio } from "../colas"
-import { type RangoFranja, variacionSeguidores } from "../seguidores"
+import { variacionSeguidores } from "../seguidores"
 import type { VerificacionEnCola } from "../tipos"
 import { HojaCuenta } from "./revision-cuenta"
 
@@ -134,7 +135,7 @@ export function RevisorCuentas({
   franjas,
 }: {
   verificaciones: readonly VerificacionEnCola[]
-  franjas: readonly RangoFranja[]
+  franjas: readonly FranjaSeguidores[]
 }) {
   const [seleccion, setSeleccion] = useState<string | null>(null)
   const actual = verificaciones.find(

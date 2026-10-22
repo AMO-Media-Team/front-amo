@@ -50,22 +50,6 @@ export function humanizarDetalle(texto: string): string {
   )
 }
 
-/**
- * Un nombre del catálogo dentro de una frase: «Cédula (frente)» → «cédula
- * (frente)», «Integración (API)» → «integración (API)»; las siglas que lo
- * abren se conservan («RUT de la sociedad»).
- */
-export function enFrase(nombre: string): string {
-  const primera = nombre.split(/\s/, 1)[0] ?? ""
-  const esSigla =
-    primera.length > 1 &&
-    /\p{Lu}/u.test(primera) &&
-    primera === primera.toLocaleUpperCase("es-CO")
-  return esSigla
-    ? nombre
-    : nombre.charAt(0).toLocaleLowerCase("es-CO") + nombre.slice(1)
-}
-
 /** «Nivel 2 · Persona natural con RUT». */
 export function etiquetaNivelCompleta(nivel: number, nombre: string): string {
   return `Nivel ${nivel} · ${nombre}`
@@ -112,6 +96,10 @@ export const GUIA_DOCUMENTO: Readonly<
     "Muestra el pago de salud y pensión.",
   ],
 }
+
+/** Campo del motivo cuando se ofrecen motivos frecuentes. */
+export const PLACEHOLDER_MOTIVO =
+  "Elige un motivo frecuente o escríbelo con tus palabras."
 
 /** Motivos frecuentes: un toque llena el campo (se pueden editar). */
 export const MOTIVOS_RECHAZO_DOCUMENTO: readonly string[] = [

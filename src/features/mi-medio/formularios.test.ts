@@ -42,6 +42,7 @@ const RESUMEN: PagoResumen = {
   responsableIva: true,
   documentoRegistrado: true,
   cuentaRegistrada: true,
+  datosPagoCambiadosAt: "2026-10-22T12:00:00Z",
   actualizadoAt: "2026-10-22T12:00:00Z",
 }
 

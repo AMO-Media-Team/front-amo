@@ -234,4 +234,25 @@ describe("vistaAlta", () => {
       "atencion"
     )
   })
+
+  it("tras cambiar la cuenta de pago, el certificado anterior ya no basta para enviar", () => {
+    const vista = vistaAlta(
+      resumenCompleto({
+        documentos: [
+          ...DOCUMENTOS_NIVEL_1.filter((d) => d.tipo !== "CERT_BILLETERA"),
+          documentoFijo({ tipo: "CERT_BILLETERA", deCuentaAnterior: true }),
+        ],
+      })
+    )
+    expect(
+      vista.requisitos.find((r) => r.tipo === "CERT_BILLETERA")
+    ).toMatchObject({ situacion: "falta", deCuentaAnterior: true })
+    expect(vista.pasos.find((p) => p.id === "documentos")).toMatchObject({
+      estado: "atencion",
+      listo: false,
+      detalle:
+        "Cambiaste tu cuenta de pago: carga el certificado de la cuenta nueva.",
+    })
+    expect(vista.puedeEnviar).toBe(false)
+  })
 })

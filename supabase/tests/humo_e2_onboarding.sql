@@ -11,6 +11,8 @@ declare
   v_e text;
   v_n bigint;
   v_id uuid;
+  v_cu uuid;
+  v_cert text;
   v_t text;
   u_adm constant uuid := '00000000-0000-4000-a000-00000000e301';
   u_med constant uuid := '00000000-0000-4000-a000-00000000e302';
@@ -231,6 +233,86 @@ begin
   perform public.transicionar_srv('anunciantes', an_co, 'VERIFICADO', u_adm, s_adm, null, '{}');
   select count(*) into v_n from public.anunciantes where id = an_co and estado_verificacion = 'VERIFICADO';
   r := r || jsonb_build_object('a02_con_rut_y_camara_verifica', v_n = 1);
+
+  -- ── (k) Ajustes tras la revisión de la fase 1 ─────────────────────────────────────────────────────────────────
+  -- k01: el medio no escribe tipo_documento directo (la huella es tipo:número; solo la RPC).
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub', u_med, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_med)::text, true);
+  execute 'set local role authenticated';
+  begin
+    update public.medios_privado set tipo_documento = 'NIT' where medio_id = me_a;
+    v_e := 'NO FALLÓ';
+  exception when others then v_e := sqlstate;
+  end;
+  execute 'reset role';
+  perform set_config('request.jwt.claims', '', true);
+  r := r || jsonb_build_object('k01_tipo_documento_solo_rpc', case when v_e = '42501' then 'true'::jsonb else to_jsonb(v_e) end);
+
+  -- k02/k03: un certificado de pago anterior al cambio de cuenta no sirve; uno posterior sí.
+  update public.medios_privado set datos_pago_cambiados_at = now() where medio_id = me_a;
+  select case mp.metodo_pago when 'BANCARIO' then 'CERT_BANCARIA' else 'CERT_BILLETERA' end into v_cert
+  from public.medios_privado mp where mp.medio_id = me_a;
+  perform set_config('amo.modo_carga', 'on', true);   -- dato de prueba: el certificado ya aprobado
+  insert into public.documentos_medio (medio_id, tipo, archivo_path, estado_validacion, created_at)
+  values (me_a, v_cert::public.documento_medio_tipo, 'medio/' || me_a || '/' || v_cert || '/humo-viejo.pdf', 'APROBADO',
+          now() - interval '1 day')
+  returning id into v_id;
+  perform set_config('amo.modo_carga', '', true);
+  begin
+    perform private.validar_verificacion_medio(me_a, 1::smallint, false);
+    v_e := 'NO FALLÓ';
+  exception when others then
+    get stacked diagnostics v_t = pg_exception_detail;
+    v_e := sqlerrm;
+  end;
+  r := r || jsonb_build_object('k02_certificado_viejo_falta', case when v_t like '%' || v_cert || '%' then 'true'::jsonb else to_jsonb(v_t) end);
+  update public.documentos_medio set created_at = now() where id = v_id;
+  v_t := '';
+  begin
+    perform private.validar_verificacion_medio(me_a, 1::smallint, false);
+  exception when others then
+    get stacked diagnostics v_t = pg_exception_detail;
+  end;
+  r := r || jsonb_build_object('k03_certificado_nuevo_vale', case when coalesce(v_t, '') not like '%' || v_cert || '%' then 'true'::jsonb else to_jsonb(v_t) end);
+
+  -- k04–k06: quitar una cuenta sin verificar por la RPC; ajena o verificada, no.
+  insert into public.cuentas_sociales (medio_id, plataforma, handle, url)
+  values (me_b, 'TIKTOK', 'humo_quitar', 'https://www.tiktok.com/@humo_quitar') returning id into v_cu;
+  begin
+    perform public.quitar_cuenta_social_srv(v_cu, u_med, s_med);
+    v_e := 'NO FALLÓ';
+  exception when others then v_e := sqlerrm;
+  end;
+  r := r || jsonb_build_object('k04_cuenta_ajena_no', case when v_e = 'AMO_NO_AUTORIZADO' then 'true'::jsonb else to_jsonb(v_e) end);
+  perform public.quitar_cuenta_social_srv(v_cu, u_med2, s_med2);
+  r := r || jsonb_build_object('k05_quita_su_cuenta',
+    (select deleted_at is not null from public.cuentas_sociales where id = v_cu));
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.cuentas_sociales
+     set verificada = true, deleted_at = null, seguidores_verificados = 31000, metodo_verificacion = 'MANUAL',
+         fecha_ultima_verificacion = now()
+   where id = v_cu;
+  perform set_config('amo.modo_carga', '', true);
+  begin
+    perform public.quitar_cuenta_social_srv(v_cu, u_med2, s_med2);
+    v_e := 'NO FALLÓ';
+  exception when others then v_e := sqlerrm;
+  end;
+  r := r || jsonb_build_object('k06_verificada_no_se_quita', case when v_e = 'AMO_TRANSICION_INVALIDA' then 'true'::jsonb else to_jsonb(v_e) end);
+
+  -- k07/k08: la cola de cuentas se avisa al llegar la captura, no al generar el código.
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.cuentas_sociales set verificada = false where id = v_cu;
+  perform set_config('amo.modo_carga', '', true);
+  delete from public.notificaciones where tipo = 'cola.cuenta_verificacion';
+  insert into public.verificaciones_cuenta (cuenta_social_id, metodo, seguidores_reportados, codigo_hash, codigo_expira_at)
+  values (v_cu, 'CODIGO_HISTORIA', 31000, repeat('cd', 32), now() + interval '30 minutes') returning id into v_id;
+  select count(*) into v_n from public.notificaciones where tipo = 'cola.cuenta_verificacion';
+  r := r || jsonb_build_object('k07_codigo_sin_captura_no_avisa', v_n = 0);
+  update public.verificaciones_cuenta set captura_path = 'medio/' || me_b || '/cuenta_social/' || v_cu || '/humo.webp'
+  where id = v_id;
+  select count(*) into v_n from public.notificaciones where tipo = 'cola.cuenta_verificacion';
+  r := r || jsonb_build_object('k08_captura_avisa', v_n >= 1);
 
   perform set_config('humo.resultado', r::text, true);
 end

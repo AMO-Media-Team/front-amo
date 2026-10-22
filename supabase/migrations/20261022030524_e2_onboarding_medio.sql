@@ -263,6 +263,14 @@ create trigger trg_medios_privado_b_pago_completo
   before insert or update of metodo_pago, datos_pago_cifrados, datos_pago_resumen on public.medios_privado
   for each row execute function private.fn_medios_privado_pago_completo();
 
+-- Cuándo cambió la cuenta de pago por última vez: el certificado del medio de pago debe ser posterior (un
+-- certificado de la cuenta anterior no sirve; `private.validar_verificacion_medio`). La fija la RPC.
+alter table public.medios_privado add column datos_pago_cambiados_at timestamptz;
+grant select (datos_pago_cambiados_at) on public.medios_privado to authenticated;
+
+-- La huella del documento es `tipo:número` (src/lib/cifrado.ts): el tipo solo cambia junto con el número, por la RPC.
+revoke insert (tipo_documento), update (tipo_documento) on public.medios_privado from authenticated;
+
 -- p_datos: claves de la lista blanca; una clave ausente conserva el valor actual, una clave en null lo borra (salvo las
 -- banderas, que no admiten null). El cifrado y el hash los calcula el servidor; aquí no se ve ningún valor claro salvo
 -- el titular y el contacto, que la bitácora enmascara.
@@ -315,6 +323,10 @@ begin
   v_nuevo.obligado_facturar := coalesce((p_datos ->> 'obligado_facturar')::boolean, v_nuevo.obligado_facturar);
   v_nuevo.responsable_iva := coalesce((p_datos ->> 'responsable_iva')::boolean, v_nuevo.responsable_iva);
   v_nuevo.medio_id := p_medio_id;
+  if (v_previo.datos_pago_cifrados, v_previo.metodo_pago) is distinct from (v_nuevo.datos_pago_cifrados, v_nuevo.metodo_pago)
+     and v_nuevo.metodo_pago is not null then
+    v_nuevo.datos_pago_cambiados_at := private.ahora();
+  end if;
   if (v_nuevo.metodo_pago is null) <> (v_nuevo.datos_pago_cifrados is null)
      or (v_nuevo.metodo_pago is null) <> (v_nuevo.datos_pago_resumen is null) then
     raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
@@ -329,16 +341,16 @@ begin
       datos_pago_cifrados = v_nuevo.datos_pago_cifrados, datos_pago_resumen = v_nuevo.datos_pago_resumen,
       es_declarante = v_nuevo.es_declarante, obligado_facturar = v_nuevo.obligado_facturar,
       responsable_iva = v_nuevo.responsable_iva, celular = v_nuevo.celular, email_contacto = v_nuevo.email_contacto,
-      direccion = v_nuevo.direccion
+      direccion = v_nuevo.direccion, datos_pago_cambiados_at = v_nuevo.datos_pago_cambiados_at
     where medio_id = p_medio_id;
   else
     insert into public.medios_privado (medio_id, titular_nombre, tipo_documento, numero_documento_cifrado,
       numero_documento_hash, numero_documento_resumen, metodo_pago, datos_pago_cifrados, datos_pago_resumen, es_declarante,
-      obligado_facturar, responsable_iva, celular, email_contacto, direccion)
+      obligado_facturar, responsable_iva, celular, email_contacto, direccion, datos_pago_cambiados_at)
     values (p_medio_id, v_nuevo.titular_nombre, v_nuevo.tipo_documento, v_nuevo.numero_documento_cifrado,
       v_nuevo.numero_documento_hash, v_nuevo.numero_documento_resumen, v_nuevo.metodo_pago, v_nuevo.datos_pago_cifrados,
       v_nuevo.datos_pago_resumen, v_nuevo.es_declarante, v_nuevo.obligado_facturar, v_nuevo.responsable_iva,
-      v_nuevo.celular, v_nuevo.email_contacto, v_nuevo.direccion);
+      v_nuevo.celular, v_nuevo.email_contacto, v_nuevo.direccion, v_nuevo.datos_pago_cambiados_at);
   end if;
 
   if v_existe and (v_previo.datos_pago_cifrados, v_previo.metodo_pago)
@@ -423,8 +435,14 @@ begin
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = 'Tu medio ya está verificado: para subir de nivel carga los documentos del nivel nuevo.';
   end if;
-  if not exists (select 1 from public.cuentas_sociales c where c.medio_id = p_medio_id and c.deleted_at is null) then
-    v_faltan := v_faltan || 'una cuenta social'::text;
+  -- Una cuenta verificada, o con su verificación en revisión (captura cargada o por API).
+  if not exists (select 1 from public.cuentas_sociales c
+                 where c.medio_id = p_medio_id and c.deleted_at is null
+                   and (c.verificada
+                        or exists (select 1 from public.verificaciones_cuenta v
+                                   where v.cuenta_social_id = c.id and v.estado_validacion = 'PENDIENTE'
+                                     and (v.captura_path is not null or v.metodo = 'API')))) then
+    v_faltan := v_faltan || 'verificar una cuenta social'::text;
   end if;
   if not exists (select 1 from public.documentos_medio d
                  where d.medio_id = p_medio_id and d.estado_validacion in ('PENDIENTE', 'APROBADO')) then
@@ -447,6 +465,78 @@ begin
 end $$;
 revoke all on function public.enviar_medio_a_verificacion_srv(uuid, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.enviar_medio_a_verificacion_srv(uuid, uuid, uuid) to service_role;
+
+-- 4c. MED-004 · El certificado del medio de pago corresponde a la cuenta vigente -------------------------------------
+-- Copia de 20260930234802 con un cambio: el certificado (CERT_BANCARIA / CERT_BILLETERA) debe haberse cargado
+-- después del último cambio de cuenta (`medios_privado.datos_pago_cambiados_at`).
+create or replace function private.validar_verificacion_medio(p_medio_id uuid, p_nivel smallint, p_exigir_cuenta boolean)
+returns void
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_docs public.documento_medio_tipo[];
+  v_metodo public.metodo_pago;
+  v_cambio timestamptz;
+  v_faltan text[];
+begin
+  if p_nivel is null or p_nivel not between 1 and 3 then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Indica un nivel de verificación válido (1, 2 o 3).';
+  end if;
+  select nv.documentos_requeridos into v_docs from public.niveles_verificacion nv where nv.nivel = p_nivel;
+  select mp.metodo_pago, mp.datos_pago_cambiados_at into v_metodo, v_cambio
+  from public.medios_privado mp where mp.medio_id = p_medio_id;
+  if v_metodo = 'BANCARIO' then
+    v_docs := v_docs || 'CERT_BANCARIA'::public.documento_medio_tipo;
+  elsif v_metodo = 'BILLETERA' then
+    v_docs := v_docs || 'CERT_BILLETERA'::public.documento_medio_tipo;
+  end if;
+  select coalesce(array_agg(x.tipo::text order by x.tipo), '{}') into v_faltan from unnest(v_docs) as x(tipo)
+  where not exists (select 1 from public.documentos_medio d
+                    where d.medio_id = p_medio_id and d.tipo = x.tipo and d.estado_validacion = 'APROBADO'
+                      and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy())
+                      and (x.tipo not in ('CERT_BANCARIA', 'CERT_BILLETERA') or v_cambio is null
+                           or d.created_at >= v_cambio));
+  if v_metodo is null then v_faltan := v_faltan || 'CERT_BANCARIA o CERT_BILLETERA (medio de pago)'::text; end if;
+  if cardinality(v_faltan) > 0 then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Faltan documentos aprobados y vigentes: ' || array_to_string(v_faltan, ', ') || '.';
+  end if;
+  if p_exigir_cuenta and not exists (select 1 from public.cuentas_sociales c
+                                     where c.medio_id = p_medio_id and private.cuenta_vigente(c.id)) then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El medio necesita al menos una cuenta social verificada y vigente.';
+  end if;
+end $$;
+revoke all on function private.validar_verificacion_medio(uuid, smallint, boolean) from public, anon, authenticated;
+
+-- 4d. MED-005 · El medio quita una cuenta social sin verificar ------------------------------------------------------
+-- La política SELECT (`deleted_at is null`) también se exige a la fila nueva, así que el borrado lógico no puede ir
+-- por la sesión del medio: va por esta RPC, con actor y sesión validados en la BD.
+create function public.quitar_cuenta_social_srv(p_cuenta_id uuid, p_actor_id uuid, p_session_id uuid)
+returns void
+language plpgsql volatile security definer set search_path = '' as $$
+declare v_cuenta public.cuentas_sociales;
+begin
+  perform private.validar_actor(p_actor_id, 'medios.editar_propio', p_session_id);
+  select * into v_cuenta from public.cuentas_sociales c where c.id = p_cuenta_id and c.deleted_at is null for update;
+  if not found or v_cuenta.medio_id is distinct from (select p.medio_id from public.perfiles p where p.id = p_actor_id) then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'La cuenta no existe o no es de tu medio.';
+  end if;
+  if v_cuenta.verificada then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Una cuenta verificada no se puede quitar desde aquí porque puede tener campañas asociadas. Pídeselo al equipo de AMO.';
+  end if;
+  if exists (select 1 from public.verificaciones_cuenta v
+             where v.cuenta_social_id = p_cuenta_id and v.estado_validacion = 'PENDIENTE' and v.captura_path is not null) then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Espera a que terminemos de revisar la verificación de esta cuenta para quitarla.';
+  end if;
+  delete from public.verificaciones_cuenta v
+  where v.cuenta_social_id = p_cuenta_id and v.estado_validacion = 'PENDIENTE' and v.captura_path is null;
+  update public.cuentas_sociales set deleted_at = private.ahora() where id = p_cuenta_id;
+end $$;
+revoke all on function public.quitar_cuenta_social_srv(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.quitar_cuenta_social_srv(uuid, uuid, uuid) to service_role;
 
 -- 5. ADM-003 · Documentos exigidos para verificar un anunciante -----------------------------------------------------
 

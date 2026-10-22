@@ -27,12 +27,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { enFrase } from "@/features/cuentas-medio/franjas"
 import { InsigniaEstado } from "@/features/operacion/components/distintivos"
 import {
   ESTADOS_DOCUMENTO,
   TIPOS_DOCUMENTO_MEDIO,
 } from "@/features/operacion/estados"
 import { instanteDeDia } from "@/features/operacion/formato"
+import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import { aplicarErroresServidor } from "@/features/usuarios/components/errores-formulario"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
 
@@ -43,14 +45,13 @@ import {
 } from "../actions"
 import { rutaRevisionMedio } from "../colas"
 import {
-  enFrase,
   GUIA_DOCUMENTO,
   MOTIVOS_RECHAZO_DOCUMENTO,
+  PLACEHOLDER_MOTIVO,
 } from "../presentacion"
 import { esquemaAprobarDocumento, LIMITES_VERIFICACION } from "../schemas"
 import type { DocumentoExpediente, MedioResumen } from "../tipos"
 import { ATAJOS_VIGENCIA, sumarMeses } from "../vigencia"
-import { DialogoMotivoVerificacion } from "./dialogo-motivo-verificacion"
 import { CuerpoRevision, HojaRevision } from "./hoja-revision"
 
 const CAMPOS = ["fechaVencimiento", "observaciones"] as const
@@ -413,7 +414,7 @@ export function HojaDocumento({
         </CuerpoRevision>
       </HojaRevision>
 
-      <DialogoMotivoVerificacion
+      <DialogoMotivo
         abierto={rechazando}
         onAbiertoChange={setRechazando}
         destructivo
@@ -426,6 +427,7 @@ export function HojaDocumento({
         }
         ayuda="El medio lo verá tal cual; queda en la bitácora."
         sugerencias={MOTIVOS_RECHAZO_DOCUMENTO}
+        placeholder={PLACEHOLDER_MOTIVO}
         textoConfirmar="Rechazar documento"
         onConfirmar={async (motivo) => {
           const resultado = await rechazarDocumento({

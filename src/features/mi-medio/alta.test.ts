@@ -14,7 +14,11 @@ import {
   RUTAS_MI_MEDIO,
   situacionMedio,
 } from "./alta"
-import type { EstadoRequisito, TipoDocumentoMedio } from "./requisitos"
+import {
+  type EstadoRequisito,
+  TEXTO_CERTIFICADO_CUENTA_ANTERIOR,
+  type TipoDocumentoMedio,
+} from "./requisitos"
 
 function requisito(
   tipo: TipoDocumentoMedio,
@@ -29,6 +33,7 @@ function requisito(
     observaciones: null,
     porVideollamada: false,
     renovacionEnRevision: false,
+    deCuentaAnterior: false,
     ...parcial,
   }
 }
@@ -307,6 +312,31 @@ describe("pasosAlta", () => {
         requisito("PRUEBA_VIDA", "aprobado", { porVideollamada: true }),
       ])
       expect(documentos.descripcion).not.toMatch(/opcional/)
+    })
+
+    it("el certificado de la cuenta anterior pide cargar el de la nueva", () => {
+      const documentos = conRequisitos([
+        requisito("CEDULA_FRENTE", "aprobado"),
+        requisito("CEDULA_REVERSO", "aprobado"),
+        requisito("CERT_BANCARIA", "falta", { deCuentaAnterior: true }),
+      ])
+      expect(documentos).toMatchObject({
+        estado: "atencion",
+        listo: false,
+        detalle: TEXTO_CERTIFICADO_CUENTA_ANTERIOR,
+      })
+    })
+
+    it("junto con otro rechazo, los cuenta a ambos", () => {
+      const documentos = conRequisitos([
+        requisito("CEDULA_FRENTE", "rechazado"),
+        requisito("CEDULA_REVERSO", "aprobado"),
+        requisito("CERT_BANCARIA", "falta", { deCuentaAnterior: true }),
+      ])
+      expect(documentos).toMatchObject({
+        estado: "atencion",
+        detalle: "2 documentos necesitan que los cargues de nuevo.",
+      })
     })
   })
 

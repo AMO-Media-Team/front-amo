@@ -16,7 +16,6 @@ import {
 
 import type {
   CuentaMedio,
-  FranjaSeguidores,
   ParametrosVerificacion,
   VerificacionCuentaMedio,
 } from "./tipos"
@@ -268,24 +267,6 @@ export function esElegible(principal: EstadoPrincipal): boolean {
     principal === "vigente" ||
     principal === "por_vencer" ||
     principal === "en_gracia"
-  )
-}
-
-// ── Franjas ─────────────────────────────────────────────────────────────────
-
-/** Franja que corresponde a unos seguidores (como `fn_cuentas_sociales_franja`). */
-export function franjaPara(
-  seguidores: number,
-  franjas: readonly FranjaSeguidores[]
-): FranjaSeguidores | null {
-  return (
-    [...franjas]
-      .sort((a, b) => a.seguidoresMin - b.seguidoresMin)
-      .find(
-        (franja) =>
-          seguidores >= franja.seguidoresMin &&
-          seguidores <= (franja.seguidoresMax ?? Number.POSITIVE_INFINITY)
-      ) ?? null
   )
 }
 

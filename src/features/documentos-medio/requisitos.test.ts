@@ -37,6 +37,7 @@ const NIVEL_3: RequisitosNivel = {
 
 const SIN_DECLARAR: PerfilTributario = {
   metodoPago: null,
+  datosPagoCambiadosAt: null,
   tipoDocumento: null,
   esDeclarante: false,
   obligadoFacturar: false,

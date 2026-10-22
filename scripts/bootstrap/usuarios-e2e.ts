@@ -38,6 +38,7 @@ import {
   VARIABLE_TOTP_ADMIN,
 } from "./provision-e2e"
 import {
+  buscarUsuarioPorEmail,
   type ClienteSupabase,
   cargarEntorno,
   describirProyecto,
@@ -84,6 +85,11 @@ async function completarCuenta(
   return hechos
 }
 
+const CUENTAS_DEMO_EXTERNAS = [
+  ["DEMO_ANUNCIANTE_EMAIL", "ANUNCIANTE"],
+  ["DEMO_MEDIO_EMAIL", "MEDIO"],
+] as const
+
 async function main(): Promise<void> {
   const entorno = cargarEntorno(ARCHIVO_ENV)
   const servicio = await clienteComoSuperadmin(entorno)
@@ -121,6 +127,22 @@ async function main(): Promise<void> {
     informar(
       `✓ ${cuenta.clave}: ${email}${hechos.length > 0 ? ` (${hechos.join("; ")})` : ""}`
     )
+  }
+
+  // Sesiones compartidas de la suite (e2e/preparacion.setup.ts): las cuentas
+  // demo externas tampoco deben quedar retenidas en la compuerta de términos.
+  for (const [variable, tipoRol] of CUENTAS_DEMO_EXTERNAS) {
+    const email = process.env[variable]
+    const usuario = email ? await buscarUsuarioPorEmail(servicio, email) : null
+    if (!email || !usuario) continue
+    const aceptados = await aceptarTerminosVigentes(servicio, {
+      id: usuario.id,
+      email,
+      tipoRol,
+    })
+    if (aceptados > 0) {
+      informar(`✓ ${email}: ${aceptados} términos vigentes aceptados`)
+    }
   }
 
   const { contenido, agregadas } = agregarVariables(

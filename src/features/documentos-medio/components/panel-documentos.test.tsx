@@ -28,6 +28,7 @@ import { PanelDocumentos } from "./panel-documentos"
 
 const SIN_PAGO: PerfilTributario = {
   metodoPago: null,
+  datosPagoCambiadosAt: null,
   tipoDocumento: null,
   esDeclarante: false,
   obligadoFacturar: false,

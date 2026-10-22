@@ -9,6 +9,7 @@ import "server-only"
  */
 import { cache } from "react"
 
+import { franjasActivas } from "@/features/cuentas-medio/queries"
 import {
   clienteSolicitud,
   departamentoJuntoAMunicipio,
@@ -30,7 +31,6 @@ import {
   rangoPagina,
 } from "./colas"
 import { type FilaPertinencia, ordenarPertinencia } from "./pertinencia"
-import type { RangoFranja } from "./seguidores"
 import type {
   ColaCuentas,
   ColaMedios,
@@ -466,22 +466,6 @@ export const nivelesConRequisitos = cache(
     }))
   }
 )
-
-export const franjasActivas = cache(async (): Promise<RangoFranja[]> => {
-  const supabase = await clienteSolicitud()
-  const { data, error } = await supabase
-    .from("franjas")
-    .select("clave, nombre, seguidores_min, seguidores_max, orden")
-    .eq("activa", true)
-    .order("orden")
-  if (error) fallar("leer las franjas", error)
-  return data.map((fila) => ({
-    clave: fila.clave,
-    nombre: fila.nombre,
-    minimo: fila.seguidores_min,
-    maximo: fila.seguidores_max,
-  }))
-})
 
 // ── Expediente de un medio (pestaña «Verificación» de la ficha) ──────────────
 

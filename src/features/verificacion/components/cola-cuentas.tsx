@@ -1,10 +1,11 @@
 import { Hourglass, UsersRound } from "lucide-react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { franjasActivas } from "@/features/cuentas-medio/queries"
 import { contar } from "@/features/operacion/formato"
 
 import { COLAS_VERIFICACION } from "../colas"
-import { colaCuentas, franjasActivas } from "../queries"
+import { colaCuentas } from "../queries"
 import { PaginacionCola } from "./paginacion-cola"
 import { RevisorCuentas } from "./revisor-cuentas"
 

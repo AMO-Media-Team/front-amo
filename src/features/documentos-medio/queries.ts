@@ -46,7 +46,7 @@ export const datosDocumentosMedio = cache(
       supabase
         .from("medios_privado")
         .select(
-          "metodo_pago, tipo_documento, es_declarante, obligado_facturar, responsable_iva"
+          "metodo_pago, datos_pago_cambiados_at, tipo_documento, es_declarante, obligado_facturar, responsable_iva"
         )
         .eq("medio_id", medioId)
         .maybeSingle(),

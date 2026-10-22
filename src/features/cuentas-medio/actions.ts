@@ -13,11 +13,10 @@
  *    - el código de la historia (CODIGO_HISTORIA solo la crea `service_role`:
  *      el servidor genera el código y guarda su huella y vencimiento);
  *    - descartar una solicitud que nunca recibió captura (para pedir otra o
- *      cambiar de método: la BD admite una pendiente por cuenta);
- *    - quitar una cuenta no verificada: la RLS de SELECT de `cuentas_sociales`
- *      oculta las filas con `deleted_at` y un UPDATE con filtro exige que la
- *      fila nueva siga visible, así que el medio no puede darla de baja con su
- *      sesión (reportado al líder con la política que lo resolvería).
+ *      cambiar de método: la BD admite una pendiente por cuenta).
+ *    Quitar una cuenta va por la RPC `quitar_cuenta_social_srv` (la política
+ *    SELECT oculta las filas con `deleted_at`, así que la sesión no puede darla
+ *    de baja): la BD valida dueño, estado y revisión, y su `detail` lo explica.
  * 4. `refresh()` para que la página muestre el cambio en la misma respuesta.
  *
  * Las capturas se suben directo a Storage (`prepararCaptura` firma la ruta que
@@ -52,6 +51,7 @@ import {
   nuevaRuta,
 } from "@/lib/storage/rutas"
 import { confirmarObjeto, prepararSubidaFirmada } from "@/lib/storage/subidas"
+import { argumentosRpc } from "@/lib/supabase/rpc"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import type { TablesInsert } from "@/types/database.types"
 
@@ -417,44 +417,36 @@ async function liberarPerfil(
   return descartarSinCaptura(await contextoDelActor(usuario), pendiente)
 }
 
-/** Quita una cuenta que nunca se verificó y no está en revisión. */
+/**
+ * Quita una cuenta que nunca se verificó y no está en revisión. La RPC valida
+ * que sea del medio del actor, que no esté verificada y que no tenga una
+ * captura en revisión; descarta un código sin usar y la da de baja en la
+ * misma transacción. Si responde que no (`AMO_NO_AUTORIZADO`,
+ * `AMO_TRANSICION_INVALIDA`), su `detail` dice por qué.
+ */
 export async function quitarCuenta(
   entrada: EntradaCuentaId
 ): Promise<ResultadoAccion> {
   const usuario = await requerirPermiso(PERMISO)
-  const medioId = medioDe(usuario)
-  if (!medioId) return fallo(MENSAJES_CUENTAS.sinMedio)
+  if (!medioDe(usuario)) return fallo(MENSAJES_CUENTAS.sinMedio)
   const validacion = esquemaCuentaId.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
 
   try {
-    const supabase = await crearClienteServidor()
-    const cuenta = await leerCuenta(supabase, medioId, validacion.data.cuentaId)
-    if (esFallo(cuenta)) return cuenta
-    if (cuenta.verificada) return fallo(MENSAJES_CUENTAS.quitarVerificada)
-    const pendiente = await leerPendiente(supabase, cuenta.id)
-    if (esFalloLectura(pendiente)) return pendiente
-    if (pendiente?.captura_path) {
-      return fallo(MENSAJES_CUENTAS.quitarEnRevision)
-    }
-
     const contexto = await contextoDelActor(usuario)
-    if (pendiente) {
-      const descarte = await descartarSinCaptura(contexto, pendiente)
-      if (descarte) return descarte
-    }
-    // Ver el encabezado: la sesión no puede escribir `deleted_at` por la RLS.
-    const { data, error } = await contexto.admin
-      .from("cuentas_sociales")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", cuenta.id)
-      .eq("medio_id", medioId)
-      .eq("verificada", false)
-      .is("deleted_at", null)
-      .select("id")
-    if (error) return falloBd("quitar cuenta", error)
-    if (data.length === 0) {
-      return conflicto(MENSAJES_CUENTAS.cuentaDesactualizada)
+    const { error } = await contexto.admin.rpc(
+      "quitar_cuenta_social_srv",
+      argumentosRpc<"quitar_cuenta_social_srv">({
+        p_cuenta_id: validacion.data.cuentaId,
+        p_actor_id: contexto.actorId,
+        p_session_id: contexto.sessionId,
+      })
+    )
+    if (error) {
+      // La cuenta pudo cambiar (verificada, en revisión o ya quitada): la
+      // página se vuelve a pintar con lo vigente junto con el mensaje.
+      refresh()
+      return falloBd("quitar cuenta", error)
     }
     refresh()
     return exito()

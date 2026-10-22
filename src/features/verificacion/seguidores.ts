@@ -1,8 +1,8 @@
 /**
  * Ayudas para verificar seguidores (módulo puro): variación frente a la última
  * verificación aprobada (los saltos bruscos delatan seguidores comprados,
- * EP §7.1.1) y franja en la que quedaría la cuenta con la cifra que se
- * aprueba (la deriva la BD con `trg_cuentas_sociales_b_franja`).
+ * EP §7.1.1) y lectura de la cifra que se escribe. La franja en la que
+ * quedaría la cuenta la calcula `franjaPara` de `@/features/cuentas-medio/franjas`.
  */
 
 /**
@@ -32,29 +32,6 @@ export function variacionSeguidores(
     diferencia: nuevos - anteriores,
     salto: Math.abs(fraccion) >= UMBRAL_SALTO_SEGUIDORES,
   }
-}
-
-export interface RangoFranja {
-  clave: string
-  nombre: string
-  minimo: number
-  /** `null`: sin techo (la última franja). */
-  maximo: number | null
-}
-
-/** Franja activa que contiene esa cantidad de seguidores (`null` si ninguna). */
-export function franjaPara(
-  seguidores: number,
-  franjas: readonly RangoFranja[]
-): RangoFranja | null {
-  if (!Number.isFinite(seguidores)) return null
-  return (
-    franjas.find(
-      (franja) =>
-        seguidores >= franja.minimo &&
-        (franja.maximo === null || seguidores <= franja.maximo)
-    ) ?? null
-  )
 }
 
 /** Entero de seguidores desde lo que se escribe («58.000», «58000»). */

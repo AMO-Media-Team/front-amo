@@ -11,7 +11,7 @@ import { crearClienteAdmin } from "@/lib/supabase/admin"
 
 import { ordenarAudiencia, sumaPorcentajes } from "./audiencia"
 import { estadoCuentasAlta } from "./resumen"
-import type { DocumentoRegistrado } from "./requisitos"
+import { type DocumentoRegistrado, esDeCuentaAnterior } from "./requisitos"
 import type {
   ConsumoTope,
   CuentaSocialAlta,
@@ -98,29 +98,6 @@ export const nivelesVerificacion = cache(
   }
 )
 
-export const documentosDelMedio = cache(
-  async (medioId: string): Promise<DocumentoRegistrado[]> => {
-    const supabase = await clienteSolicitud()
-    const { data, error } = await supabase
-      .from("documentos_medio")
-      .select(
-        "tipo, estado_validacion, fecha_vencimiento, metodo, observaciones, created_at"
-      )
-      .eq("medio_id", medioId)
-      .order("created_at", { ascending: false })
-      .limit(200)
-    if (error) fallar("leer tus documentos", error)
-    return data.map((fila) => ({
-      tipo: fila.tipo,
-      estado: fila.estado_validacion,
-      fechaVencimiento: fila.fecha_vencimiento,
-      metodo: fila.metodo === "VIDEOLLAMADA" ? "VIDEOLLAMADA" : "ARCHIVO",
-      observaciones: fila.observaciones,
-      creadoAt: fila.created_at,
-    }))
-  }
-)
-
 /** ¿Hay número de documento y cuenta cifrados? Sin leer los valores. */
 const cifradosRegistrados = cache(
   async (medioId: string): Promise<{ documento: boolean; cuenta: boolean }> => {
@@ -155,7 +132,7 @@ export const pagoResumen = cache(
         .select(
           `titular_nombre, tipo_documento, numero_documento_resumen, metodo_pago,
            datos_pago_resumen, es_declarante, obligado_facturar, responsable_iva,
-           updated_at`
+           datos_pago_cambiados_at, updated_at`
         )
         .eq("medio_id", medioId)
         .maybeSingle(),
@@ -179,8 +156,41 @@ export const pagoResumen = cache(
       responsableIva: data?.responsable_iva ?? false,
       documentoRegistrado: cifrados.documento,
       cuentaRegistrada: cifrados.cuenta,
+      datosPagoCambiadosAt: data?.datos_pago_cambiados_at ?? null,
       actualizadoAt: data?.updated_at ?? null,
     }
+  }
+)
+
+/**
+ * Documentos del medio, de la carga más reciente a la más antigua. Marca el
+ * certificado de pago cargado antes del último cambio de cuenta: la BD ya no
+ * lo acepta (el resumen de pago va cacheado en la misma solicitud).
+ */
+export const documentosDelMedio = cache(
+  async (medioId: string): Promise<DocumentoRegistrado[]> => {
+    const supabase = await clienteSolicitud()
+    const [{ data, error }, pago] = await Promise.all([
+      supabase
+        .from("documentos_medio")
+        .select(
+          "tipo, estado_validacion, fecha_vencimiento, metodo, observaciones, created_at"
+        )
+        .eq("medio_id", medioId)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      pagoResumen(medioId),
+    ])
+    if (error) fallar("leer tus documentos", error)
+    return data.map((fila) => ({
+      tipo: fila.tipo,
+      estado: fila.estado_validacion,
+      fechaVencimiento: fila.fecha_vencimiento,
+      metodo: fila.metodo === "VIDEOLLAMADA" ? "VIDEOLLAMADA" : "ARCHIVO",
+      observaciones: fila.observaciones,
+      creadoAt: fila.created_at,
+      deCuentaAnterior: esDeCuentaAnterior(fila.tipo, fila.created_at, pago),
+    }))
   }
 )
 

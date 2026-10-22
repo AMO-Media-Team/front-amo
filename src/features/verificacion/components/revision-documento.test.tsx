@@ -128,6 +128,9 @@ describe("HojaDocumento", () => {
       within(dialogo).getByRole("button", { name: sugerencia })
     )
     expect(within(dialogo).getByLabelText("Motivo")).toHaveValue(sugerencia)
+    expect(
+      within(dialogo).getByRole("button", { name: sugerencia })
+    ).toHaveAttribute("aria-pressed", "true")
     await usuario.click(
       within(dialogo).getByRole("button", { name: "Rechazar documento" })
     )

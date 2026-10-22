@@ -9,6 +9,12 @@
  *
  * Todos los specs importan `test` y `expect` de aquí. Una prueba que provoca a
  * propósito una respuesta de error la declara con `guardia.permitir(...)`.
+ *
+ * Única excepción global: el aborto de una View Transition («Transition was
+ * aborted…», «Skipping view transition…»). El navegador la descarta cuando
+ * cambia el viewport (en el móvil emulado ocurre al navegar) y solo se pierde
+ * la animación; la app lo trata igual (`GuardiaTransiciones`, que lo marca como
+ * atendido, pero Playwright registra la excepción antes de ese `preventDefault`).
  */
 import {
   test as base,
@@ -19,6 +25,10 @@ import {
 } from "@playwright/test"
 
 export { expect }
+
+/** Mismos mensajes que `src/components/motion/abortos-transicion.ts`. */
+const ABORTO_DE_TRANSICION =
+  /^(?:Transition was aborted|Skipping view transition)\b/i
 export type { Locator, Page } from "@playwright/test"
 
 type OpcionesContexto = NonNullable<Parameters<Browser["newContext"]>[0]>
@@ -138,7 +148,9 @@ function crearGuardia(): { guardia: Guardia; problemas: () => Problema[] } {
       problemas.filter(
         ({ tipo, detalle }) =>
           // Una violación de la CSP nunca es «esperada».
-          tipo === "csp" || !permitidos.some((patron) => patron.test(detalle))
+          tipo === "csp" ||
+          (!(tipo === "excepción" && ABORTO_DE_TRANSICION.test(detalle)) &&
+            !permitidos.some((patron) => patron.test(detalle)))
       ),
   }
 }

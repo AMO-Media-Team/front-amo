@@ -85,7 +85,10 @@ function destinoInterno(
     case "perfiles":
       return SEGURIDAD
     case "medios":
-      return r(`/operacion/medios/${id}`)
+      // Los avisos de cola del medio abren su expediente a quien verifica.
+      return verifica
+        ? r(`/operacion/medios/${id}?pestana=verificacion`)
+        : r(`/operacion/medios/${id}`)
     case "anunciantes":
       return r(`/operacion/anunciantes/${id}`)
     case "solicitudes_vinculacion":

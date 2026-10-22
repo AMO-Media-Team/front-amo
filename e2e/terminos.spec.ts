@@ -227,6 +227,12 @@ test.describe("términos y política de datos (AUT-012)", () => {
       info.project.name !== PROYECTO_CON_CUENTAS,
       "Publica términos y usa una cuenta exclusiva: corre solo en el proyecto de escritorio."
     )
+    // Las versiones publicadas son inmutables: en develop dejaría como vigente
+    // un texto de prueba (incluso sobre los términos reales del cliente).
+    info.skip(
+      !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(entorno.url),
+      "Publica términos que no se pueden borrar: solo en la pila local."
+    )
     info.setTimeout(90_000)
     servicio = await clienteComoSuperadmin(entorno)
     cuenta.password = generarContrasena()

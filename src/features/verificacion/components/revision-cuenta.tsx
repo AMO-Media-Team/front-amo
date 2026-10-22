@@ -31,9 +31,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { enFrase, franjaPara } from "@/features/cuentas-medio/franjas"
+import type { FranjaSeguidores } from "@/features/cuentas-medio/tipos"
 import { MarcaPlataforma } from "@/features/operacion/components/distintivos"
 import { METODOS_VERIFICACION, PLATAFORMAS } from "@/features/operacion/estados"
 import { formatearHandle } from "@/features/operacion/formato"
+import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import { aplicarErroresServidor } from "@/features/usuarios/components/errores-formulario"
 import {
   formatearFecha,
@@ -51,16 +54,10 @@ import {
 } from "../actions"
 import { momentoCaptura } from "../codigo"
 import { rutaRevisionMedio } from "../colas"
-import { enFrase, MOTIVOS_RECHAZO_CUENTA } from "../presentacion"
+import { MOTIVOS_RECHAZO_CUENTA, PLACEHOLDER_MOTIVO } from "../presentacion"
 import { esquemaAprobarCuenta, LIMITES_VERIFICACION } from "../schemas"
-import {
-  franjaPara,
-  parsearSeguidores,
-  type RangoFranja,
-  variacionSeguidores,
-} from "../seguidores"
+import { parsearSeguidores, variacionSeguidores } from "../seguidores"
 import type { VerificacionEnCola } from "../tipos"
-import { DialogoMotivoVerificacion } from "./dialogo-motivo-verificacion"
 import { CuerpoRevision, HojaRevision } from "./hoja-revision"
 
 const CAMPOS = ["seguidoresVerificados", "observaciones"] as const
@@ -229,7 +226,7 @@ function EfectoSeguidores({
 }: {
   seguidores: number | null
   anteriores: number | null
-  franjas: readonly RangoFranja[]
+  franjas: readonly FranjaSeguidores[]
 }) {
   if (seguidores === null) return null
   const variacion = variacionSeguidores(seguidores, anteriores)
@@ -239,10 +236,10 @@ function EfectoSeguidores({
       {franja ? (
         <p className="text-pretty">
           Queda en la franja <strong>{franja.nombre}</strong> (
-          {formatearNumero(franja.minimo)}
-          {franja.maximo === null
+          {formatearNumero(franja.seguidoresMin)}
+          {franja.seguidoresMax === null
             ? " o más"
-            : `–${formatearNumero(franja.maximo)}`}{" "}
+            : `–${formatearNumero(franja.seguidoresMax)}`}{" "}
           seguidores).
         </p>
       ) : (
@@ -358,7 +355,7 @@ function FormularioCuenta({
   id: string
   formulario: FormularioDeCuenta
   verificacion: VerificacionEnCola
-  franjas: readonly RangoFranja[]
+  franjas: readonly FranjaSeguidores[]
   deshabilitado: boolean
   onEnviar: () => void
 }) {
@@ -450,7 +447,7 @@ function FormularioCuenta({
 
 export interface HojaCuentaProps {
   verificacion: VerificacionEnCola
-  franjas: readonly RangoFranja[]
+  franjas: readonly FranjaSeguidores[]
   abierta: boolean
   onAbiertaChange: (abierta: boolean) => void
   onDecidido?: () => void
@@ -586,7 +583,7 @@ export function HojaCuenta({
         </CuerpoRevision>
       </HojaRevision>
 
-      <DialogoMotivoVerificacion
+      <DialogoMotivo
         abierto={rechazando}
         onAbiertoChange={setRechazando}
         destructivo
@@ -599,6 +596,7 @@ export function HojaCuenta({
         }
         ayuda="El medio lo verá tal cual; queda en la bitácora."
         sugerencias={MOTIVOS_RECHAZO_CUENTA}
+        placeholder={PLACEHOLDER_MOTIVO}
         textoConfirmar="Rechazar verificación"
         onConfirmar={async (motivo) => {
           const resultado = await rechazarVerificacionCuenta({

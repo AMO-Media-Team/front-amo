@@ -83,6 +83,7 @@ export function pagoFijo(parcial: Partial<PagoResumen> = {}): PagoResumen {
     responsableIva: false,
     documentoRegistrado: true,
     cuentaRegistrada: true,
+    datosPagoCambiadosAt: "2026-09-30T12:00:00Z",
     actualizadoAt: "2026-10-20T12:00:00Z",
     ...parcial,
   }
@@ -96,6 +97,7 @@ export const SIN_PAGO: PagoResumen = pagoFijo({
   cuentaResumen: null,
   documentoRegistrado: false,
   cuentaRegistrada: false,
+  datosPagoCambiadosAt: null,
   actualizadoAt: null,
 })
 
@@ -109,6 +111,7 @@ export function documentoFijo(
     metodo: "ARCHIVO",
     observaciones: null,
     creadoAt: "2026-10-01T15:00:00Z",
+    deCuentaAnterior: false,
     ...parcial,
   }
 }

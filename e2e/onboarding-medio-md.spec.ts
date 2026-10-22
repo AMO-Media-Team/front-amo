@@ -6,7 +6,7 @@ import {
 import type { ClienteSupabase } from "../scripts/bootstrap/supabase"
 import { credenciales, entorno, ingresar } from "./utilidades/cuentas"
 import { esperarSinDesbordeHorizontal, parametro } from "./utilidades/interfaz"
-import { PROYECTO_CON_CUENTAS } from "./utilidades/proyectos"
+import { PROYECTO_ALTA_MEDIO } from "./utilidades/proyectos"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
 
 /**
@@ -143,8 +143,8 @@ test.describe("mis documentos · medio en alta", () => {
 
   test.beforeAll(async ({}, info) => {
     info.skip(
-      info.project.name !== PROYECTO_CON_CUENTAS,
-      "Carga y borra archivos de una cuenta compartida: corre solo en escritorio."
+      info.project.name !== PROYECTO_ALTA_MEDIO,
+      "Carga y borra archivos de una cuenta compartida: corre solo en el proyecto «alta-medio», en serie."
     )
     servicio = await clienteComoSuperadmin(entorno)
     // Parte de «sin cargar» aunque una corrida anterior se haya cortado.
@@ -157,7 +157,7 @@ test.describe("mis documentos · medio en alta", () => {
   })
 
   test.afterAll(async ({}, info) => {
-    if (info.project.name !== PROYECTO_CON_CUENTAS || !servicio) return
+    if (info.project.name !== PROYECTO_ALTA_MEDIO || !servicio) return
     for (const fila of await documentosDeCedula()) {
       creados.push({ id: fila.id, ruta: fila.archivo_path })
     }

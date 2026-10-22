@@ -55,10 +55,6 @@ export const MENSAJES_CUENTAS = {
     "Una cuenta verificada no cambia de usuario ni de enlace. Si ahora usas otra cuenta, regístrala como nueva.",
   perfilBloqueadoRevision:
     "No puedes cambiar el usuario mientras revisamos la verificación de esta cuenta.",
-  quitarVerificada:
-    "Una cuenta verificada no se puede quitar desde aquí porque puede tener campañas asociadas. Pídeselo al equipo de AMO.",
-  quitarEnRevision:
-    "Espera a que terminemos de revisar la verificación de esta cuenta para quitarla.",
   verificacionEnRevision:
     "Esta cuenta ya tiene una verificación en revisión. Te avisaremos cuando la resolvamos.",
   verificacionInexistente:

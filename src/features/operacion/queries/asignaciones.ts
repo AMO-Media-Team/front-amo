@@ -17,7 +17,7 @@ import {
   PARTES_DISPUTA,
 } from "../estados"
 import type { EstadoTablaAsignaciones } from "../estado-tablas"
-import { normalizarBusqueda, patronContiene, textoParaFiltro } from "../formato"
+import { normalizarBusqueda, patronContiene, patronLiteral } from "../formato"
 import {
   calcularProgreso,
   construirLineaTiempo,
@@ -108,7 +108,7 @@ async function resolverBusqueda(
   texto: string
 ): Promise<ContextoFiltros["coincidencias"]> {
   const patron = patronContiene(normalizarBusqueda(texto))
-  const literal = textoParaFiltro(texto)
+  const literal = patronLiteral(texto)
   if (!patron || !literal) return null
   const [medios, campanas] = await Promise.all([
     supabase
@@ -119,7 +119,7 @@ async function resolverBusqueda(
     supabase
       .from("campanas")
       .select("id")
-      .or(`nombre.ilike.%${literal}%,marca.ilike.%${literal}%`)
+      .or(`nombre.ilike.${literal},marca.ilike.${literal}`)
       .limit(LIMITE_COINCIDENCIAS),
   ])
   if (medios.error) fallar("buscar medios", medios.error)

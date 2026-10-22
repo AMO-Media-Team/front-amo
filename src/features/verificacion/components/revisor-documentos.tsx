@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { enFrase } from "@/features/cuentas-medio/franjas"
 import { InsigniaEstado } from "@/features/operacion/components/distintivos"
 import {
   ESTADOS_MEDIO,
@@ -14,7 +15,6 @@ import { categoriaDe } from "@/lib/archivos/mime"
 import { formatearFechaHora, formatearRelativo } from "@/lib/format"
 
 import { rutaRevisionMedio } from "../colas"
-import { enFrase } from "../presentacion"
 import type { DocumentoEnCola } from "../tipos"
 import { HojaDocumento } from "./revision-documento"
 

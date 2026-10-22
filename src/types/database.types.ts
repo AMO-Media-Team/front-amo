@@ -2085,6 +2085,7 @@ export type Database = {
         Row: {
           celular: string | null
           created_at: string
+          datos_pago_cambiados_at: string | null
           datos_pago_cifrados: string | null
           datos_pago_resumen: string | null
           direccion: string | null
@@ -2106,6 +2107,7 @@ export type Database = {
         Insert: {
           celular?: string | null
           created_at?: string
+          datos_pago_cambiados_at?: string | null
           datos_pago_cifrados?: string | null
           datos_pago_resumen?: string | null
           direccion?: string | null
@@ -2127,6 +2129,7 @@ export type Database = {
         Update: {
           celular?: string | null
           created_at?: string
+          datos_pago_cambiados_at?: string | null
           datos_pago_cifrados?: string | null
           datos_pago_resumen?: string | null
           direccion?: string | null
@@ -4192,6 +4195,10 @@ export type Database = {
           oferta_titulo: string
           vence_at: string
         }[]
+      }
+      quitar_cuenta_social_srv: {
+        Args: { p_actor_id: string; p_cuenta_id: string; p_session_id: string }
+        Returns: undefined
       }
       rechazar_oferta_srv: {
         Args: {

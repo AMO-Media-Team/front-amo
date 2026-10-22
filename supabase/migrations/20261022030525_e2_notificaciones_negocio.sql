@@ -372,8 +372,13 @@ create trigger trg_documentos_medio_z_avisar_cola after insert on public.documen
   for each row execute function private.fn_avisar_cola();
 create trigger trg_documentos_anunciante_z_avisar_cola after insert on public.documentos_anunciante
   for each row execute function private.fn_avisar_cola();
+-- La cola de cuentas se avisa cuando hay captura que revisar, no al generar el código de la historia.
 create trigger trg_verificaciones_cuenta_z_avisar_cola after insert on public.verificaciones_cuenta
-  for each row execute function private.fn_avisar_cola();
+  for each row when (new.captura_path is not null and new.estado_validacion = 'PENDIENTE')
+  execute function private.fn_avisar_cola();
+create trigger trg_verificaciones_cuenta_z_avisar_cola_captura after update of captura_path on public.verificaciones_cuenta
+  for each row when (old.captura_path is null and new.captura_path is not null and new.estado_validacion = 'PENDIENTE')
+  execute function private.fn_avisar_cola();
 create trigger trg_publicaciones_z_avisar_cola after insert or update of estado_validacion on public.publicaciones
   for each row execute function private.fn_avisar_cola();
 create trigger trg_metricas_z_avisar_cola after insert or update of estado_validacion on public.metricas

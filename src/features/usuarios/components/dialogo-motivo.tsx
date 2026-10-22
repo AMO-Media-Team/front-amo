@@ -1,7 +1,7 @@
 "use client"
 
 import { CircleHelp, TriangleAlert } from "lucide-react"
-import { type ReactNode, useId, useState, useTransition } from "react"
+import { type ReactNode, useId, useRef, useState, useTransition } from "react"
 
 import {
   AlertDialog,
@@ -31,13 +31,23 @@ interface DialogoMotivoProps {
   destructivo?: boolean
   /** Ayuda bajo el campo ("Quedará en la bitácora y lo verá el equipo de administración"). */
   ayuda?: string
+  /** Rótulo del campo. */
+  etiqueta?: string
+  placeholder?: string
+  /** Motivos frecuentes: un toque llena el campo, que se puede editar. */
+  sugerencias?: readonly string[]
   onConfirmar: (motivo: string) => Promise<ResultadoAccion<unknown>>
 }
+
+const PLACEHOLDER_POR_DEFECTO =
+  "Ej.: solicitud del cliente, acceso indebido, cambio de área…"
 
 /**
  * Confirmación que exige un motivo (transiciones con «M» en §4.2). El motivo
  * queda en la bitácora junto con el cambio. Un fallo se muestra dentro del
- * diálogo y lo mantiene abierto para corregir o reintentar.
+ * diálogo y lo mantiene abierto para corregir o reintentar. Con
+ * `sugerencias`, ofrece redacciones frecuentes de un toque (p. ej. cuando el
+ * motivo lo recibe un medio para corregir).
  */
 export function DialogoMotivo({
   abierto,
@@ -47,15 +57,21 @@ export function DialogoMotivo({
   textoConfirmar,
   destructivo = false,
   ayuda = "Queda registrado en la bitácora de auditoría.",
+  etiqueta = "Motivo",
+  placeholder = PLACEHOLDER_POR_DEFECTO,
+  sugerencias = [],
   onConfirmar,
 }: DialogoMotivoProps) {
   const [motivo, setMotivo] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [pendiente, iniciar] = useTransition()
+  const campo = useRef<HTMLTextAreaElement>(null)
   const idCampo = useId()
   const idAyuda = useId()
   const idError = useId()
+  const idSugerencias = useId()
   const valido = motivo.trim().length >= LONGITUD_MINIMA_MOTIVO
+  const conSugerencias = sugerencias.length > 0
 
   function cambiarAbierto(valor: boolean) {
     if (pendiente) return
@@ -64,6 +80,12 @@ export function DialogoMotivo({
       setError(null)
     }
     onAbiertoChange(valor)
+  }
+
+  function usarSugerencia(texto: string) {
+    setMotivo(texto)
+    setError(null)
+    campo.current?.focus()
   }
 
   function confirmar() {
@@ -89,7 +111,9 @@ export function DialogoMotivo({
 
   return (
     <AlertDialog open={abierto} onOpenChange={cambiarAbierto}>
-      <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogContent
+        className={conSugerencias ? "sm:max-w-lg" : "sm:max-w-md"}
+      >
         <AlertDialogHeader>
           <AlertDialogMedia
             className={cn(
@@ -104,30 +128,63 @@ export function DialogoMotivo({
           <AlertDialogDescription>{descripcion}</AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="grid gap-2">
-          <Label htmlFor={idCampo}>Motivo</Label>
-          <Textarea
-            id={idCampo}
-            value={motivo}
-            onChange={(evento) => setMotivo(evento.target.value)}
-            maxLength={LONGITUD_MAXIMA_MOTIVO}
-            rows={3}
-            disabled={pendiente}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? `${idError} ${idAyuda}` : idAyuda}
-            placeholder="Ej.: solicitud del cliente, acceso indebido, cambio de área…"
-          />
-          <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
-            <p id={idAyuda}>{ayuda}</p>
-            <span className="shrink-0 cifras" aria-hidden>
-              {motivo.length}/{LONGITUD_MAXIMA_MOTIVO}
-            </span>
-          </div>
-          {error ? (
-            <p id={idError} role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+        <div className="grid gap-3">
+          {conSugerencias ? (
+            <div className="grid gap-2">
+              <p id={idSugerencias} className="text-xs text-muted-foreground">
+                Motivos frecuentes
+              </p>
+              <ul
+                aria-labelledby={idSugerencias}
+                className="flex flex-col gap-1.5"
+              >
+                {sugerencias.map((sugerencia) => (
+                  <li key={sugerencia}>
+                    <button
+                      type="button"
+                      disabled={pendiente}
+                      aria-pressed={motivo === sugerencia}
+                      onClick={() => usarSugerencia(sugerencia)}
+                      className={cn(
+                        "w-full rounded-lg border px-3 py-2 text-left text-xs text-pretty transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60",
+                        motivo === sugerencia &&
+                          "border-primary/50 bg-primary/6 text-foreground"
+                      )}
+                    >
+                      {sugerencia}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
+
+          <div className="grid gap-2">
+            <Label htmlFor={idCampo}>{etiqueta}</Label>
+            <Textarea
+              ref={campo}
+              id={idCampo}
+              value={motivo}
+              onChange={(evento) => setMotivo(evento.target.value)}
+              maxLength={LONGITUD_MAXIMA_MOTIVO}
+              rows={3}
+              disabled={pendiente}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? `${idError} ${idAyuda}` : idAyuda}
+              placeholder={placeholder}
+            />
+            <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+              <p id={idAyuda}>{ayuda}</p>
+              <span className="shrink-0 cifras" aria-hidden>
+                {motivo.length}/{LONGITUD_MAXIMA_MOTIVO}
+              </span>
+            </div>
+            {error ? (
+              <p id={idError} role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <AlertDialogFooter>

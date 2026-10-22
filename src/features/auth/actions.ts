@@ -25,7 +25,10 @@ import {
   rutaDePaso,
 } from "@/lib/auth/compuertas"
 import { destinoTrasIngreso } from "@/lib/auth/navegacion"
-import { leerPerfilSesion } from "@/lib/auth/perfil-sesion"
+import {
+  leerPerfilSesion,
+  leerTerminosPendientes,
+} from "@/lib/auth/perfil-sesion"
 import {
   informarFallo,
   registrarAcceso,
@@ -177,11 +180,17 @@ async function evaluarSesionNueva(
   const { data } = await auth.getClaims(accessToken)
   const claims = data ? leerClaims(data.claims) : null
   if (!claims) return null
-  const perfil = await leerPerfilSesion(
-    await crearClienteConToken(accessToken),
-    usuario.id
-  )
+  const cliente = await crearClienteConToken(accessToken)
+  const perfil = await leerPerfilSesion(cliente, usuario.id)
   if (!perfil?.activo) return null
+  // Optimización: ir directo a /aceptar-terminos. Si la consulta falla no se
+  // bloquea el ingreso; el DAL vuelve a exigir la compuerta en la primera página.
+  const terminosPendientes = await leerTerminosPendientes(
+    cliente,
+    perfil.usuario.rol.tipo
+  )
+    .then((pendientes) => pendientes.length > 0)
+    .catch(() => false)
   return {
     claims,
     cuenta: {
@@ -190,6 +199,7 @@ async function evaluarSesionNueva(
       rolRequiereMfa: perfil.usuario.rol.requiereMfa,
       aal: claims.aal,
       tieneFactorVerificado: tieneTotpVerificado(usuario),
+      terminosPendientes,
     },
   }
 }

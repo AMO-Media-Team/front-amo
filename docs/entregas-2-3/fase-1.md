@@ -4,19 +4,20 @@ Requisitos: AUT-012, MED-001…007, ADM-001, ADM-006 y NOT-003 (notificaciones d
 [`README.md`](README.md). La base ya tiene (migraciones `20261022030524_e2_onboarding_medio` y
 `20261022030525_e2_notificaciones_negocio`; tipos regenerados en `src/types/database.types.ts`):
 
-| Objeto | Uso |
-|---|---|
-| `public.terminos_pendientes()` | Versiones vigentes que el usuario externo aún no acepta (id, tipo, version, vigente_desde, hash_sha256, contenido_md). Aceptar = `insert` en `aceptaciones_terminos (perfil_id, termino_version_id)` con el cliente de sesión (el trigger fija IP, agente y huella del correo). |
-| `solicitudes_vinculacion` | Cola de MED-001 (select interno con `medios.verificar`). `crear_solicitud_vinculacion_srv(p_datos jsonb, p_ip_hash text)` (service_role; `p_datos`: nombre_medio, tipo?, contacto_nombre, email, celular?, municipio_codigo, cuentas `[{plataforma, usuario, seguidores?}]` 1–6, mensaje?, autoriza_datos=true; error `AMO_LIMITE_SOLICITUDES`; duplicados se absorben en silencio). `resolver_solicitud_vinculacion_srv(p_id, p_actor_id, p_session_id, p_estado 'INVITADA'\|'DESCARTADA', p_medio_id?, p_motivo?)`. |
+| Objeto                                                                              | Uso                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public.terminos_pendientes()`                                                      | Versiones vigentes que el usuario externo aún no acepta (id, tipo, version, vigente_desde, hash_sha256, contenido_md). Aceptar = `insert` en `aceptaciones_terminos (perfil_id, termino_version_id)` con el cliente de sesión (el trigger fija IP, agente y huella del correo).                                                                                                                                                                                                                                                                                                                      |
+| `solicitudes_vinculacion`                                                           | Cola de MED-001 (select interno con `medios.verificar`). `crear_solicitud_vinculacion_srv(p_datos jsonb, p_ip_hash text)` (service_role; `p_datos`: nombre_medio, tipo?, contacto_nombre, email, celular?, municipio_codigo, cuentas `[{plataforma, usuario, seguidores?}]` 1–6, mensaje?, autoriza_datos=true; error `AMO_LIMITE_SOLICITUDES`; duplicados se absorben en silencio). `resolver_solicitud_vinculacion_srv(p_id, p_actor_id, p_session_id, p_estado 'INVITADA'\|'DESCARTADA', p_medio_id?, p_motivo?)`.                                                                                |
 | `guardar_datos_pago_medio_srv(p_medio_id, p_actor_id, p_session_id, p_datos jsonb)` | MED-004. Claves admitidas: titular_nombre, tipo_documento (`CC`,`CE`,`PPT`,`PASAPORTE`,`NIT`), numero_documento_cifrado, numero_documento_hash, numero_documento_resumen, metodo_pago (`BANCARIO`,`BILLETERA`), datos_pago_cifrados, datos_pago_resumen, es_declarante, obligado_facturar, responsable_iva, celular, email_contacto, direccion. Clave ausente = se conserva. Cifrado con `cifrar()` y huella con `huella()` de `src/lib/cifrado.ts` (formato `v<n>:…`); pago completo = método + cifrado + resumen juntos. Unicidad del documento: error `medios_privado_numero_documento_hash_key`. |
-| `enviar_medio_a_verificacion_srv(p_medio_id, p_actor_id, p_session_id)` | MED-002: el medio envía su perfil a la cola (exige cuenta social, documentos y datos de pago; si estaba RECHAZADO vuelve a PENDIENTE). `medios.enviado_verificacion_at`. |
-| `documentos_medio.metodo` (`ARCHIVO`\|`VIDEOLLAMADA`) | `registrar_verificacion_videollamada_srv(p_medio_id, p_actor_id, p_session_id, p_observaciones)` aprueba una prueba de vida sin imagen. `transicionar_srv('documentos_medio', id, 'APROBADO', …, p_datos {"fecha_vencimiento":"YYYY-MM-DD"})` fija la vigencia. |
-| Verificar medio | `transicionar_srv('medios', id, 'VERIFICADO', actor, sesión, null, {"nivel": n})` desde PENDIENTE (valida documentos del nivel + certificado del medio de pago + una cuenta vigente; el `detail` lista lo que falta); VERIFICADO→VERIFICADO con otro nivel exige motivo; PENDIENTE→RECHAZADO con motivo. |
-| Cuentas sociales | `cuentas_sociales` (el medio inserta/actualiza `plataforma, handle, url, tarifa_referencia`); `verificaciones_cuenta` método MANUAL la inserta el medio (captura en `documentos/medio/{id}/cuenta_social/{cuenta}/…`); método CODIGO_HISTORIA la crea el servidor (service_role) con `codigo_hash` sha256 hex y `codigo_expira_at` = ahora + `medios.codigo_verificacion_minutos`; aprobar con `transicionar_srv('verificaciones_cuenta', id, 'APROBADA', …, {"seguidores_verificados": n})`. Reverificación: `private.cuenta_vigente`, avisos del cron `cuenta.reverificacion_pendiente`. |
-| Pertinencia (ADM-006) | `medio_pertinencia_geografica (medio_id, municipio_codigo, multiplicador 0.500–1.500, notas)` con `medios.clasificar_pertinencia`. |
-| Notificaciones | Nuevos tipos: `medio.*`, `documento.*`, `anunciante.*`, `cola.*` (avisos a colas internas), `asignacion.aceptada/publicada/verificada`, `liquidacion.aprobada/anulada`, `factura.*`, `campana.finalizada`, `disputa.mensaje`, `oferta.rechazada/vencida`. Todas con `url = null`: el destino lo resuelve `/ir/[entidad]/[id]`. |
+| `enviar_medio_a_verificacion_srv(p_medio_id, p_actor_id, p_session_id)`             | MED-002: el medio envía su perfil a la cola (exige cuenta social, documentos y datos de pago; si estaba RECHAZADO vuelve a PENDIENTE). `medios.enviado_verificacion_at`.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `documentos_medio.metodo` (`ARCHIVO`\|`VIDEOLLAMADA`)                               | `registrar_verificacion_videollamada_srv(p_medio_id, p_actor_id, p_session_id, p_observaciones)` aprueba una prueba de vida sin imagen. `transicionar_srv('documentos_medio', id, 'APROBADO', …, p_datos {"fecha_vencimiento":"YYYY-MM-DD"})` fija la vigencia.                                                                                                                                                                                                                                                                                                                                      |
+| Verificar medio                                                                     | `transicionar_srv('medios', id, 'VERIFICADO', actor, sesión, null, {"nivel": n})` desde PENDIENTE (valida documentos del nivel + certificado del medio de pago + una cuenta vigente; el `detail` lista lo que falta); VERIFICADO→VERIFICADO con otro nivel exige motivo; PENDIENTE→RECHAZADO con motivo.                                                                                                                                                                                                                                                                                             |
+| Cuentas sociales                                                                    | `cuentas_sociales` (el medio inserta/actualiza `plataforma, handle, url, tarifa_referencia`); `verificaciones_cuenta` método MANUAL la inserta el medio (captura en `documentos/medio/{id}/cuenta_social/{cuenta}/…`); método CODIGO_HISTORIA la crea el servidor (service_role) con `codigo_hash` sha256 hex y `codigo_expira_at` = ahora + `medios.codigo_verificacion_minutos`; aprobar con `transicionar_srv('verificaciones_cuenta', id, 'APROBADA', …, {"seguidores_verificados": n})`. Reverificación: `private.cuenta_vigente`, avisos del cron `cuenta.reverificacion_pendiente`.           |
+| Pertinencia (ADM-006)                                                               | `medio_pertinencia_geografica (medio_id, municipio_codigo, multiplicador 0.500–1.500, notas)` con `medios.clasificar_pertinencia`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Notificaciones                                                                      | Nuevos tipos: `medio.*`, `documento.*`, `anunciante.*`, `cola.*` (avisos a colas internas), `asignacion.aceptada/publicada/verificada`, `liquidacion.aprobada/anulada`, `factura.*`, `campana.finalizada`, `disputa.mensaje`, `oferta.rechazada/vencida`. Todas con `url = null`: el destino lo resuelve `/ir/[entidad]/[id]`.                                                                                                                                                                                                                                                                       |
 
 **El líder ya integró** (no lo toques; si necesitas otra cosa ahí, repórtalo):
+
 - Navegación: grupo «Mi negocio» con «Mi medio» (`/mi-medio`, tipo MEDIO, `medios.editar_propio`, subpáginas
   perfil, documentos, pago, cuentas y nivel) y «Verificación» en Operación (`/operacion/verificacion`,
   `medios.verificar` o `anunciantes.verificar`).
@@ -41,10 +42,11 @@ ejecutes** (lo hace el líder con la app compilada); que sean deterministas, sin
 rol y nombre accesible, y que limpien o aíslen lo que crean.
 
 **Convenciones fijadas por el líder (obligatorias):**
+
 - **Cifrado:** `contexto` = `"<tabla>:<id de la fila>:<columna>"` (p. ej. `medios_privado:<medio_id>:datos_pago_cifrados`).
   Cifrar, descifrar tras `revelar_privado_srv` y descifrar en la dispersión usan exactamente ese valor.
-- **Huella del documento:** `huella(\`${tipoDocumento}:${numero}\`)` con el número normalizado (solo dígitos y letras,
-  en mayúsculas): el mismo número con dos tipos distintos no choca en `medios_privado_numero_documento_hash_key`.
+- **Huella del documento:** `huella(\`${tipoDocumento}:${numero}\`)`con el número normalizado (solo dígitos y letras,
+en mayúsculas): el mismo número con dos tipos distintos no choca en`medios_privado_numero_documento_hash_key`.
 - **Resumen:** `ultimos4()` de `cifrado.ts` (`•••• 1234`); el resumen de pago, `«<proveedor o banco> •••• 1234»`,
   nunca más de 60 caracteres (`medios_privado_datos_pago_resumen_chk`).
 - **Archivos:** toda acción `confirmar…` sigue la pauta de `src/lib/archivos` (esquema `esquemaArchivoSubido`,
@@ -57,6 +59,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 
 **Propiedad:** `src/features/terminos/**`, `src/app/(auth)/aceptar-terminos/**`, y en exclusiva durante esta fase
 `src/lib/auth/compuertas.ts`, `src/lib/auth/dal.ts`, `src/lib/auth/perfil-sesion.ts` (+ sus pruebas).
+
 - Paso nuevo `aceptar-terminos` en `resolverCompuertas`, después del cambio de contraseña y de la configuración de
   MFA, solo para roles ANUNCIANTE y MEDIO cuando `terminos_pendientes()` devuelve filas (una consulta por
   solicitud, cacheada con `cache` de React). Ruta `/aceptar-terminos?next=`.
@@ -69,6 +72,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 ## Paquete VI — Solicitud pública de vinculación y su cola (MED-001)
 
 **Propiedad:** `src/features/vinculacion/**`, `src/app/(auth)/vincular/**`.
+
 - Formulario público breve y bonito a 390 px (`/vincular`, enlazado desde «Ingresar» como «¿Tienes un medio?
   Pide unirte»): nombre del medio, tipo, nombre de contacto, correo, celular, municipio (selector de territorio),
   1–6 cuentas (plataforma, usuario, seguidores aproximados), mensaje, autorización de datos (Ley 1581, enlace a la
@@ -86,6 +90,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 
 **Propiedad:** `src/features/mi-medio/**`, `src/app/(app)/mi-medio/page.tsx`, `src/app/(app)/mi-medio/{perfil,pago,nivel}/**`,
 `src/features/dashboard/medio/**`.
+
 - `/mi-medio`: hub con el estado de verificación (PENDIENTE, en revisión desde `enviado_verificacion_at`,
   VERIFICADO Nn, RECHAZADO con motivo, SUSPENDIDO) y la lista de alta (perfil, documentos, pago, cuentas, términos)
   con progreso y botón «Enviar a verificación» (`enviar_medio_a_verificacion_srv`).
@@ -104,6 +109,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 ## Paquete MD — Documentos del medio (MED-003)
 
 **Propiedad:** `src/features/documentos-medio/**`, `src/app/(app)/mi-medio/documentos/**`.
+
 - Lista de los documentos que exige su nivel objetivo (y los opcionales), con estado, observaciones de rechazo,
   vigencia y «Cargar»/«Reemplazar» (una carga nueva sustituye a la anterior en la interfaz). Subida directa con
   `useSubida` (compresión en el celular a WebP para fotos, PDF tal cual, cámara con `capture`, reintentos y
@@ -115,6 +121,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 ## Paquete MC — Cuentas sociales y verificación de control (MED-005, MED-006)
 
 **Propiedad:** `src/features/cuentas-medio/**`, `src/app/(app)/mi-medio/cuentas/**`.
+
 - Alta y edición de cuentas (Facebook, Instagram, TikTok; usuario o URL validados por plataforma; tarifa de
   referencia informativa) y su estado: verificada con seguidores y franja, vigencia y días para reverificar, en
   revisión, rechazada.
@@ -127,6 +134,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 
 **Propiedad:** `src/features/verificacion/**`, `src/app/(app)/operacion/verificacion/**`, y en
 `src/app/(app)/operacion/medios/[id]/page.tsx` solo las pestañas nuevas (coordinado con lo de la fase 0).
+
 - `/operacion/verificacion?cola=medios|cuentas|documentos|solicitudes` con contadores: medios enviados a
   verificación (orden por `enviado_verificacion_at`), cuentas por verificar, documentos pendientes y solicitudes
   (`ColaSolicitudes` del paquete VI).
@@ -141,6 +149,7 @@ rol y nombre accesible, y que limpien o aíslen lo que crean.
 **Propiedad:** `scripts/bootstrap/usuarios-e2e.ts`, `scripts/bootstrap/provision-e2e.ts` (+ pruebas),
 `e2e/utilidades/**` (solo agregar), `e2e/registro-organizaciones.spec.ts`. Autorizado a escribir en la base
 **local** solo mediante `pnpm bootstrap:e2e`.
+
 - Dos cuentas nuevas en el aprovisionamiento idempotente, con las mismas garantías que las existentes (nunca en
   producción, contraseñas generadas que se agregan a `.env.local` sin imprimirse):
   - `E2E_MEDIO_EMAIL/PASSWORD`: usuario MEDIO ACTIVO de un medio **VERIFICADO nivel 1** («Medio E2E»,

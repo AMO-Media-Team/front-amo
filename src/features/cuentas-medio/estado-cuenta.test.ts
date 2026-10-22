@@ -4,13 +4,12 @@ import {
   codigoVencido,
   esElegible,
   estadoCuenta,
-  franjaPara,
   ordenarCuentas,
   requiereAccion,
   ultimoRechazo,
   verificacionEnCurso,
 } from "./estado-cuenta"
-import type { FranjaSeguidores, VerificacionCuentaMedio } from "./tipos"
+import type { VerificacionCuentaMedio } from "./tipos"
 
 const AHORA = new Date("2026-10-22T15:00:00Z")
 const PARAMETROS = { diasVigencia: 30, diasGracia: 7 }
@@ -258,43 +257,6 @@ describe("requiereAccion y esElegible", () => {
     expect(esElegible("por_vencer")).toBe(true)
     expect(esElegible("vencida")).toBe(false)
     expect(esElegible("sin_verificar")).toBe(false)
-  })
-})
-
-describe("franjaPara", () => {
-  const FRANJAS: FranjaSeguidores[] = [
-    {
-      id: "f3",
-      clave: "F3",
-      nombre: "Más de 120.000",
-      seguidoresMin: 120_001,
-      seguidoresMax: null,
-    },
-    {
-      id: "f1",
-      clave: "F1",
-      nombre: "30.000 – 60.000",
-      seguidoresMin: 30_000,
-      seguidoresMax: 60_000,
-    },
-    {
-      id: "f2",
-      clave: "F2",
-      nombre: "60.001 – 120.000",
-      seguidoresMin: 60_001,
-      seguidoresMax: 120_000,
-    },
-  ]
-
-  it("ubica los seguidores en su franja, incluidos los bordes", () => {
-    expect(franjaPara(30_000, FRANJAS)?.clave).toBe("F1")
-    expect(franjaPara(60_000, FRANJAS)?.clave).toBe("F1")
-    expect(franjaPara(60_001, FRANJAS)?.clave).toBe("F2")
-    expect(franjaPara(2_000_000, FRANJAS)?.clave).toBe("F3")
-  })
-
-  it("por debajo del umbral no hay franja", () => {
-    expect(franjaPara(29_999, FRANJAS)).toBeNull()
   })
 })
 

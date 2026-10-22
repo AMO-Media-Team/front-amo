@@ -46,6 +46,8 @@ export interface RequisitosNivel {
 /** Lo de `medios_privado` que decide qué se exige (sin datos cifrados). */
 export interface PerfilTributario {
   metodoPago: MetodoPago | null
+  /** Último cambio de método o de cuenta: el certificado debe ser posterior. */
+  datosPagoCambiadosAt: string | null
   tipoDocumento: TipoDocumentoIdentidad | null
   esDeclarante: boolean
   obligadoFacturar: boolean

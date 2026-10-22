@@ -4,11 +4,14 @@
  * corregir. Sigue la regla con que la BD verifica (`validar_verificacion_medio`):
  * vale un documento APROBADO cuya vigencia no ha pasado (`fecha_vencimiento`
  * nula o desde hoy en Bogotá). Una carga nueva no borra la anterior: mientras se
- * revisa, la aprobada sigue valiendo.
+ * revisa, la aprobada sigue valiendo. El certificado de pago cargado antes del
+ * último cambio de cuenta es de la cuenta anterior y ya no vale.
  */
 import {
+  type CuentaPago,
   DIAS_AVISO_VENCIMIENTO,
   diasEntre,
+  esDeCuentaAnterior,
 } from "@/features/mi-medio/requisitos"
 import type { Tono } from "@/features/operacion/estados"
 
@@ -22,7 +25,11 @@ import type { DocumentoCargado, TipoDocumentoMedio } from "./tipos"
 export { DIAS_AVISO_VENCIMIENTO, diasEntre }
 
 export type Situacion =
-  | { tipo: "falta" }
+  | {
+      tipo: "falta"
+      /** Lo único cargado es el certificado de la cuenta de pago anterior. */
+      deCuentaAnterior: boolean
+    }
   | {
       tipo: "en-revision"
       /** La carga que espera revisión (la más reciente). */
@@ -43,6 +50,8 @@ export type Situacion =
   | { tipo: "vencido"; documento: DocumentoCargado }
 
 export type TipoSituacion = Situacion["tipo"]
+
+const SIN_CARGAR: Situacion = { tipo: "falta", deCuentaAnterior: false }
 
 /** Aprobado y dentro de su vigencia el día `hoy`. */
 export function estaVigente(documento: DocumentoCargado, hoy: string): boolean {
@@ -79,14 +88,26 @@ function aprobado(
   }
 }
 
-/** Situación de un tipo a partir de TODAS sus cargas (en cualquier orden). */
+/**
+ * Situación de un tipo a partir de TODAS sus cargas (en cualquier orden). Con
+ * la cuenta de pago, el certificado cargado antes de su último cambio no
+ * cuenta: si es lo único que hay, el certificado falta.
+ */
 export function situacionDe(
   cargas: readonly DocumentoCargado[],
-  hoy: string
+  hoy: string,
+  cuenta: CuentaPago | null = null
 ): Situacion {
-  const ordenadas = [...cargas].sort(masRecientePrimero)
+  const validas = cuenta
+    ? cargas.filter(
+        (carga) => !esDeCuentaAnterior(carga.tipo, carga.cargadoAt, cuenta)
+      )
+    : cargas
+  const ordenadas = [...validas].sort(masRecientePrimero)
   const ultima = ordenadas[0]
-  if (!ultima) return { tipo: "falta" }
+  if (!ultima) {
+    return { tipo: "falta", deCuentaAnterior: validas.length < cargas.length }
+  }
   const vigente = ordenadas.find((carga) => estaVigente(carga, hoy)) ?? null
   if (ultima.estado === "PENDIENTE") {
     return { tipo: "en-revision", documento: ultima, vigente }
@@ -101,10 +122,14 @@ export function situacionDe(
 
 export type SituacionesPorTipo = ReadonlyMap<TipoDocumentoMedio, Situacion>
 
-/** Situación de cada tipo que tiene al menos una carga. */
+/**
+ * Situación de cada tipo que tiene al menos una carga. `cuenta` es el medio de
+ * pago con su último cambio (`null` si aún no lo registra).
+ */
 export function situacionesPorTipo(
   documentos: readonly DocumentoCargado[],
-  hoy: string
+  hoy: string,
+  cuenta: CuentaPago | null
 ): SituacionesPorTipo {
   const porTipo = new Map<TipoDocumentoMedio, DocumentoCargado[]>()
   for (const documento of documentos) {
@@ -114,7 +139,10 @@ export function situacionesPorTipo(
     ])
   }
   return new Map(
-    [...porTipo].map(([tipo, cargas]) => [tipo, situacionDe(cargas, hoy)])
+    [...porTipo].map(([tipo, cargas]) => [
+      tipo,
+      situacionDe(cargas, hoy, cuenta),
+    ])
   )
 }
 
@@ -122,7 +150,7 @@ export function situacionDeTipo(
   situaciones: SituacionesPorTipo,
   tipo: TipoDocumentoMedio
 ): Situacion {
-  return situaciones.get(tipo) ?? { tipo: "falta" }
+  return situaciones.get(tipo) ?? SIN_CARGAR
 }
 
 // ── Resumen de la lista ──────────────────────────────────────────────────────

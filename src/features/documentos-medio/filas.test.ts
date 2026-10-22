@@ -112,6 +112,7 @@ describe("aPerfilTributario", () => {
   it("sin fila privada no hay nada declarado", () => {
     expect(aPerfilTributario(null)).toEqual({
       metodoPago: null,
+      datosPagoCambiadosAt: null,
       tipoDocumento: null,
       esDeclarante: false,
       obligadoFacturar: false,
@@ -123,6 +124,7 @@ describe("aPerfilTributario", () => {
     expect(
       aPerfilTributario({
         metodo_pago: "BILLETERA",
+        datos_pago_cambiados_at: "2026-10-20T12:00:00+00:00",
         tipo_documento: "CC",
         es_declarante: true,
         obligado_facturar: false,
@@ -130,6 +132,7 @@ describe("aPerfilTributario", () => {
       })
     ).toEqual({
       metodoPago: "BILLETERA",
+      datosPagoCambiadosAt: "2026-10-20T12:00:00+00:00",
       tipoDocumento: "CC",
       esDeclarante: true,
       obligadoFacturar: false,

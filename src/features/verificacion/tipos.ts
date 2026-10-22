@@ -3,6 +3,7 @@
  * la ruta de un archivo en Storage (se firma en el servidor por id) ni datos
  * de `*_privado`: solo el MIME, para elegir cómo mostrarlo.
  */
+import type { FranjaSeguidores } from "@/features/cuentas-medio/tipos"
 import type {
   EstadoMedio,
   Plataforma,
@@ -13,7 +14,6 @@ import type { Database } from "@/types/database.types"
 
 import type { Cola } from "./colas"
 import type { DocumentoRequisito, NivelRequisitos } from "./requisitos"
-import type { RangoFranja } from "./seguidores"
 
 type Enums = Database["public"]["Enums"]
 
@@ -117,7 +117,7 @@ export interface ExpedienteMedio {
   documentos: DocumentoExpediente[] | null
   cuentas: CuentaExpediente[]
   niveles: NivelExpediente[]
-  franjas: RangoFranja[]
+  franjas: FranjaSeguidores[]
   /** `YYYY-MM-DD` de Bogotá con que se evalúan las vigencias. */
   hoy: string
 }

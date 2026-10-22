@@ -118,7 +118,7 @@ async function municipioActivo(servicio: ClienteSupabase): Promise<Municipio> {
   const { data, error } = await servicio
     .from("municipios")
     .select(
-      "codigo, nombre, departamento:departamentos!inner ( nombre_corto, activo )"
+      "codigo, nombre, departamento:departamentos!municipios_departamento_codigo_fkey!inner ( nombre_corto, activo )"
     )
     .eq("activo", true)
     .eq("departamento.activo", true)
@@ -450,8 +450,12 @@ test.describe("cola de solicitudes", () => {
     await expect(dialogo).toBeHidden()
     await expect(solicitud).toBeHidden()
     await page.getByText("Atendidas recientemente").click()
+    // En `main`: el aviso emergente (toast) también es un listitem con el nombre.
     await expect(
-      page.getByRole("listitem").filter({ hasText: descartar.nombre })
+      page
+        .getByRole("main")
+        .getByRole("listitem")
+        .filter({ hasText: descartar.nombre })
     ).toContainText("Prueba E2E: no es un medio.")
 
     const { data } = await servicio

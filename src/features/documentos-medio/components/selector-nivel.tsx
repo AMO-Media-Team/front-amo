@@ -70,6 +70,13 @@ export function SelectorNivel({
           <RadioPrimitive.Root
             key={nivel}
             value={nivel}
+            // Nombre explícito: el texto oculto tras el icono sumaba un espacio
+            // antes de la coma («Nivel 1 , tu nivel actual»).
+            aria-label={
+              nivel === nivelActual
+                ? `Nivel ${nivel}, tu nivel actual`
+                : `Nivel ${nivel}`
+            }
             className={cn(
               "relative flex h-11 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors outline-none select-none",
               "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -79,10 +86,7 @@ export function SelectorNivel({
           >
             Nivel {nivel}
             {nivel === nivelActual ? (
-              <>
-                <BadgeCheck aria-hidden className="size-3.5 text-success" />
-                <span className="sr-only">, tu nivel actual</span>
-              </>
+              <BadgeCheck aria-hidden className="size-3.5 text-success" />
             ) : null}
           </RadioPrimitive.Root>
         ))}

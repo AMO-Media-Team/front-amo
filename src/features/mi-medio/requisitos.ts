@@ -3,7 +3,8 @@
  * uno (módulo puro). Replica la regla de `private.validar_verificacion_medio`:
  * para verificar en un nivel hacen falta, aprobados y vigentes, los
  * `documentos_requeridos` del nivel más el certificado del medio de pago
- * (bancario o de billetera). La BD vuelve a validarlo todo al decidir.
+ * (bancario o de billetera) cargado después del último cambio de cuenta. La
+ * BD vuelve a validarlo todo al decidir.
  */
 import type { Database } from "@/types/database.types"
 
@@ -37,6 +38,37 @@ export function certificadoDePago(
   metodo: MetodoPago | null
 ): TipoDocumentoMedio | null {
   return metodo ? CERTIFICADO_POR_METODO[metodo] : null
+}
+
+/** Lo de `medios_privado` que decide qué certificado de pago vale. */
+export interface CuentaPago {
+  metodoPago: MetodoPago | null
+  /**
+   * Último cambio de método o de cuenta (`datos_pago_cambiados_at`); `null`
+   * si nunca se registró (o se registró antes de existir la columna).
+   */
+  datosPagoCambiadosAt: string | null
+}
+
+export const TEXTO_CERTIFICADO_CUENTA_ANTERIOR =
+  "Cambiaste tu cuenta de pago: carga el certificado de la cuenta nueva."
+
+/**
+ * ¿Es el certificado del medio de pago vigente y se cargó antes del último
+ * cambio de cuenta? Entonces es de la cuenta anterior y ya no vale: la BD solo
+ * acepta el cargado desde ese cambio. El certificado del otro método no se
+ * marca: no se exige y queda como estaba.
+ */
+export function esDeCuentaAnterior(
+  tipo: TipoDocumentoMedio,
+  cargadoAt: string,
+  cuenta: CuentaPago
+): boolean {
+  return (
+    cuenta.datosPagoCambiadosAt !== null &&
+    tipo === certificadoDePago(cuenta.metodoPago) &&
+    Date.parse(cargadoAt) < Date.parse(cuenta.datosPagoCambiadosAt)
+  )
 }
 
 export interface DocumentosExigidos {
@@ -79,6 +111,8 @@ export interface DocumentoRegistrado {
   metodo: "ARCHIVO" | "VIDEOLLAMADA"
   observaciones: string | null
   creadoAt: string
+  /** Certificado de pago de la cuenta anterior (`esDeCuentaAnterior`): no cuenta. */
+  deCuentaAnterior: boolean
 }
 
 export type SituacionDocumento =
@@ -97,6 +131,8 @@ export interface EstadoRequisito {
   porVideollamada: boolean
   /** Hay una carga nueva en revisión además del aprobado vigente. */
   renovacionEnRevision: boolean
+  /** Falta porque lo único cargado es el certificado de la cuenta anterior. */
+  deCuentaAnterior: boolean
 }
 
 const MS_DIA = 86_400_000
@@ -124,21 +160,25 @@ function porRecientes(a: DocumentoRegistrado, b: DocumentoRegistrado): number {
  * Estado de un tipo de documento con la misma regla que la BD: cuenta el
  * aprobado vigente aunque después se haya cargado otro (una renovación en
  * revisión no lo invalida). Sin aprobado vigente manda la carga más reciente.
+ * Un certificado de la cuenta de pago anterior no cuenta: si es lo único
+ * cargado, el certificado falta.
  */
 export function estadoRequisito(
   tipo: TipoDocumentoMedio,
   documentos: readonly DocumentoRegistrado[],
   hoy: string
 ): EstadoRequisito {
-  const delTipo = documentos.filter((d) => d.tipo === tipo).sort(porRecientes)
-  const aprobado = delTipo.find((d) => vigente(d, hoy))
-  const reciente = delTipo.at(0)
+  const delTipo = documentos.filter((d) => d.tipo === tipo)
+  const validos = delTipo.filter((d) => !d.deCuentaAnterior).sort(porRecientes)
+  const aprobado = validos.find((d) => vigente(d, hoy))
+  const reciente = validos.at(0)
   const base = {
     tipo,
     porVencer: false,
     observaciones: null,
     porVideollamada: false,
     renovacionEnRevision: false,
+    deCuentaAnterior: false,
   }
 
   if (aprobado) {
@@ -150,12 +190,19 @@ export function estadoRequisito(
       porVencer:
         vence !== null && diasEntre(hoy, vence) <= DIAS_AVISO_VENCIMIENTO,
       porVideollamada: aprobado.metodo === "VIDEOLLAMADA",
-      renovacionEnRevision: delTipo.some(
+      renovacionEnRevision: validos.some(
         (d) => d.estado === "PENDIENTE" && d.creadoAt > aprobado.creadoAt
       ),
     }
   }
-  if (!reciente) return { ...base, situacion: "falta", fechaVencimiento: null }
+  if (!reciente) {
+    return {
+      ...base,
+      situacion: "falta",
+      fechaVencimiento: null,
+      deCuentaAnterior: delTipo.length > 0,
+    }
+  }
   switch (reciente.estado) {
     case "PENDIENTE":
       return {

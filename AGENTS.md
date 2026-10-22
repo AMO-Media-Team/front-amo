@@ -121,7 +121,7 @@ e2e/                             Playwright
    (RLS + `private.tiene_permiso` + `private.acceso_valido`). El proxy solo es optimista y los layouts
    no autorizan.
 2. **Compuertas del DAL, en orden**: sesión válida → perfil activo → MFA si el rol lo exige → cambio
-   de contraseña obligatorio → permiso.
+   de contraseña obligatorio → aceptación de términos vigentes (anunciante y medio) → permiso.
 3. **Clave secreta de Supabase**: solo en `src/lib/supabase/admin.ts` y `auth-server.ts`
    (`import 'server-only'`). Nada sensible en `NEXT_PUBLIC_*`, logs ni bitácora.
 4. **Cambios de estado**: únicamente por `transicionar_srv` y las RPC `*_srv` (rol `service_role`,

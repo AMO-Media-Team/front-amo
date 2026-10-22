@@ -2,9 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { FranjaSeguidores } from "@/features/cuentas-medio/tipos"
 import { exito } from "@/lib/result"
 
-import type { RangoFranja } from "../seguidores"
 import type { VerificacionEnCola } from "../tipos"
 
 const acciones = vi.hoisted(() => ({
@@ -17,10 +17,28 @@ vi.mock("../actions", () => acciones)
 
 import { HojaCuenta } from "./revision-cuenta"
 
-const FRANJAS: RangoFranja[] = [
-  { clave: "F1", nombre: "F1", minimo: 30_000, maximo: 59_999 },
-  { clave: "F2", nombre: "F2", minimo: 60_000, maximo: 119_999 },
-  { clave: "F3", nombre: "F3", minimo: 120_000, maximo: null },
+const FRANJAS: FranjaSeguidores[] = [
+  {
+    id: "f1",
+    clave: "F1",
+    nombre: "F1",
+    seguidoresMin: 30_000,
+    seguidoresMax: 59_999,
+  },
+  {
+    id: "f2",
+    clave: "F2",
+    nombre: "F2",
+    seguidoresMin: 60_000,
+    seguidoresMax: 119_999,
+  },
+  {
+    id: "f3",
+    clave: "F3",
+    nombre: "F3",
+    seguidoresMin: 120_000,
+    seguidoresMax: null,
+  },
 ]
 
 const VERIFICACION: VerificacionEnCola = {

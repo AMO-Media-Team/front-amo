@@ -41,6 +41,12 @@ describe("destinoDe · equipo AMO", () => {
     )
   })
 
+  it("quien verifica abre el expediente del medio", () => {
+    expect(destinoDe("medios", ID, interno(["medios.verificar"]))).toBe(
+      `/operacion/medios/${ID}?pestana=verificacion`
+    )
+  })
+
   it("quien verifica va a la cola; quien solo consulta, a la ficha", () => {
     expect(
       destinoDe("documentos_medio", ID, interno(["medios.verificar"]), {

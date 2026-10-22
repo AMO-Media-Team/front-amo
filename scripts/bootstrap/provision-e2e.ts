@@ -27,6 +27,7 @@ import {
   idDeRol,
   rutaConfirmacion,
 } from "./supabase"
+import { aceptarTerminosVigentes, tipoRolExterno } from "./terminos-e2e"
 
 export { codigoTotpEstable } from "./mfa"
 
@@ -255,6 +256,15 @@ export async function prepararCuenta(
 ): Promise<string> {
   const usuarioId = await asegurarUsuario(servicio, cuenta, password)
   await asegurarPerfil(servicio, usuarioId, cuenta)
+  // Una cuenta externa entra sin pasar por la compuerta de términos (AUT-012).
+  const tipoRol = tipoRolExterno(cuenta.rol)
+  if (tipoRol) {
+    await aceptarTerminosVigentes(servicio, {
+      id: usuarioId,
+      email: emailDe(cuenta),
+      tipoRol,
+    })
+  }
   return usuarioId
 }
 

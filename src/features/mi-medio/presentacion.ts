@@ -7,7 +7,11 @@ import { parsearFecha } from "@/lib/fechas"
 import { formatearFecha } from "@/lib/format"
 
 import type { EstadoPaso, SituacionMedio } from "./alta"
-import type { EstadoRequisito, SituacionDocumento } from "./requisitos"
+import {
+  type EstadoRequisito,
+  type SituacionDocumento,
+  TEXTO_CERTIFICADO_CUENTA_ANTERIOR,
+} from "./requisitos"
 
 export const ESTADOS_PASO: Readonly<
   Record<EstadoPaso, { etiqueta: string; tono: Tono }>
@@ -58,7 +62,9 @@ export function notaRequisito(requisito: EstadoRequisito): string | null {
         ? `Venció el ${fechaCalendario(requisito.fechaVencimiento)}: carga uno vigente.`
         : "Venció: carga uno vigente."
     case "falta":
-      return null
+      return requisito.deCuentaAnterior
+        ? TEXTO_CERTIFICADO_CUENTA_ANTERIOR
+        : null
   }
 }
 

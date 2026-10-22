@@ -37,6 +37,7 @@ export type FilaNivel = Pick<
 export type FilaPerfilTributario = Pick<
   Tablas["medios_privado"]["Row"],
   | "metodo_pago"
+  | "datos_pago_cambiados_at"
   | "tipo_documento"
   | "es_declarante"
   | "obligado_facturar"
@@ -95,6 +96,7 @@ export function aPerfilTributario(
 ): PerfilTributario {
   return {
     metodoPago: fila?.metodo_pago ?? null,
+    datosPagoCambiadosAt: fila?.datos_pago_cambiados_at ?? null,
     tipoDocumento: fila?.tipo_documento ?? null,
     esDeclarante: fila?.es_declarante ?? false,
     obligadoFacturar: fila?.obligado_facturar ?? false,
