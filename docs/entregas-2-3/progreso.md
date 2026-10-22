@@ -5,8 +5,8 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 
 | Fase | Contenido                                                                               | Estado |
 | ---- | --------------------------------------------------------------------------------------- | ------ |
-| P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | 🧪     |
-| P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | 🔧     |
+| P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
+| P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ⬜     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ⬜     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
@@ -17,19 +17,19 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 
 | RF               | Nombre                                                     | Fase  | Estado |
 | ---------------- | ---------------------------------------------------------- | ----- | ------ |
-| —                | Registrar anunciante y medio (equipo AMO)                  | P0    | 🧪     |
-| ROL-008          | El Administrador gestiona usuarios de anunciantes y medios | P0    | 🧪     |
-| AUT-012          | Aceptación versionada de términos y política de datos      | P1    | 🔧     |
-| MED-001          | Solicitud de vinculación del medio                         | P1    | 🔧     |
-| MED-002          | Perfil del medio                                           | P1    | 🔧     |
-| MED-003          | Carga de documentos por nivel                              | P1    | 🔧     |
-| MED-004          | Datos de pago y condición tributaria                       | P1    | 🔧     |
-| MED-005          | Cuentas sociales y verificación de control                 | P1    | 🔧     |
-| MED-006          | Reverificación periódica de seguidores                     | P1    | 🔧     |
-| MED-007          | Tope por nivel y camino para subir de nivel                | P1    | 🔧     |
-| ADM-001          | Cola de verificación de medios                             | P1    | 🔧     |
-| ADM-006          | Clasificación de pertinencia geográfica                    | P1    | 🔧     |
-| NOT-003          | Notificaciones por eventos del negocio                     | P1    | ⬜     |
+| —                | Registrar anunciante y medio (equipo AMO)                  | P0    | ✅     |
+| ROL-008          | El Administrador gestiona usuarios de anunciantes y medios | P0    | ✅     |
+| AUT-012          | Aceptación versionada de términos y política de datos      | P1    | ✅     |
+| MED-001          | Solicitud de vinculación del medio                         | P1    | ✅     |
+| MED-002          | Perfil del medio                                           | P1    | ✅     |
+| MED-003          | Carga de documentos por nivel                              | P1    | ✅     |
+| MED-004          | Datos de pago y condición tributaria                       | P1    | ✅     |
+| MED-005          | Cuentas sociales y verificación de control                 | P1    | ✅     |
+| MED-006          | Reverificación periódica de seguidores                     | P1    | ✅     |
+| MED-007          | Tope por nivel y camino para subir de nivel                | P1    | ✅     |
+| ADM-001          | Cola de verificación de medios                             | P1    | ✅     |
+| ADM-006          | Clasificación de pertinencia geográfica                    | P1    | ✅     |
+| NOT-003          | Notificaciones por eventos del negocio                     | P1    | 🔧     |
 | ANU-001          | Registro y datos de la empresa                             | P0/P2 | 🔧     |
 | ANU-002          | Varios usuarios por anunciante                             | P2    | ⬜     |
 | ANU-003          | Creación de campañas                                       | P2    | ⬜     |
@@ -128,3 +128,10 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   contenido de la página (`_R_…` del servidor y `_r_…` del cliente); no se reproduce fuera del runner ni en desarrollo.
   Los specs afectados esperan a que quede una sola copia.
 - Pendiente (P6): limpieza programada de objetos de Storage sin fila (subidas no confirmadas o reemplazadas).
+- 2026-10-22 · **Fases 0 y 1 en producción** (`oriuuuaczpncmtglfgpv`): respaldo previo de esquema y datos en
+  `context/respaldos/` (0600, fuera de git); `pnpm db:push produccion --confirmar-produccion` aplicó
+  `20261022024336`, `20261022030524` y `20261022030525`. Verificación por MCP (solo lectura): 48 migraciones iguales a
+  los archivos, 55 plantillas, 54 claves, 14 triggers de notificación, 141 transiciones, secreto de Vault, 3
+  superadministradores intactos; advisors de seguridad sin ERROR (WARN nuevo esperado: `terminos_pendientes` ejecutable por
+  authenticated, solo devuelve lo del propio usuario). Falta que Andrés lleve `feature/andres` a `main` (PR) para que Vercel
+  despliegue el front.
