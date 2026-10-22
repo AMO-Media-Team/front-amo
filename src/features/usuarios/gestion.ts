@@ -34,13 +34,17 @@ export function actorParaInterfaz(usuario: UsuarioSesion): ActorUsuarios {
  * solo hacen falta para crear o editar.
  */
 export async function cargarDatosGestion(
-  usuario: UsuarioSesion
+  usuario: UsuarioSesion,
+  /**
+   * `organizaciones: false` en las fichas de un medio o anunciante: la
+   * invitación ya fija la organización y no hace falta enviar el catálogo.
+   */
+  { organizaciones: conOrganizaciones = true } = {}
 ): Promise<DatosGestionUsuarios> {
   const gestiona = tieneAlgunPermiso(usuario, PERMISOS_GESTION)
-  const edita = tieneAlgunPermiso(usuario, [
-    "usuarios.invitar",
-    "usuarios.editar",
-  ])
+  const edita =
+    conOrganizaciones &&
+    tieneAlgunPermiso(usuario, ["usuarios.invitar", "usuarios.editar"])
   const [roles, orgs] = await Promise.all([
     gestiona ? rolesAsignables() : [],
     edita ? organizaciones() : SIN_ORGANIZACIONES,

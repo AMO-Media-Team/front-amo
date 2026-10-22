@@ -154,6 +154,36 @@ describe("validarEnvServidor", () => {
     ).toBe("0x2")
   })
 
+  it("acepta la clave anterior solo con formato válido y otra versión", () => {
+    const anterior = `k2:${Buffer.alloc(32, 9).toString("base64")}`
+    expect(
+      validarEnvServidor({
+        ...SERVIDOR_VALIDO,
+        AMO_CIFRADO_KEY_ANTERIOR: anterior,
+      }).AMO_CIFRADO_KEY_ANTERIOR
+    ).toBe(anterior)
+    expect(
+      validarEnvServidor({ ...SERVIDOR_VALIDO, AMO_CIFRADO_KEY_ANTERIOR: "" })
+        .AMO_CIFRADO_KEY_ANTERIOR
+    ).toBeUndefined()
+    const malFormada = mensajeDeError(() =>
+      validarEnvServidor({
+        ...SERVIDOR_VALIDO,
+        AMO_CIFRADO_KEY_ANTERIOR: "k2:corta",
+      })
+    )
+    expect(malFormada).toContain("AMO_CIFRADO_KEY_ANTERIOR")
+    expect(malFormada).not.toContain("corta")
+    expect(
+      mensajeDeError(() =>
+        validarEnvServidor({
+          ...SERVIDOR_VALIDO,
+          AMO_CIFRADO_KEY_ANTERIOR: `k1:${Buffer.alloc(32, 9).toString("base64")}`,
+        })
+      )
+    ).toContain("versión")
+  })
+
   it("valida el correo del superadmin y AMO_SMTP_CONFIGURADO", () => {
     expect(() =>
       validarEnvServidor({ ...SERVIDOR_VALIDO, SUPERADMIN_EMAIL: "no-correo" })

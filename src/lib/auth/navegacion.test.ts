@@ -140,6 +140,7 @@ describe("migas", () => {
 describe("rutas públicas", () => {
   it.each([
     "/ingresar",
+    "/vincular",
     "/recuperar",
     "/restablecer",
     "/auth/confirm",
@@ -164,6 +165,7 @@ describe("rutas públicas", () => {
     "/mfa/configurar",
     "/mfa/verificar",
     "/ingresar-admin",
+    "/vinculaciones",
     "/iconos",
     "/api/geo/metricas",
   ])("%s exige sesión", (ruta) => {

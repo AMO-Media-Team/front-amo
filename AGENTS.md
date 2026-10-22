@@ -177,12 +177,16 @@ Proyectos Supabase:
   Sus variables están en `.env.produccion` (ignorado por git y que Next no carga en local): son las que
   se importan en Vercel, que corre en `yul1` (Montreal, junto a la base) con el dominio
   `https://front-amo.vercel.app`. Los scripts de arranque la usan con `AMO_ARCHIVO_ENTORNO=.env.produccion`.
-- **Desarrollo** `zygfqfvqwfvhbirmjojp` (15 meses de datos demo y cuentas de prueba): `.env.local`.
+- **Develop** `baas-amo-develop` (`depbmnlpfnrcsbqlwxxd`, us-east-1): banco de pruebas en la nube antes de
+  producción; conexión en `.env.db.develop` y clave secreta en `.env.develop` (0600, ignorados por git).
+- **Local** (`supabase start` en Docker): `.env.local` apunta a la pila; `pnpm db:local` la reconstruye con
+  15 meses de datos demo y las cuentas E2E (ver «Base local» en `docs/guia-desarrollo.md`).
+- El proyecto `zygfqfvqwfvhbirmjojp` (desarrollo de la Entrega 1) está retirado.
 
 Todo lo que crea datos de prueba (cuentas E2E y de pista, `demo:*`, carrera de cupos, prueba de
 guardas por PostgREST y la suite E2E) se niega a correr contra producción
-(`scripts/bootstrap/produccion.ts`). Las migraciones se aplican con
-`supabase db push --db-url <pooler de sesión como postgres.<ref>>`, primero en desarrollo; nunca con
+(`scripts/bootstrap/produccion.ts`). Las migraciones se prueban en local y se aplican con `pnpm db:push
+<develop|produccion>` (`supabase db push --db-url <pooler de sesión como postgres.<ref>>`), primero en develop; nunca con
 `--linked` (el CLI entra como `cli_login_*` y `session_user` deja de ser `postgres`, que exigen
 `private.modo_carga()` y las guardas de roles) ni mezclando `apply_migration` (otra numeración).
 

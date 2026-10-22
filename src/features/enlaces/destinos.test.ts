@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest"
+
+import {
+  destinoDe,
+  ENTIDADES_ENLACE,
+  enlaceNotificacion,
+  esEntidadEnlace,
+} from "./destinos"
+
+const ID = "0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a01"
+const PADRE = "0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a99"
+
+const interno = (permisos: string[] = []) =>
+  ({ tipoRol: "ADMIN", permisos }) as const
+const medio = { tipoRol: "MEDIO", permisos: [] } as const
+const anunciante = { tipoRol: "ANUNCIANTE", permisos: [] } as const
+
+describe("destinoDe · equipo AMO", () => {
+  it("lleva cada entidad a su ficha de operación", () => {
+    expect(destinoDe("medios", ID, interno())).toBe(`/operacion/medios/${ID}`)
+    expect(destinoDe("anunciantes", ID, interno())).toBe(
+      `/operacion/anunciantes/${ID}`
+    )
+    expect(destinoDe("campanas", ID, interno())).toBe(
+      `/operacion/campanas/${ID}`
+    )
+    expect(destinoDe("asignaciones", ID, interno())).toBe(
+      `/operacion/asignaciones/${ID}`
+    )
+  })
+
+  it("las filas hijas van a la ficha de su padre", () => {
+    expect(destinoDe("metricas", ID, interno(), { asignacionId: PADRE })).toBe(
+      `/operacion/asignaciones/${PADRE}`
+    )
+    expect(destinoDe("ofertas", ID, interno(), { campanaId: PADRE })).toBe(
+      `/operacion/campanas/${PADRE}`
+    )
+    expect(destinoDe("facturas", ID, interno(), { anuncianteId: PADRE })).toBe(
+      `/operacion/anunciantes/${PADRE}?pestana=cartera`
+    )
+  })
+
+  it("quien verifica va a la cola; quien solo consulta, a la ficha", () => {
+    expect(
+      destinoDe("documentos_medio", ID, interno(["medios.verificar"]), {
+        medioId: PADRE,
+      })
+    ).toBe("/operacion/verificacion?cola=documentos")
+    expect(
+      destinoDe("documentos_medio", ID, interno(["medios.ver"]), {
+        medioId: PADRE,
+      })
+    ).toBe(`/operacion/medios/${PADRE}?pestana=documentos`)
+  })
+
+  it("sin relacionados visibles no hay destino", () => {
+    expect(destinoDe("publicaciones", ID, interno(), {})).toBeNull()
+    expect(destinoDe("ofertas", ID, interno())).toBeNull()
+  })
+})
+
+describe("destinoDe · portales externos", () => {
+  it("el medio va a su portal y lo que aún no tiene pantalla, a Inicio", () => {
+    expect(destinoDe("medios", ID, medio)).toBe("/mi-medio")
+    expect(destinoDe("documentos_medio", ID, medio)).toBe(
+      "/mi-medio/documentos"
+    )
+    expect(destinoDe("verificaciones_cuenta", ID, medio)).toBe(
+      "/mi-medio/cuentas"
+    )
+    expect(destinoDe("asignaciones", ID, medio)).toBe("/inicio")
+  })
+
+  it("nunca manda a un externo a una ruta de operación", () => {
+    for (const entidad of ENTIDADES_ENLACE) {
+      for (const quien of [medio, anunciante]) {
+        expect(
+          destinoDe(entidad, ID, quien, { asignacionId: PADRE })
+        ).not.toMatch(/^\/operacion/)
+      }
+    }
+  })
+
+  it("los avisos de seguridad van a Seguridad para todos", () => {
+    for (const quien of [interno(), medio, anunciante]) {
+      expect(destinoDe("accesos", "42", quien)).toBe("/cuenta/seguridad")
+    }
+  })
+})
+
+describe("enlaceNotificacion", () => {
+  it("arma /ir solo para entidades conocidas con id", () => {
+    expect(enlaceNotificacion("ofertas", ID)).toBe(`/ir/ofertas/${ID}`)
+    expect(enlaceNotificacion("tabla_rara", ID)).toBeNull()
+    expect(enlaceNotificacion("ofertas", null)).toBeNull()
+    expect(enlaceNotificacion(null, ID)).toBeNull()
+  })
+
+  it("codifica el id (nunca sale del segmento)", () => {
+    expect(enlaceNotificacion("accesos", "../x")).toBe("/ir/accesos/..%2Fx")
+    expect(esEntidadEnlace("medios")).toBe(true)
+    expect(esEntidadEnlace("medios/../x")).toBe(false)
+  })
+})

@@ -4,6 +4,7 @@
  * presentación; cada página vuelve a autorizar con el DAL.
  */
 import {
+  BadgeCheck,
   Bell,
   Building2,
   ChartColumn,
@@ -16,6 +17,7 @@ import {
   Megaphone,
   RadioTower,
   ScrollText,
+  Store,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -60,7 +62,12 @@ export interface ItemNavegacion {
 }
 
 export type IdGrupoNavegacion =
-  "general" | "operacion" | "administracion" | "cuenta"
+  | "general"
+  | "negocio"
+  | "operacion"
+  | "finanzas"
+  | "administracion"
+  | "cuenta"
 
 export interface GrupoNavegacion {
   id: IdGrupoNavegacion
@@ -73,6 +80,7 @@ export interface GrupoNavegacion {
 }
 
 const SOLO_INTERNOS: readonly TipoRol[] = ["ADMIN"]
+const SOLO_MEDIOS: readonly TipoRol[] = ["MEDIO"]
 
 export const NAVEGACION: readonly GrupoNavegacion[] = [
   {
@@ -130,11 +138,63 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     ],
   },
   {
+    // Portales externos (medio y anunciante). El orden de sus entradas fija la
+    // barra inferior del celular: lo del día a día primero.
+    id: "negocio",
+    titulo: "Mi negocio",
+    enMigas: true,
+    enBarraLateral: true,
+    items: [
+      {
+        id: "mi-medio",
+        titulo: "Mi medio",
+        href: ruta("/mi-medio"),
+        icono: Store,
+        permisos: ["medios.editar_propio"],
+        tiposRol: SOLO_MEDIOS,
+        descripcion: "Perfil, documentos, datos de pago, cuentas y nivel",
+        palabrasClave: [
+          "perfil",
+          "documentos",
+          "pago",
+          "cuentas sociales",
+          "verificación",
+          "nivel",
+        ],
+        subpaginas: {
+          perfil: "Perfil",
+          documentos: "Documentos",
+          pago: "Pago y tributario",
+          cuentas: "Cuentas sociales",
+          nivel: "Nivel",
+        },
+      },
+    ],
+  },
+  {
     id: "operacion",
     titulo: "Operación",
     enMigas: true,
     enBarraLateral: true,
     items: [
+      {
+        id: "verificacion",
+        titulo: "Verificación",
+        href: ruta("/operacion/verificacion"),
+        icono: BadgeCheck,
+        permisos: ["medios.verificar", "anunciantes.verificar"],
+        tiposRol: SOLO_INTERNOS,
+        descripcion:
+          "Colas de medios, cuentas, documentos y solicitudes por revisar",
+        palabrasClave: [
+          "revisión",
+          "aprobar",
+          "documentos",
+          "solicitudes",
+          "vinculación",
+          "pendientes",
+        ],
+      },
       {
         id: "medios",
         titulo: "Medios",
@@ -420,6 +480,8 @@ export function migas(rutaActual: string, tituloFinal?: string | null): Miga[] {
 /** Accesibles sin sesión. `/cambiar-contrasena` y `/mfa/*` exigen sesión (aal1). */
 export const RUTAS_PUBLICAS: readonly string[] = [
   "/ingresar",
+  // Solicitud de vinculación de un medio (MED-001): formulario público.
+  "/vincular",
   "/recuperar",
   "/restablecer",
   "/auth",

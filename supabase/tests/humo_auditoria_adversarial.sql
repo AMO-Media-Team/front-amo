@@ -82,11 +82,13 @@ begin
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
   values (an_a, 'Sonda A S.A.S.', 'Sonda A', '900007701', '1', v_sector, '11001', 'VERIFICADO', now()),
-         (an_b, 'Sonda B S.A.S.', 'Sonda B', '900007702', '1', v_sector, '05001', 'VERIFICADO', now());
+         (an_b, 'Sonda B S.A.S.', 'Sonda B', '900007702', '9', v_sector, '05001', 'VERIFICADO', now());
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Medio Sonda A', 'PAGINA_NOTICIAS', '05001', 'VERIFICADO', 1, now()),
          (me_b, 'Medio Sonda B', 'CREADOR', '76001', 'VERIFICADO', 1, now());
-  insert into public.medios_privado (medio_id, metodo_pago, obligado_facturar) values (me_b, 'BANCARIO', true);
+  -- Pago completo (método + cifrado + resumen juntos: medios_privado_pago_completo_chk, e2_onboarding_medio).
+  insert into public.medios_privado (medio_id, metodo_pago, datos_pago_cifrados, datos_pago_resumen, obligado_facturar)
+  values (me_b, 'BANCARIO', 'v1:AAAA:BBBB:CCCC', 'Banco Sonda •••• 1234', true);
   insert into public.cuentas_sociales (id, medio_id, plataforma, handle, url, seguidores_verificados, franja_id, verificada,
                                        metodo_verificacion, fecha_ultima_verificacion)
   values (cu_a, me_a, 'INSTAGRAM', 'aud12_a', 'https://instagram.com/aud12_a', 45000, fr1, true, 'MANUAL', now()),
@@ -186,7 +188,9 @@ begin
     raise exception 'deshacer';
   exception when others then
     r := r || jsonb_build_object('f1_plantilla_editada_no_reenvia',
-      case when sqlerrm = 'deshacer' and n1 = 1 and n2 = 0 and n3 = 0 then to_jsonb(true)
+      -- n1 cuenta todos los recordatorios de la base (con datos demo hay más de uno); lo que se prueba es que
+      -- las corridas siguientes no reenvían nada.
+      case when sqlerrm = 'deshacer' and n1 >= 1 and n2 = 0 and n3 = 0 then to_jsonb(true)
            else to_jsonb(format('%s [%s,%s,%s]', sqlerrm, n1, n2, n3)) end);
   end;
   -- Recordatorios acumulados de a5 tras cada corrida: H24 hoy; D7 seis días después (el título contiene «corte D7 »).

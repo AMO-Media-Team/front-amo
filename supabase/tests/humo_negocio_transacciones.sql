@@ -86,8 +86,8 @@ begin
                (u_ope, 'humo7.ope@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
-  values (an_a, 'Humo Siete A S.A.S.', 'Humo Siete A', '900000201', '1', v_sector, '11001', 'VERIFICADO', now()),
-         (an_b, 'Humo Siete B S.A.S.', 'Humo Siete B', '900000202', '1', v_sector, '05001', 'VERIFICADO', now());
+  values (an_a, 'Humo Siete A S.A.S.', 'Humo Siete A', '900000201', '9', v_sector, '11001', 'VERIFICADO', now()),
+         (an_b, 'Humo Siete B S.A.S.', 'Humo Siete B', '900000202', '6', v_sector, '05001', 'VERIFICADO', now());
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Medio Siete A', 'PAGINA_NOTICIAS', '05001', 'VERIFICADO', 1, now()),
          (me_b, 'Medio Siete B', 'CREADOR', '76001', 'VERIFICADO', 1, now()),
@@ -1158,8 +1158,8 @@ begin
   from (values (u_adm, 'pol.adm@amo.test'), (u_ana, 'pol.ana@amo.test'), (u_anb, 'pol.anb@amo.test'),
                (u_mea, 'pol.mea@amo.test'), (u_meb, 'pol.meb@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo, estado_verificacion, verificado_at)
-  values (an_a, 'Pol A S.A.S.', 'Pol A', '900000301', '1', v_sector, '11001', 'VERIFICADO', now()),
-         (an_b, 'Pol B S.A.S.', 'Pol B', '900000302', '1', v_sector, '11001', 'VERIFICADO', now());
+  values (an_a, 'Pol A S.A.S.', 'Pol A', '900000301', '7', v_sector, '11001', 'VERIFICADO', now()),
+         (an_b, 'Pol B S.A.S.', 'Pol B', '900000302', '4', v_sector, '11001', 'VERIFICADO', now());
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Pol Medio A', 'CREADOR', '05001', 'VERIFICADO', 1, now()), (me_b, 'Pol Medio B', 'CREADOR', '05001', 'VERIFICADO', 1, now());
   insert into public.cuentas_sociales (id, medio_id, plataforma, handle, url, seguidores_verificados, verificada, metodo_verificacion, fecha_ultima_verificacion)

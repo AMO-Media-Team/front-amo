@@ -67,7 +67,7 @@ begin
   from (values (u_adm, 'humodz.adm@amo.test'), (u_fin, 'humodz.fin@amo.test'), (u_ana, 'humodz.ana@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
-  values (an_a, 'Humo Zona A S.A.S.', 'Humo Zona A', '900000951', '1', v_sector, '11001', 'VERIFICADO', '2026-04-01'),
+  values (an_a, 'Humo Zona A S.A.S.', 'Humo Zona A', '900000951', '4', v_sector, '11001', 'VERIFICADO', '2026-04-01'),
          (an_b, 'Humo Zona B S.A.S.', 'Humo Zona B', '900000952', '1', v_sector, '05001', 'VERIFICADO', '2026-04-01');
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Medio Zona A', 'PAGINA_NOTICIAS', '05001', 'VERIFICADO', 1, '2026-07-15 15:00+00'),

@@ -2,9 +2,11 @@ import type { JwtPayload } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
 import {
+  aTerminoPendiente,
   destinoFinal,
   esSesionDeEnlace,
   type EstadoCuenta,
+  exigeAceptarTerminos,
   leerClaims,
   resolverCompuertas,
   rutaDePaso,
@@ -70,16 +72,127 @@ describe("resolverCompuertas (orden §2.6)", () => {
   })
 })
 
+describe("resolverCompuertas: aceptar términos (AUT-012)", () => {
+  /** Medio o anunciante: sin MFA obligatoria ni factor, en aal1. */
+  const EXTERNO: EstadoCuenta = {
+    ...LISTA,
+    rolRequiereMfa: false,
+    aal: "aal1",
+    tieneFactorVerificado: false,
+  }
+
+  it("con términos pendientes y lo demás al día, pide aceptarlos", () => {
+    expect(
+      resolverCompuertas({ ...EXTERNO, terminosPendientes: true })
+    ).toEqual({ tipo: "pendiente", paso: "aceptar-terminos" })
+  })
+
+  it("sin términos pendientes (o sin consultarlos) la cuenta queda lista", () => {
+    expect(
+      resolverCompuertas({ ...EXTERNO, terminosPendientes: false })
+    ).toEqual({ tipo: "listo" })
+    expect(resolverCompuertas(EXTERNO)).toEqual({ tipo: "listo" })
+  })
+
+  it("va después del cambio de contraseña", () => {
+    expect(
+      resolverCompuertas({
+        ...EXTERNO,
+        debeCambiarPassword: true,
+        terminosPendientes: true,
+      })
+    ).toEqual({ tipo: "pendiente", paso: "cambiar-contrasena" })
+  })
+
+  it("va después de verificar y de configurar la MFA", () => {
+    expect(
+      resolverCompuertas({
+        ...EXTERNO,
+        tieneFactorVerificado: true,
+        terminosPendientes: true,
+      })
+    ).toEqual({ tipo: "pendiente", paso: "mfa-verificar" })
+    expect(
+      resolverCompuertas({
+        ...EXTERNO,
+        rolRequiereMfa: true,
+        terminosPendientes: true,
+      })
+    ).toEqual({ tipo: "pendiente", paso: "mfa-configurar" })
+  })
+
+  it("un perfil inactivo sale aunque tenga términos pendientes", () => {
+    expect(
+      resolverCompuertas({
+        ...EXTERNO,
+        perfilActivo: false,
+        terminosPendientes: true,
+      })
+    ).toEqual({ tipo: "salir" })
+  })
+
+  it("al cerrar el cambio de contraseña, el siguiente paso son los términos", () => {
+    const primerIngreso = {
+      ...EXTERNO,
+      debeCambiarPassword: true,
+      terminosPendientes: true,
+    }
+    expect(
+      resolverCompuertas({ ...primerIngreso, debeCambiarPassword: false })
+    ).toEqual({ tipo: "pendiente", paso: "aceptar-terminos" })
+  })
+})
+
+describe("exigeAceptarTerminos", () => {
+  it("solo los portales externos aceptan términos", () => {
+    expect(exigeAceptarTerminos("MEDIO")).toBe(true)
+    expect(exigeAceptarTerminos("ANUNCIANTE")).toBe(true)
+    expect(exigeAceptarTerminos("ADMIN")).toBe(false)
+  })
+})
+
+describe("aTerminoPendiente", () => {
+  it("convierte la fila de terminos_pendientes() en el DTO", () => {
+    expect(
+      aTerminoPendiente({
+        id: "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+        tipo: "POLITICA_DATOS",
+        version: "2.1",
+        vigente_desde: "2026-10-22T05:00:00+00:00",
+        hash_sha256: "ab".repeat(32),
+        contenido_md: "# Política",
+      })
+    ).toEqual({
+      id: "0192f3a4-5b6c-7d8e-9f01-23456789abcd",
+      tipo: "POLITICA_DATOS",
+      version: "2.1",
+      vigenteDesde: "2026-10-22T05:00:00+00:00",
+      hashSha256: "ab".repeat(32),
+      contenidoMd: "# Política",
+    })
+  })
+})
+
 describe("rutaDePaso", () => {
-  it("solo la verificación MFA conserva el destino", () => {
+  it("la verificación MFA conserva el destino", () => {
     expect(rutaDePaso("mfa-verificar", "/reportes?x=1")).toBe(
       "/mfa/verificar?next=%2Freportes%3Fx%3D1"
     )
     expect(rutaDePaso("mfa-verificar")).toBe("/mfa/verificar")
+  })
+
+  it("la aceptación de términos conserva el destino", () => {
+    expect(rutaDePaso("aceptar-terminos", "/ir/asignaciones/1")).toBe(
+      "/aceptar-terminos?next=%2Fir%2Fasignaciones%2F1"
+    )
+    expect(rutaDePaso("aceptar-terminos")).toBe("/aceptar-terminos")
+  })
+
+  it("los pasos del primer ingreso no lo conservan", () => {
     expect(rutaDePaso("cambiar-contrasena", "/reportes")).toBe(
       "/cambiar-contrasena"
     )
-    expect(rutaDePaso("mfa-configurar")).toBe("/mfa/configurar")
+    expect(rutaDePaso("mfa-configurar", "/reportes")).toBe("/mfa/configurar")
   })
 })
 

@@ -56,7 +56,7 @@ begin
                (u_meb, 'humo8.meb@amo.test'), (u_inv, 'humo8.inv@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
-  values (an_a, 'Humo Ocho A S.A.S.', 'Humo Ocho A', '900000801', '1', v_sector, '11001', 'VERIFICADO', now());
+  values (an_a, 'Humo Ocho A S.A.S.', 'Humo Ocho A', '900000801', '8', v_sector, '11001', 'VERIFICADO', now());
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
   values (me_a, 'Medio Ocho A', 'PAGINA_NOTICIAS', '05001', 'VERIFICADO', 1, now()),
          (me_b, 'Medio Ocho B', 'CREADOR', '76001', 'VERIFICADO', 1, now());
@@ -186,7 +186,8 @@ begin
   r := r || jsonb_build_object('c5_disputa_abierta_contraparte',
     exists (select 1 from public.notificaciones where tipo = 'disputa.abierta' and usuario_id = u_ana and mensaje like '%métricas%')
     and not exists (select 1 from public.notificaciones where tipo = 'disputa.abierta' and usuario_id = u_mea));
-  r := r || jsonb_build_object('c6_triggers', (select count(*) = 8 from pg_trigger where tgname like 'trg\_%\_z\_notificar%'));
+  -- 8 de M8 + medios, anunciantes, documentos_medio, documentos_anunciante, campanas y facturas (e2_notificaciones_negocio).
+  r := r || jsonb_build_object('c6_triggers', (select count(*) = 14 from pg_trigger where tgname like 'trg\_%\_z\_notificar%'));
 
   -- ── (d) Accesos: alerta PAIS_INUSUAL y un bloqueo por ventana ──────────────────────────────────────
   perform set_config('request.jwt.claims', '{"role": "service_role"}', true);
