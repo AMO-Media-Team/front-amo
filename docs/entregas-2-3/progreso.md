@@ -135,3 +135,8 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   superadministradores intactos; advisors de seguridad sin ERROR (WARN nuevo esperado: `terminos_pendientes` ejecutable por
   authenticated, solo devuelve lo del propio usuario). Falta que Andrés lleve `feature/andres` a `main` (PR) para que Vercel
   despliegue el front.
+- 2026-10-22 · Andrés fusionó los PR #5 y #6 en `main` y Vercel desplegó: `/vincular` responde 200 desde `yul1`, sin
+  errores de consola ni de CSP; las rutas privadas redirigen a `/ingresar?next=`. `pnpm prod:config-pruebas`
+  (`scripts/produccion/`) probado en la base local (simular, aplicar, reaplicar sin cambios, revertir; bitácora con actor
+  SUPERADMIN y origen APP). Simulación contra producción: 3 parámetros (anticipación 24→0 h, cortes → `["H24"]`,
+  creativo 50→25 MB) y los 4 textos legales `0.1-PRUEBA`. Pendiente aplicarlo en producción (lo ejecuta Andrés).

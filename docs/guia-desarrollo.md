@@ -81,7 +81,7 @@ src/components/{ui,brand,layout,data-table,charts,kpi,maps,feedback,motion,provi
 src/features/<dominio>/{actions.ts,queries.ts,schemas.ts,components/,*.test.ts}
 src/lib/{supabase,auth,geo,export}/  src/lib/{env,format,fechas,result,csp}.ts
 src/types/database.types.ts  # generado desde Supabase (no editar a mano)
-scripts/{geo,brand,db,bootstrap,demo,pruebas}/
+scripts/{geo,brand,db,bootstrap,demo,pruebas,produccion}/
 supabase/{migrations,seed,tests}/   e2e/   docs/
 ```
 
@@ -143,6 +143,28 @@ supabase stop                      # al terminar (conserva los datos); colima st
 - La base (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) acepta `psql` dentro del contenedor:
   `docker exec -i supabase_db_front-amo psql -U postgres -d postgres`.
 - `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop.
+
+### Producción como entorno de pruebas del cliente
+
+Hasta nueva orden, producción es donde el cliente hace sus pruebas funcionales. `pnpm prod:config-pruebas`
+(`scripts/produccion/configuracion-pruebas.ts`) deja una configuración rotulada para que los flujos se recorran en
+minutos: anticipación mínima de la oferta en 0 h, un solo corte de métricas (`["H24"]`), creativos de hasta 25 MB
+(cuida el 1 GB del plan gratuito) y términos, condiciones y política de datos publicados como versión `0.1-PRUEBA`
+(«VERSIÓN DE PRUEBA», sin valor legal; si el cliente ya publicó un texto propio de un tipo, ese tipo no se toca).
+
+```bash
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas                    # simulación: muestra el plan
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas --aplicar --confirmar-produccion
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas --revertir --confirmar-produccion
+```
+
+- Escribe como servicio con contexto confiable a nombre del superadministrador de `SUPERADMIN_EMAIL`: la bitácora
+  registra cada cambio con ese actor y origen `APP`.
+- Guarda lo que cambia en `context/respaldos/configuracion-pruebas-<ref>.json` (0600, fuera de git). `--revertir`
+  devuelve cada parámetro a su valor anterior solo si sigue con el de prueba. Las versiones legales publicadas son
+  inmutables: las retira la limpieza final, que se construye en la fase 6 y no se ejecuta sin orden de Andrés.
+- Es idempotente y sin argumentos no cambia nada. Sin `AMO_ARCHIVO_ENTORNO` actúa sobre `.env.local` (la base
+  local), útil para probarlo antes.
 
 ## Identidad visual
 

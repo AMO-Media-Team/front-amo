@@ -76,6 +76,9 @@ pnpm bootstrap:restablecer-mfa   # emergencia: borra los factores MFA de una cue
                             # contra producción: AMO_ARCHIVO_ENTORNO=.env.produccion pnpm bootstrap:restablecer-mfa
 pnpm bootstrap:e2e          # cuentas de prueba E2E (variables E2E_* en .env.local)
 pnpm demo:generar | pnpm demo:purgar   # datos demo (ver supabase/seed/demo/README.md)
+pnpm prod:config-pruebas    # configuración rotulada para las pruebas del cliente (tiempos cortos, textos legales
+                            # «VERSIÓN DE PRUEBA»): simula por defecto; --aplicar | --revertir; contra producción
+                            # AMO_ARCHIVO_ENTORNO=.env.produccion … --confirmar-produccion
 ```
 
 Antes de entregar cualquier cambio: `pnpm typecheck && pnpm lint && pnpm test`. En integraciones,
