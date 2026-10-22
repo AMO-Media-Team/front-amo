@@ -7,7 +7,7 @@ import type { Database } from "@/types/database.types"
 import { resumirCupos } from "../calculos"
 import { ORDEN_PLATAFORMAS, type Plataforma } from "../estados"
 import type { EstadoTablaCampanas } from "../estado-tablas"
-import { textoParaFiltro } from "../formato"
+import { patronLiteral } from "../formato"
 import type {
   CampanaDetalle,
   CampanaFila,
@@ -102,7 +102,7 @@ export async function listarCampanas(
   estado: EstadoTablaCampanas
 ): Promise<PaginaFilas<CampanaFila>> {
   const supabase = await clienteSolicitud()
-  const texto = textoParaFiltro(estado.q)
+  const patron = patronLiteral(estado.q)
   const seleccion =
     estado.plataforma.length > 0
       ? `${SELECCION_LISTADO}, con_plataforma:ofertas!inner ( id )`
@@ -118,8 +118,8 @@ export async function listarCampanas(
         .select(seleccion, { count: "exact" })
         .is("deleted_at", null)
         .is("ofertas.deleted_at", null)
-      if (texto) {
-        consulta = consulta.or(`nombre.ilike.%${texto}%,marca.ilike.%${texto}%`)
+      if (patron) {
+        consulta = consulta.or(`nombre.ilike.${patron},marca.ilike.${patron}`)
       }
       if (estado.estado.length > 0)
         consulta = consulta.in("estado", estado.estado)

@@ -54,10 +54,11 @@ El build falla con un mensaje claro si falta una variable obligatoria.
 
 ### Entornos
 
-| Entorno    | Supabase                              | Variables         | Datos                                |
-| ---------- | ------------------------------------- | ----------------- | ------------------------------------ |
-| Producción | `oriuuuaczpncmtglfgpv` (ca-central-1) | `.env.produccion` | Solo los reales (nació vacío)        |
-| Desarrollo | `zygfqfvqwfvhbirmjojp`                | `.env.local`      | 15 meses de demo y cuentas de prueba |
+| Entorno    | Supabase                              | Variables                         | Datos                                                  |
+| ---------- | ------------------------------------- | --------------------------------- | ------------------------------------------------------ |
+| Producción | `oriuuuaczpncmtglfgpv` (ca-central-1) | `.env.produccion`                 | Solo los reales (nació vacío)                          |
+| Develop    | `depbmnlpfnrcsbqlwxxd` (us-east-1)    | `.env.develop`, `.env.db.develop` | Banco de pruebas antes de producción                   |
+| Local      | `supabase start` (Docker)             | `.env.local`                      | 15 meses de demo y cuentas de prueba (`pnpm db:local`) |
 
 `.env.produccion` (ignorado por git; Next no lo carga en local) contiene las variables que se importan
 en Vercel. Los scripts de arranque apuntan a otro entorno con `AMO_ARCHIVO_ENTORNO`, p. ej.

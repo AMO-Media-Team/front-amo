@@ -117,9 +117,10 @@ function Destino({
 /**
  * Clase que reserva en el `<main>` el alto de la barra (pestañas de 56 px,
  * borde y área segura del teléfono) para que no tape el final de la página.
+ * Lo publica también en `--reserva-inferior` para los pies fijos (asistente).
  */
 export const RESERVA_BARRA_INFERIOR =
-  "max-md:pb-[calc(3.5rem+1px+env(safe-area-inset-bottom))]"
+  "max-md:pb-[calc(3.5rem+1px+env(safe-area-inset-bottom))] max-md:[--reserva-inferior:calc(3.5rem+1px+env(safe-area-inset-bottom))]"
 
 /**
  * Barra de navegación inferior en móvil (< 768 px) para el rol MEDIO: sus

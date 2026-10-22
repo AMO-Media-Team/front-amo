@@ -161,6 +161,17 @@ describe("proxy", () => {
     ).toBe(csp)
   })
 
+  it("entrega a la app la ruta pedida sin _rsc e ignora la que mande el cliente", async () => {
+    const respuesta = await proxy(
+      solicitud("/vincular?origen=correo&_rsc=1a2b", {
+        headers: { "x-amo-ruta": "https://evil.test/" },
+      })
+    )
+    expect(respuesta.headers.get("x-middleware-request-x-amo-ruta")).toBe(
+      "/vincular?origen=correo"
+    )
+  })
+
   it("genera un nonce distinto por solicitud", async () => {
     const [a, b] = await Promise.all([
       proxy(solicitud("/ingresar")),

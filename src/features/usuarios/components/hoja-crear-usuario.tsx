@@ -40,7 +40,7 @@ import {
   type EntradaCrearUsuario,
   esquemaCrearUsuario,
 } from "../schemas"
-import type { MetodoAlta } from "../tipos"
+import type { MetodoAlta, OrganizacionFija } from "../tipos"
 import { CamposUsuario, faltaOrganizacion } from "./campos-usuario"
 import { useGestionUsuarios } from "./contexto-gestion"
 import {
@@ -106,28 +106,48 @@ function OpcionMetodo({
 }
 
 function FormularioCrearUsuario({
+  organizacionFija,
   onCreado,
   onSucio,
 }: {
+  organizacionFija?: OrganizacionFija
   onCreado: (datos: CredencialParaMostrar) => void
   onSucio: (sucio: boolean) => void
 }) {
-  const { rolesAsignables, organizaciones, smtpConfigurado } =
-    useGestionUsuarios()
+  const gestion = useGestionUsuarios()
+  const { organizaciones, smtpConfigurado } = gestion
+  // Desde la ficha de una organización solo se ofrecen los roles de su tipo.
+  const rolesAsignables = useMemo(
+    () =>
+      organizacionFija
+        ? gestion.rolesAsignables.filter(
+            (rol) => rol.tipo === organizacionFija.tipo
+          )
+        : gestion.rolesAsignables,
+    [gestion.rolesAsignables, organizacionFija]
+  )
   const esquema = useMemo(
     () => conReglasDeRol(esquemaCrearUsuario, rolesAsignables),
     [rolesAsignables]
   )
   const formulario = useForm({
     resolver: zodResolver(esquema),
-    defaultValues: VALORES_INICIALES,
+    defaultValues: organizacionFija
+      ? {
+          ...VALORES_INICIALES,
+          organizacionId: organizacionFija.id,
+          rolId: rolesAsignables.length === 1 ? rolesAsignables[0].id : "",
+        }
+      : VALORES_INICIALES,
     mode: "onTouched",
   })
   const { control, register, formState, handleSubmit, getValues, setError } =
     formulario
   const [pendiente, iniciar] = useTransition()
   const rolId = useWatch({ control, name: "rolId" })
-  const bloqueado = faltaOrganizacion(rolesAsignables, organizaciones, rolId)
+  const bloqueado =
+    !organizacionFija &&
+    faltaOrganizacion(rolesAsignables, organizaciones, rolId)
   const errorServidor = formState.errors.root?.servidor?.message
 
   // Se envían los valores tal como se escribieron: el servidor aplica el MISMO
@@ -185,9 +205,19 @@ function FormularioCrearUsuario({
             <FieldError errors={[formState.errors.email]} />
           </Field>
 
+          {organizacionFija && rolesAsignables.length === 0 ? (
+            <Alert>
+              <CircleAlert aria-hidden />
+              <AlertDescription>
+                No tienes roles que puedas asignar a esta organización.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <CamposUsuario
             roles={rolesAsignables}
             organizaciones={organizaciones}
+            organizacionFija={organizacionFija}
             deshabilitado={pendiente}
           />
 
@@ -250,12 +280,27 @@ function FormularioCrearUsuario({
   )
 }
 
+interface BotonCrearUsuarioProps {
+  /**
+   * Alta desde la ficha de un anunciante o medio: solo roles de su tipo y la
+   * organización fija (sin selector).
+   */
+  organizacion?: OrganizacionFija
+  /** Texto del disparador ("Crear usuario" por omisión). */
+  texto?: string
+  variante?: "default" | "outline" | "secondary"
+}
+
 /**
  * Botón "Crear usuario" + hoja lateral con el formulario. Tras crearlo muestra
  * UNA vez el enlace o la contraseña temporal. Si hay datos sin guardar, pide
- * confirmación antes de cerrar.
+ * confirmación antes de cerrar. Requiere `<ProveedorGestionUsuarios>`.
  */
-export function BotonCrearUsuario() {
+export function BotonCrearUsuario({
+  organizacion,
+  texto = "Crear usuario",
+  variante = "default",
+}: BotonCrearUsuarioProps = {}) {
   const [abierta, setAbierta] = useState(false)
   const [sucio, setSucio] = useState(false)
   const [confirmarDescarte, setConfirmarDescarte] = useState(false)
@@ -278,9 +323,9 @@ export function BotonCrearUsuario() {
   return (
     <>
       <Sheet open={abierta} onOpenChange={cambiarAbierta}>
-        <SheetTrigger render={<Button />}>
+        <SheetTrigger render={<Button variant={variante} />}>
           <UserPlus data-icon="inline-start" aria-hidden />
-          Crear usuario
+          {texto}
         </SheetTrigger>
         <SheetContent
           side="right"
@@ -296,7 +341,9 @@ export function BotonCrearUsuario() {
                 Nuevo usuario
               </SheetTitle>
               <SheetDescription>
-                Invita a una persona y define qué puede hacer en AMO.
+                {organizacion
+                  ? `Invita a una persona del equipo de ${organizacion.nombre}.`
+                  : "Invita a una persona y define qué puede hacer en AMO."}
               </SheetDescription>
             </div>
             <SheetClose
@@ -309,6 +356,7 @@ export function BotonCrearUsuario() {
           </SheetHeader>
           <FormularioCrearUsuario
             key={version}
+            organizacionFija={organizacion}
             onSucio={setSucio}
             onCreado={(datos) => {
               setAbierta(false)

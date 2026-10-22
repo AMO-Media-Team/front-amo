@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
-// Origen: Supabase generate_typescript_types (proyecto oriuuuaczpncmtglfgpv, esquema public),
-// última migración aplicada: 20261006170206_bitacora_indice_cronologico.
+// Origen: Supabase local (supabase start), esquema public,
+// última migración aplicada: 20261022030525_e2_notificaciones_negocio.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -1417,12 +1417,13 @@ export type Database = {
       }
       documentos_medio: {
         Row: {
-          archivo_path: string
+          archivo_path: string | null
           created_at: string
           estado_validacion: Database["public"]["Enums"]["documento_estado"]
           fecha_vencimiento: string | null
           id: string
           medio_id: string
+          metodo: string
           observaciones: string | null
           subido_por: string | null
           tipo: Database["public"]["Enums"]["documento_medio_tipo"]
@@ -1431,12 +1432,13 @@ export type Database = {
           validado_por: string | null
         }
         Insert: {
-          archivo_path: string
+          archivo_path?: string | null
           created_at?: string
           estado_validacion?: Database["public"]["Enums"]["documento_estado"]
           fecha_vencimiento?: string | null
           id?: string
           medio_id: string
+          metodo?: string
           observaciones?: string | null
           subido_por?: string | null
           tipo: Database["public"]["Enums"]["documento_medio_tipo"]
@@ -1445,12 +1447,13 @@ export type Database = {
           validado_por?: string | null
         }
         Update: {
-          archivo_path?: string
+          archivo_path?: string | null
           created_at?: string
           estado_validacion?: Database["public"]["Enums"]["documento_estado"]
           fecha_vencimiento?: string | null
           id?: string
           medio_id?: string
+          metodo?: string
           observaciones?: string | null
           subido_por?: string | null
           tipo?: Database["public"]["Enums"]["documento_medio_tipo"]
@@ -1979,6 +1982,7 @@ export type Database = {
           deleted_at: string | null
           departamento_codigo: string | null
           descripcion_audiencia: string | null
+          enviado_verificacion_at: string | null
           es_demo: boolean
           estado: Database["public"]["Enums"]["medio_estado"]
           id: string
@@ -2005,6 +2009,7 @@ export type Database = {
           deleted_at?: string | null
           departamento_codigo?: string | null
           descripcion_audiencia?: string | null
+          enviado_verificacion_at?: string | null
           es_demo?: boolean
           estado?: Database["public"]["Enums"]["medio_estado"]
           id?: string
@@ -2031,6 +2036,7 @@ export type Database = {
           deleted_at?: string | null
           departamento_codigo?: string | null
           descripcion_audiencia?: string | null
+          enviado_verificacion_at?: string | null
           es_demo?: boolean
           estado?: Database["public"]["Enums"]["medio_estado"]
           id?: string
@@ -2079,6 +2085,7 @@ export type Database = {
         Row: {
           celular: string | null
           created_at: string
+          datos_pago_cambiados_at: string | null
           datos_pago_cifrados: string | null
           datos_pago_resumen: string | null
           direccion: string | null
@@ -2100,6 +2107,7 @@ export type Database = {
         Insert: {
           celular?: string | null
           created_at?: string
+          datos_pago_cambiados_at?: string | null
           datos_pago_cifrados?: string | null
           datos_pago_resumen?: string | null
           direccion?: string | null
@@ -2121,6 +2129,7 @@ export type Database = {
         Update: {
           celular?: string | null
           created_at?: string
+          datos_pago_cambiados_at?: string | null
           datos_pago_cifrados?: string | null
           datos_pago_resumen?: string | null
           direccion?: string | null
@@ -3379,6 +3388,91 @@ export type Database = {
         }
         Relationships: []
       }
+      solicitudes_vinculacion: {
+        Row: {
+          autoriza_datos: boolean
+          celular: string | null
+          contacto_nombre: string
+          created_at: string
+          cuentas: Json
+          email: string
+          estado: Database["public"]["Enums"]["solicitud_vinculacion_estado"]
+          id: string
+          ip_hash: string | null
+          medio_id: string | null
+          mensaje: string | null
+          motivo_descarte: string | null
+          municipio_codigo: string
+          nombre_medio: string
+          resuelta_at: string | null
+          resuelta_por: string | null
+          tipo: Database["public"]["Enums"]["medio_tipo"] | null
+          updated_at: string
+        }
+        Insert: {
+          autoriza_datos: boolean
+          celular?: string | null
+          contacto_nombre: string
+          created_at?: string
+          cuentas: Json
+          email: string
+          estado?: Database["public"]["Enums"]["solicitud_vinculacion_estado"]
+          id?: string
+          ip_hash?: string | null
+          medio_id?: string | null
+          mensaje?: string | null
+          motivo_descarte?: string | null
+          municipio_codigo: string
+          nombre_medio: string
+          resuelta_at?: string | null
+          resuelta_por?: string | null
+          tipo?: Database["public"]["Enums"]["medio_tipo"] | null
+          updated_at?: string
+        }
+        Update: {
+          autoriza_datos?: boolean
+          celular?: string | null
+          contacto_nombre?: string
+          created_at?: string
+          cuentas?: Json
+          email?: string
+          estado?: Database["public"]["Enums"]["solicitud_vinculacion_estado"]
+          id?: string
+          ip_hash?: string | null
+          medio_id?: string | null
+          mensaje?: string | null
+          motivo_descarte?: string | null
+          municipio_codigo?: string
+          nombre_medio?: string
+          resuelta_at?: string | null
+          resuelta_por?: string | null
+          tipo?: Database["public"]["Enums"]["medio_tipo"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitudes_vinculacion_medio_id_fkey"
+            columns: ["medio_id"]
+            isOneToOne: false
+            referencedRelation: "medios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_vinculacion_municipio_codigo_fkey"
+            columns: ["municipio_codigo"]
+            isOneToOne: false
+            referencedRelation: "municipios"
+            referencedColumns: ["codigo"]
+          },
+          {
+            foreignKeyName: "solicitudes_vinculacion_resuelta_por_fkey"
+            columns: ["resuelta_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarifas: {
         Row: {
           creada_por: string | null
@@ -3624,6 +3718,10 @@ export type Database = {
           tarifa_id: string
         }[]
       }
+      crear_solicitud_vinculacion_srv: {
+        Args: { p_datos: Json; p_ip_hash: string }
+        Returns: undefined
+      }
       desempeno_anunciante: {
         Args: {
           p_campana_id?: string
@@ -3711,6 +3809,10 @@ export type Database = {
         Args: { p_actor_id: string; p_factura_id: string; p_session_id: string }
         Returns: Json
       }
+      enviar_medio_a_verificacion_srv: {
+        Args: { p_actor_id: string; p_medio_id: string; p_session_id: string }
+        Returns: undefined
+      }
       estimar_oferta: {
         Args: {
           p_categorias: string[]
@@ -3756,6 +3858,15 @@ export type Database = {
           valor: number
           valor_por_100k: number
         }[]
+      }
+      guardar_datos_pago_medio_srv: {
+        Args: {
+          p_actor_id: string
+          p_datos: Json
+          p_medio_id: string
+          p_session_id: string
+        }
+        Returns: undefined
       }
       guardar_permisos_rol_srv: {
         Args: {
@@ -4085,6 +4196,10 @@ export type Database = {
           vence_at: string
         }[]
       }
+      quitar_cuenta_social_srv: {
+        Args: { p_actor_id: string; p_cuenta_id: string; p_session_id: string }
+        Returns: undefined
+      }
       rechazar_oferta_srv: {
         Args: {
           p_actor_id: string
@@ -4182,6 +4297,15 @@ export type Database = {
           p_soporte_path: string
         }
         Returns: Json
+      }
+      registrar_verificacion_videollamada_srv: {
+        Args: {
+          p_actor_id: string
+          p_medio_id: string
+          p_observaciones: string
+          p_session_id: string
+        }
+        Returns: string
       }
       registrar_vista_oferta: {
         Args: { p_oferta_id: string }
@@ -4324,6 +4448,17 @@ export type Database = {
           monto_medio: number
         }[]
       }
+      resolver_solicitud_vinculacion_srv: {
+        Args: {
+          p_actor_id: string
+          p_estado: string
+          p_id: string
+          p_medio_id?: string
+          p_motivo?: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       resumen_usuarios: {
         Args: never
         Returns: {
@@ -4419,6 +4554,17 @@ export type Database = {
           p_usuario_id: string
         }
         Returns: undefined
+      }
+      terminos_pendientes: {
+        Args: never
+        Returns: {
+          contenido_md: string
+          hash_sha256: string
+          id: string
+          tipo: Database["public"]["Enums"]["terminos_tipo"]
+          version: string
+          vigente_desde: string
+        }[]
       }
       tocar_sesion_srv: {
         Args: { p_session_id: string; p_usuario_id: string }
@@ -4565,6 +4711,7 @@ export type Database = {
       plataforma: "FACEBOOK" | "INSTAGRAM" | "TIKTOK"
       retencion_tipo: "RETEFUENTE" | "RETEICA" | "RETEIVA"
       rol_tipo: "ADMIN" | "ANUNCIANTE" | "MEDIO"
+      solicitud_vinculacion_estado: "PENDIENTE" | "INVITADA" | "DESCARTADA"
       terminos_tipo:
         | "TERMINOS_MEDIO"
         | "TERMINOS_ANUNCIANTE"
@@ -4827,6 +4974,7 @@ export const Constants = {
       plataforma: ["FACEBOOK", "INSTAGRAM", "TIKTOK"],
       retencion_tipo: ["RETEFUENTE", "RETEICA", "RETEIVA"],
       rol_tipo: ["ADMIN", "ANUNCIANTE", "MEDIO"],
+      solicitud_vinculacion_estado: ["PENDIENTE", "INVITADA", "DESCARTADA"],
       terminos_tipo: [
         "TERMINOS_MEDIO",
         "TERMINOS_ANUNCIANTE",
@@ -4838,3 +4986,4 @@ export const Constants = {
     },
   },
 } as const
+

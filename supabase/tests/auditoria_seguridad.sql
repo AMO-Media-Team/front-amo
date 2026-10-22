@@ -33,7 +33,7 @@ begin
          (u_ext, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'auditoria.externo@amo.test', null, now(), now());
   -- Organización propia (desde negocio_actores perfiles.anunciante_id es FK): sin otros miembros (s6).
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo)
-  values ('00000000-0000-4000-c000-0000000000a1', 'Auditoría S.A.S.', 'Auditoría', '900000201', '1',
+  values ('00000000-0000-4000-c000-0000000000a1', 'Auditoría S.A.S.', 'Auditoría', '900000201', '9',
           (select id from public.sectores where nombre_normalizado = 'retail y comercio'), '11001');
   -- Desde M7 el estado de un perfil solo cambia por aplicar_transicion: la preparación (owner) lo simula.
   perform set_config('amo.transicion_autorizada', 'on', true);

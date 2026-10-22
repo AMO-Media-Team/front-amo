@@ -11,6 +11,7 @@ import {
   ShieldX,
   Ticket,
 } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
@@ -108,12 +109,15 @@ function Identificacion({ anunciante }: { anunciante: AnuncianteDetalle }) {
 
 export function CabeceraAnunciante({
   anunciante,
+  acciones,
 }: {
   anunciante: AnuncianteDetalle
+  acciones?: ReactNode
 }) {
   const bandera = banderaEmoji(anunciante.paisIso2)
   return (
     <CabeceraFicha
+      acciones={acciones}
       volver={{ href: RUTAS_OPERACION.anunciantes, titulo: "Anunciantes" }}
       antetitulo={anunciante.sector ?? "Anunciante"}
       titulo={anunciante.nombreComercial}

@@ -15,6 +15,15 @@ export const esquemaFila = z.object({
   titulo: z.string(),
   mensaje: z.string(),
   url: z.string().nullable(),
+  // Sin `url`, la entidad decide el enlace (`/ir/…`); ausentes cuentan como null.
+  entidad: z
+    .string()
+    .nullish()
+    .transform((valor) => valor ?? null),
+  entidad_id: z
+    .string()
+    .nullish()
+    .transform((valor) => valor ?? null),
   prioridad: z.number().int(),
   leida: z.boolean(),
   created_at: z.string(),

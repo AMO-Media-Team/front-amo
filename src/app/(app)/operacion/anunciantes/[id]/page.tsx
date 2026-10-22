@@ -4,11 +4,20 @@ import {
   LayoutDashboard,
   Megaphone,
   Receipt,
+  UsersRound,
 } from "lucide-react"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import type { ReactNode } from "react"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { AccionesAnunciante } from "@/features/gestion-anunciantes/components/acciones-anunciante"
+import { SeccionUsuariosAnunciante } from "@/features/gestion-anunciantes/components/usuarios-anunciante"
+import { organizacionParaInvitar } from "@/features/gestion-anunciantes/presentacion"
+import {
+  anuncianteEditable,
+  catalogosAnunciante,
+} from "@/features/gestion-anunciantes/queries"
 import { EsqueletoIndicadores } from "@/features/operacion/components/esqueletos"
 import { Diferida, UUID } from "@/features/operacion/components/ficha"
 import {
@@ -28,6 +37,8 @@ import {
   documentosDelAnunciante,
   obtenerAnunciante,
 } from "@/features/operacion/queries/anunciantes"
+import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
+import { cargarDatosGestion } from "@/features/usuarios/gestion"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -49,10 +60,12 @@ async function SeccionDocumentos({ anuncianteId }: { anuncianteId: string }) {
 }
 
 /**
- * Ficha de un anunciante (consulta): cabecera con su NIT, indicadores y
- * pestañas Resumen, Campañas, Asignaciones, Cartera y Documentos según los
+ * Ficha de un anunciante: cabecera con su NIT, indicadores y pestañas
+ * Resumen, Campañas, Asignaciones, Cartera, Documentos y Usuarios según los
  * permisos del rol. El contacto (dato personal) solo se ofrece con
- * `datos_sensibles.ver` y se revela dejando registro.
+ * `datos_sensibles.ver` y se revela dejando registro. El equipo AMO edita sus
+ * datos (`anunciantes.editar`, incluido el NIT) e invita a su equipo
+ * (`usuarios.invitar`).
  */
 export default async function PaginaAnunciante({
   params,
@@ -66,9 +79,24 @@ export default async function PaginaAnunciante({
   const verCartera = tieneAlgunPermiso(usuario, ["facturas.ver"])
   const verCampanas = tieneAlgunPermiso(usuario, ["campanas.ver"])
   const verDocumentos = tieneAlgunPermiso(usuario, ["anunciantes.verificar"])
+  const verUsuarios = tieneAlgunPermiso(usuario, ["usuarios.ver"])
+  const puedeEditar = tieneAlgunPermiso(usuario, ["anunciantes.editar"])
+  const puedeInvitar = tieneAlgunPermiso(usuario, ["usuarios.invitar"])
 
-  const anunciante = await obtenerAnunciante(id)
+  const [anunciante, edicion, catalogos, datosGestion] = await Promise.all([
+    obtenerAnunciante(id),
+    puedeEditar ? anuncianteEditable(id) : null,
+    puedeEditar ? catalogosAnunciante() : null,
+    puedeInvitar
+      ? cargarDatosGestion(usuario, { organizaciones: false })
+      : null,
+  ])
   if (!anunciante) notFound()
+
+  const invitarA = organizacionParaInvitar(
+    datosGestion?.rolesAsignables ?? null,
+    anunciante
+  )
 
   const pestanas: PestanaFicha[] = [
     {
@@ -131,10 +159,34 @@ export default async function PaginaAnunciante({
       ),
     })
   }
+  if (verUsuarios) {
+    pestanas.push({
+      clave: "usuarios",
+      titulo: "Usuarios",
+      icono: <UsersRound aria-hidden />,
+      contenido: (
+        <Diferida recurso="las personas del anunciante">
+          <SeccionUsuariosAnunciante
+            anuncianteId={anunciante.id}
+            invitarA={invitarA}
+          />
+        </Diferida>
+      ),
+    })
+  }
 
-  return (
+  const contenido: ReactNode = (
     <ContenedorPagina>
-      <CabeceraAnunciante anunciante={anunciante} />
+      <CabeceraAnunciante
+        anunciante={anunciante}
+        acciones={
+          <AccionesAnunciante
+            edicion={edicion}
+            catalogos={catalogos}
+            invitarA={invitarA}
+          />
+        }
+      />
       <Diferida
         recurso="los indicadores del anunciante"
         respaldo={<EsqueletoIndicadores cantidad={5} />}
@@ -148,5 +200,14 @@ export default async function PaginaAnunciante({
       </Diferida>
       <PestanasFicha pestanas={pestanas} />
     </ContenedorPagina>
+  )
+
+  // «Invitar usuario» necesita los datos de gestión (roles asignables, correo).
+  return datosGestion ? (
+    <ProveedorGestionUsuarios datos={datosGestion}>
+      {contenido}
+    </ProveedorGestionUsuarios>
+  ) : (
+    contenido
   )
 }

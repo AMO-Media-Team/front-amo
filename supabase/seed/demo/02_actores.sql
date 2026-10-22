@@ -288,7 +288,7 @@ begin
          case m.nivel when 1 then m.n % 7 = 0 when 2 then m.n % 5 < 3 else true end,
          m.nivel = 3 and m.n % 5 <> 0, m.nivel = 3 and m.n % 5 <> 0,
          case when m.n % 5 < 3 then 'BANCARIO' else 'BILLETERA' end::public.metodo_pago,
-         case when m.n % 5 < 3 then 'Cuenta de ahorros ••• ' else 'Nequi ••• ' end || lpad(((m.n * 3571) % 10000)::text, 4, '0'),
+         case when m.n % 5 < 3 then 'Cuenta de ahorros •••• ' else 'Nequi •••• ' end || lpad(((m.n * 3571) % 10000)::text, 4, '0'),
          m.alta_at + interval '10 minutes', m.alta_at + interval '10 minutes'
   from _mf m;
 

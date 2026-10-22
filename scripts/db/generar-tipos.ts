@@ -7,9 +7,12 @@
  * autenticada: `supabase login` en local o SUPABASE_ACCESS_TOKEN (token personal) en CI. No usa
  * las claves de la aplicación. Alternativa sin CLI: la herramienta MCP `generate_typescript_types`,
  * pegando su salida debajo de la misma cabecera.
+ *
+ * `pnpm db:types local` los genera desde la pila de `supabase start` (útil para migraciones que aún no están
+ * en ningún proyecto remoto; mismo generador, misma forma).
  */
 import { execFileSync } from "node:child_process"
-import { readdirSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 
 import { supabaseUrlDe } from "../bootstrap/produccion"
 
@@ -28,7 +31,8 @@ function proyectoDelEntorno(): string {
   return ref
 }
 
-const PROYECTO = proyectoDelEntorno()
+const LOCAL = process.argv.slice(2).includes("local")
+const PROYECTO = LOCAL ? "local" : proyectoDelEntorno()
 const DESTINO = "src/types/database.types.ts"
 const MIGRACIONES = "supabase/migrations"
 
@@ -44,7 +48,9 @@ function cabecera(): string {
   return [
     linea,
     "// ARCHIVO GENERADO — no editar a mano.",
-    `// Origen: Supabase generate_typescript_types (proyecto ${PROYECTO}, esquema public),`,
+    LOCAL
+      ? "// Origen: Supabase local (supabase start), esquema public,"
+      : `// Origen: Supabase generate_typescript_types (proyecto ${PROYECTO}, esquema public),`,
     `// última migración aplicada: ${ultimaMigracion()}.`,
     "// Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).",
     linea,
@@ -58,12 +64,26 @@ const tipos = execFileSync(
     "gen",
     "types",
     "typescript",
-    "--project-id",
-    PROYECTO,
+    ...(LOCAL ? ["--local"] : ["--project-id", PROYECTO]),
     "--schema",
     "public",
   ],
   { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
 )
-writeFileSync(DESTINO, cabecera() + tipos)
+/**
+ * La generación local omite `__InternalSupabase` (versión de PostgREST del proyecto remoto, que tipa el cliente):
+ * se conserva la del archivo actual para que los tipos no cambien de forma según de dónde se generen.
+ */
+function conservarVersionPostgrest(generados: string): string {
+  if (generados.includes("__InternalSupabase: {")) return generados
+  const actual = existsSync(DESTINO) ? readFileSync(DESTINO, "utf8") : ""
+  const bloque =
+    /\n( {2}\/\/ Allows to automatically[^\n]*\n[^\n]*\n {2}__InternalSupabase: \{\n[^}]*\n {2}\}\n)/.exec(
+      actual
+    )?.[1]
+  const apertura = "export type Database = {\n"
+  return bloque ? generados.replace(apertura, apertura + bloque) : generados
+}
+
+writeFileSync(DESTINO, cabecera() + conservarVersionPostgrest(tipos))
 console.log(`Tipos escritos en ${DESTINO}`)

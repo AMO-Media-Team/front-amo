@@ -121,6 +121,9 @@ export type Organizaciones = {
   medios: Organizacion[]
 }
 
+/** Alta desde la ficha de una organización: el tipo de rol y la organización quedan fijos. */
+export type OrganizacionFija = Organizacion & { tipo: "ANUNCIANTE" | "MEDIO" }
+
 export type MetodoAlta = "ENLACE" | "CONTRASENA"
 
 /** Lo que la interfaz muestra UNA sola vez tras crear o regenerar un acceso. */

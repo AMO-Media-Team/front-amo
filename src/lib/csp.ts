@@ -105,6 +105,9 @@ function directivas({
       MAPBOX_API,
       MAPBOX_TESELAS,
     ],
+    // Videos de creativos y evidencias: vista previa local (`blob:`) y
+    // reproducción con URL firmada de Storage.
+    ["media-src", "'self'", "blob:", ...supabaseImagenes],
     ["font-src", "'self'", "data:"],
     [
       "connect-src",

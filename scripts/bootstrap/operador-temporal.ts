@@ -116,9 +116,7 @@ export async function conOperadorTemporal<T>(
   const cuenta = await crearOperador(servicio)
   let resultado: T
   try {
-    resultado = await accion(
-      await habilitarOperador(entorno, servicio, cuenta)
-    )
+    resultado = await accion(await habilitarOperador(entorno, servicio, cuenta))
   } catch (error) {
     await retirarOperador(servicio, cuenta).catch((errorRetiro: unknown) => {
       process.stderr.write(

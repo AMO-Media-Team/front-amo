@@ -130,7 +130,8 @@ export function InsigniaNivel({
 /**
  * Identidad visual de cada plataforma sin logotipos de marca: monograma
  * sobre un tinte propio (el texto mezcla el color con el primer plano para
- * conservar el contraste en ambos temas).
+ * conservar el contraste en ambos temas: con más del 42 % de color, el
+ * monograma de 9 px no llega a 4,5:1 en el tema claro sobre fondos tintados).
  */
 const ESTILO_PLATAFORMA: Readonly<
   Record<Plataforma, { abreviatura: string; color: string }>
@@ -162,7 +163,7 @@ export function MarcaPlataforma({
       <span
         aria-hidden
         style={{ "--color-plataforma": color } as CSSProperties}
-        className="inline-grid size-5 shrink-0 place-items-center rounded-md bg-[color-mix(in_oklab,var(--color-plataforma)_15%,transparent)] text-[0.5625rem] font-bold tracking-wide text-[color-mix(in_oklab,var(--color-plataforma)_62%,var(--foreground))] ring-1 ring-[color-mix(in_oklab,var(--color-plataforma)_32%,transparent)] ring-inset"
+        className="inline-grid size-5 shrink-0 place-items-center rounded-md bg-[color-mix(in_oklab,var(--color-plataforma)_15%,transparent)] text-[0.5625rem] font-bold tracking-wide text-[color-mix(in_oklab,var(--color-plataforma)_42%,var(--foreground))] ring-1 ring-[color-mix(in_oklab,var(--color-plataforma)_32%,transparent)] ring-inset"
       >
         {abreviatura}
       </span>

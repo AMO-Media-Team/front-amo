@@ -28,6 +28,9 @@ const ACCIONES_PUBLICAS: Readonly<Record<string, readonly string[]>> = {
     "confirmarEnlace",
     "cerrarSesion",
   ],
+  // Formulario público de vinculación (MED-001): límite por IP en la BD, campo
+  // trampa y respuesta genérica. Las demás acciones del módulo usan el DAL.
+  "src/features/vinculacion/actions.ts": ["registrarSolicitudVinculacion"],
 }
 
 function archivos(directorio: string, filtro: (ruta: string) => boolean) {

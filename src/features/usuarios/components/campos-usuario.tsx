@@ -26,7 +26,13 @@ import {
 
 import { TIPOS_ROL_ETIQUETA } from "../presentacion"
 import { exigeOrganizacion } from "../schemas"
-import type { Organizaciones, RolAsignable, TipoRol } from "../tipos"
+import { useGestionUsuarios } from "./contexto-gestion"
+import type {
+  OrganizacionFija,
+  Organizaciones,
+  RolAsignable,
+  TipoRol,
+} from "../tipos"
 
 /** Campos comunes al alta y a la edición (nombres de `esquemaDatosUsuario`). */
 export type CamposComunesUsuario = {
@@ -43,24 +49,52 @@ const ORGANIZACION = {
     etiqueta: "Anunciante",
     Icono: Building2,
     vacio: "Aún no hay anunciantes registrados.",
-    ruta: "/operacion/anunciantes",
-    seccion: "Operación › Anunciantes",
+    registrar: "Registra el anunciante",
+    // `?registrar=1` abre la hoja de registro al llegar al listado.
+    ruta: "/operacion/anunciantes?registrar=1",
+    permiso: "anunciantes.editar",
   },
   MEDIO: {
     etiqueta: "Medio",
     Icono: RadioTower,
     vacio: "Aún no hay medios registrados.",
-    ruta: "/operacion/medios",
-    seccion: "Operación › Medios",
+    registrar: "Registra el medio",
+    ruta: "/operacion/medios?registrar=1",
+    permiso: "medios.editar",
   },
 } as const
 
 interface CamposUsuarioProps {
   roles: readonly RolAsignable[]
   organizaciones: Organizaciones
+  /** Alta desde la ficha de la organización: no se elige, se muestra. */
+  organizacionFija?: OrganizacionFija
   /** Edición de la propia cuenta: el rol no se puede cambiar (AMO_ROL_PROPIO). */
   rolBloqueado?: boolean
   deshabilitado?: boolean
+}
+
+function OrganizacionFijada({
+  organizacion,
+}: {
+  organizacion: OrganizacionFija
+}) {
+  const config = ORGANIZACION[organizacion.tipo]
+  return (
+    <Field>
+      <FieldLabel htmlFor="usuario-organizacion">{config.etiqueta}</FieldLabel>
+      <div
+        id="usuario-organizacion"
+        className="flex h-9 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm"
+      >
+        <config.Icono className="size-4 text-muted-foreground" aria-hidden />
+        <span className="truncate font-medium">{organizacion.nombre}</span>
+      </div>
+      <FieldDescription>
+        La persona quedará vinculada a esta organización.
+      </FieldDescription>
+    </Field>
+  )
 }
 
 function SelectorOrganizacion({
@@ -73,23 +107,33 @@ function SelectorOrganizacion({
   deshabilitado?: boolean
 }) {
   const { control } = useFormContext<CamposComunesUsuario>()
+  const { actor } = useGestionUsuarios()
   const config = ORGANIZACION[tipo]
   const opciones =
     tipo === "ANUNCIANTE" ? organizaciones.anunciantes : organizaciones.medios
 
   if (opciones.length === 0) {
+    // Sin el permiso de registro, el enlace llevaría a un listado sin el botón.
+    const puedeRegistrar =
+      actor.esSuperadmin || actor.permisos.includes(config.permiso)
     return (
       <Alert>
         <Info aria-hidden />
         <AlertDescription>
-          {config.vacio} Regístralo primero en{" "}
-          <Link
-            href={config.ruta as Route}
-            className="font-medium underline underline-offset-3"
-          >
-            {config.seccion}
-          </Link>{" "}
-          y vuelve a invitar a su equipo.
+          {config.vacio}{" "}
+          {puedeRegistrar ? (
+            <>
+              <Link
+                href={config.ruta as Route}
+                className="font-medium underline underline-offset-3"
+              >
+                {config.registrar}
+              </Link>{" "}
+              y luego invita a su equipo desde su ficha.
+            </>
+          ) : (
+            "Pide a alguien del equipo de operación que lo registre; luego podrás invitar a su equipo desde su ficha."
+          )}
         </AlertDescription>
       </Alert>
     )
@@ -146,6 +190,7 @@ function SelectorOrganizacion({
 export function CamposUsuario({
   roles,
   organizaciones,
+  organizacionFija,
   rolBloqueado = false,
   deshabilitado = false,
 }: CamposUsuarioProps) {
@@ -268,7 +313,9 @@ export function CamposUsuario({
         )}
       />
 
-      {tipoOrganizacion ? (
+      {organizacionFija ? (
+        <OrganizacionFijada organizacion={organizacionFija} />
+      ) : tipoOrganizacion ? (
         <SelectorOrganizacion
           tipo={tipoOrganizacion}
           organizaciones={organizaciones}

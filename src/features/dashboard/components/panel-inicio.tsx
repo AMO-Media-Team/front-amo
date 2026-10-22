@@ -4,6 +4,8 @@ import { LayoutDashboard } from "lucide-react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { enAlta, situacionMedio } from "@/features/mi-medio/alta"
+import { medioPropio } from "@/features/mi-medio/queries"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 
 import { PanelAdmin } from "../admin/components/panel-admin"
@@ -26,11 +28,30 @@ const DESCRIPCION: Readonly<Record<TipoPanel, (p: PeriodoPanel) => string>> = {
 }
 
 /**
+ * Medio aún en alta (sin verificar): su inicio es la lista de alta, sin
+ * periodo. Un error de lectura no tumba el inicio: el panel lo muestra aislado.
+ */
+async function medioEnAlta(medioId: string | null): Promise<boolean> {
+  if (!medioId) return false
+  const medio = await medioPropio(medioId).catch(() => null)
+  return medio
+    ? enAlta(
+        situacionMedio({
+          estado: medio.estado,
+          nivel: medio.nivel,
+          enviadoVerificacionAt: medio.enviadoVerificacionAt,
+          motivoEstado: medio.motivoEstado,
+        })
+      )
+    : false
+}
+
+/**
  * Inicio según el tipo de rol: panel general (interno), del anunciante o del
  * medio. La página ya autorizó con el DAL; cada RPC vuelve a exigir su
  * permiso en la base de datos.
  */
-export function PanelInicio({
+export async function PanelInicio({
   usuario,
   valores,
 }: {
@@ -61,13 +82,19 @@ export function PanelInicio({
 
   const porDefecto = PRESET_POR_DEFECTO_PANEL[panel]
   const periodo = periodoPanel(valores, porDefecto, ahora)
+  const alta = panel === "medio" && (await medioEnAlta(usuario.medioId))
   return (
     <ProveedorPeriodo porDefecto={porDefecto}>
       <ContenedorPagina>
         <EncabezadoPanel
           nombre={usuario.nombre}
           ahora={ahora}
-          descripcion={DESCRIPCION[panel](periodo)}
+          descripcion={
+            alta
+              ? "Completa tu perfil para empezar a recibir ofertas."
+              : DESCRIPCION[panel](periodo)
+          }
+          conPeriodo={!alta}
         />
         <ContenidoPanel>
           {panel === "admin" ? (

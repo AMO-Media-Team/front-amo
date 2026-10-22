@@ -32,6 +32,11 @@ export function esClaveCifradoValida(valor: string): boolean {
   return longitudBase64Decodificada(coincidencia[2]) === BYTES_CLAVE_CIFRADO
 }
 
+/** `k2:…` → `"2"`; `null` si no tiene el formato. */
+function versionClaveCifrado(valor: string): string | null {
+  return CLAVE_CIFRADO.exec(valor)?.[1] ?? null
+}
+
 export const esquemaEnvCliente = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url({ protocol: /^https?$/ }),
   // Exigir el prefijo evita publicar por error la secret key (sb_secret_…) o
@@ -64,6 +69,14 @@ export const esquemaEnvServidor = z
         esClaveCifradoValida,
         "Formato esperado k<n>:<base64 de 32 bytes> (openssl rand -base64 32)."
       ),
+    // Solo durante una rotación: la llave saliente, para descifrar lo viejo.
+    AMO_CIFRADO_KEY_ANTERIOR: z
+      .string()
+      .refine(
+        esClaveCifradoValida,
+        "Formato esperado k<n>:<base64 de 32 bytes> (openssl rand -base64 32)."
+      )
+      .optional(),
     AMO_SERVIDOR_SECRET: z
       .string()
       .min(
@@ -85,6 +98,17 @@ export const esquemaEnvServidor = z
         code: "custom",
         path: ["SUPABASE_SECRET_KEY"],
         message: "Es obligatoria en producción (VERCEL_ENV=production).",
+      })
+    }
+    if (
+      env.AMO_CIFRADO_KEY_ANTERIOR &&
+      versionClaveCifrado(env.AMO_CIFRADO_KEY_ANTERIOR) ===
+        versionClaveCifrado(env.AMO_CIFRADO_KEY)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AMO_CIFRADO_KEY_ANTERIOR"],
+        message: "Debe tener una versión (k<n>) distinta de AMO_CIFRADO_KEY.",
       })
     }
     if (Boolean(env.TURNSTILE_SITE_KEY) !== Boolean(env.TURNSTILE_SECRET_KEY)) {

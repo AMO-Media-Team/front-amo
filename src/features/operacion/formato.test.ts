@@ -18,6 +18,7 @@ import {
   instanteDeDia,
   normalizarBusqueda,
   patronContiene,
+  patronLiteral,
   textoParaFiltro,
   unirUbicacion,
 } from "./formato"
@@ -41,11 +42,20 @@ describe("búsqueda", () => {
     )
     expect(normalizarBusqueda("Ñapa & Café")).toBe("napa y cafe")
     expect(normalizarBusqueda("¿%_*?")).toBe("")
+    // Como `private.normalizar_texto`: sin el sufijo de la capital.
+    expect(normalizarBusqueda("Bogotá D.C.")).toBe("bogota")
   })
 
   it("arma el patrón ilike sin comodines del usuario", () => {
     expect(patronContiene("noticias del sur")).toBe("%noticias%del%sur%")
     expect(patronContiene("")).toBeNull()
+  })
+
+  it("busca el nombre exacto aunque traiga puntuación", () => {
+    expect(patronLiteral("Halloween 2026 · Vida Sana (13)")).toBe(
+      "%Halloween%2026%·%Vida%Sana%13%"
+    )
+    expect(patronLiteral(" ( ) ")).toBeNull()
   })
 
   it("limpia el texto que va dentro de un or() de PostgREST", () => {

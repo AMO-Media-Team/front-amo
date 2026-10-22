@@ -110,7 +110,7 @@ begin
   from unnest(v_usuarios) u;
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, municipio_codigo,
                                   estado_verificacion, verificado_at)
-  values (an_a, 'RLS A S.A.S.', 'RLS A', '900777101', '1', v_sector, '11001', 'VERIFICADO', now()),
+  values (an_a, 'RLS A S.A.S.', 'RLS A', '900777101', '5', v_sector, '11001', 'VERIFICADO', now()),
          (an_b, 'RLS B S.A.S.', 'RLS B', '900777102', '2', v_sector, '05001', 'VERIFICADO', now());
   insert into public.anunciantes_privado (anunciante_id, contacto_email) values (an_a, 'contacto.a@amo.test'), (an_b, 'contacto.b@amo.test');
   insert into public.medios (id, nombre, tipo, municipio_codigo, estado, nivel_verificacion, verificado_at)
