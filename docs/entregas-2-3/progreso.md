@@ -7,7 +7,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ---- | --------------------------------------------------------------------------------------- | ------ |
 | P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
-| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ⬜     |
+| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | 🔧     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ⬜     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
@@ -142,3 +142,11 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   creativo 50→25 MB) y los 4 textos legales `0.1-PRUEBA`. Andrés lo aplicó en producción; verificado por MCP (solo
   lectura): valores nuevos, 4 versiones publicadas y vigentes, 11 entradas de bitácora (SUPERADMIN, APP) y respaldo en
   `context/respaldos/configuracion-pruebas-oriuuuaczpncmtglfgpv.json` (0600).
+- 2026-10-22 · **Fase 2 en curso.** Mapeo de la BD y del código (workflow de 4 lectores). Migración
+  `20261022193647_e2_anunciantes_ofertas` (E2d, §3.10 de `docs/modelo-datos.md`, decisiones D41–D49) probada en la base
+  local: 17 suites SQL en verde tras ajustar conteos (57 plantillas, 56 claves, 145 transiciones), la regla del NIT antes
+  de verificar, los archivos de creativo con SHA-256, medidas y objeto en Storage, y la lectura del medio solo de versiones
+  activadas. `pnpm db:transiciones local` respeta el TLS local. Preparación del líder: navegación («Mis campañas», «Mi
+  empresa», «Moderación», ficha interna de oferta fuera del menú), destinos `/ir` del anunciante, `transicionar` en
+  `src/lib/negocio`, proyecto E2E `anunciante` en serie, stubs de contratos y brief `fase-2.md`. Workflow de
+  implementación lanzado con 8 paquetes (EM, VA, CA, AO, CR, OM, E0, SQ).
