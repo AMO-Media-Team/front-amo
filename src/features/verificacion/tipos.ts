@@ -12,11 +12,7 @@ import type { VigenciaVerificacion } from "@/features/operacion/calculos"
 import type { Database } from "@/types/database.types"
 
 import type { Cola } from "./colas"
-import type {
-  DocumentoRequisito,
-  NivelRequisitos,
-  TipoDocumentoMedio,
-} from "./requisitos"
+import type { DocumentoRequisito, NivelRequisitos } from "./requisitos"
 import type { RangoFranja } from "./seguidores"
 
 type Enums = Database["public"]["Enums"]
@@ -57,12 +53,7 @@ export interface ColaMedios extends Pagina<MedioEnCola> {
   sinEnviar: { total: number; primeros: MedioSinEnviar[] }
 }
 
-export interface DocumentoEnCola {
-  id: string
-  tipo: TipoDocumentoMedio
-  subidoAt: string
-  /** MIME del archivo (para el visor). */
-  mime: string
+export interface DocumentoEnCola extends DocumentoExpediente {
   medio: MedioResumen & { estado: EstadoMedio; nivel: number }
 }
 
@@ -95,9 +86,11 @@ export interface ColaCuentas extends Pagina<VerificacionEnCola> {
   esperandoCaptura: number
 }
 
+/** Documento tal como se revisa: metadatos y el MIME del archivo (nunca su ruta). */
 export interface DocumentoExpediente extends DocumentoRequisito {
   observaciones: string | null
   validadoAt: string | null
+  /** `null` sin archivo (prueba de vida por videollamada). */
   mime: string | null
 }
 

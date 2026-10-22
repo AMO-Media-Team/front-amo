@@ -2,28 +2,39 @@
 
 import { Radio as RadioPrimitive } from "@base-ui/react/radio"
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group"
-import { BadgeCheck } from "lucide-react"
+import { ArrowRight, BadgeCheck, Lightbulb } from "lucide-react"
 import { useId } from "react"
 
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 import { esNivel, NIVELES } from "../requisitos"
 import type { NivelVerificacion, RequisitosNivel } from "../tipos"
+import { Nota } from "./avisos"
+
+export interface SugerenciaNivel {
+  nivel: NivelVerificacion
+  /** Por qué se sugiere (lo que declaró en sus datos de pago). */
+  texto: string
+}
 
 export interface SelectorNivelProps {
   valor: NivelVerificacion
   onCambiar: (nivel: NivelVerificacion) => void
   niveles: readonly RequisitosNivel[]
-  /** Nivel verificado del medio (0 si aún no lo está). */
-  nivelActual: number
+  /** Nivel verificado del medio; `null` mientras está en alta. */
+  nivelActual: NivelVerificacion | null
   explicacion: string
+  /** Un nivel mayor que corresponde a lo que declaró; `null` si no aplica. */
+  sugerencia?: SugerenciaNivel | null
   /** Mientras sube un documento no se cambia la lista que lo contiene. */
   deshabilitado?: boolean
 }
 
 /**
- * «¿A qué nivel aspiras?»: control segmentado (radio) con los tres niveles;
- * debajo, el nombre del elegido, sus requisitos y por qué se sugiere.
+ * Nivel cuyos documentos se consultan: control segmentado (radio) con los
+ * tres niveles; debajo, el nombre del elegido, por qué se ve y, si lo que
+ * declaró el medio corresponde a un nivel mayor, la sugerencia de verlo.
  */
 export function SelectorNivel({
   valor,
@@ -31,6 +42,7 @@ export function SelectorNivel({
   niveles,
   nivelActual,
   explicacion,
+  sugerencia = null,
   deshabilitado = false,
 }: SelectorNivelProps) {
   const idTitulo = useId()
@@ -42,7 +54,7 @@ export function SelectorNivel({
       className="flex flex-col gap-3 rounded-xl border bg-card p-4"
     >
       <h2 id={idTitulo} className="text-sm font-semibold">
-        Nivel al que aspiras
+        Nivel de verificación
       </h2>
       <RadioGroupPrimitive
         value={valor}
@@ -59,7 +71,7 @@ export function SelectorNivel({
             key={nivel}
             value={nivel}
             className={cn(
-              "relative flex h-10 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors outline-none select-none",
+              "relative flex h-11 cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors outline-none select-none",
               "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
               "data-checked:bg-card data-checked:text-foreground data-checked:shadow-sm",
               "data-disabled:cursor-not-allowed data-disabled:opacity-60"
@@ -69,7 +81,7 @@ export function SelectorNivel({
             {nivel === nivelActual ? (
               <>
                 <BadgeCheck aria-hidden className="size-3.5 text-success" />
-                <span className="sr-only"> (tu nivel actual)</span>
+                <span className="sr-only">, tu nivel actual</span>
               </>
             ) : null}
           </RadioPrimitive.Root>
@@ -88,6 +100,22 @@ export function SelectorNivel({
           </p>
         ) : null}
       </div>
+      {sugerencia ? (
+        <Nota tono="info" icono={Lightbulb}>
+          <p>{sugerencia.texto}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            disabled={deshabilitado}
+            onClick={() => onCambiar(sugerencia.nivel)}
+          >
+            Ver el nivel {sugerencia.nivel}
+            <ArrowRight data-icon="inline-end" aria-hidden />
+          </Button>
+        </Nota>
+      ) : null}
     </section>
   )
 }

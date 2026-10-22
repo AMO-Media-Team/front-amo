@@ -77,15 +77,15 @@ describe("esquemaAprobarCuenta", () => {
 
 describe("decisión sobre el medio", () => {
   it("nivel entre 1 y 3", () => {
-    expect(esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 2 }).success).toBe(
-      true
-    )
-    expect(esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 0 }).success).toBe(
-      false
-    )
-    expect(esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 4 }).success).toBe(
-      false
-    )
+    expect(
+      esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 2 }).success
+    ).toBe(true)
+    expect(
+      esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 0 }).success
+    ).toBe(false)
+    expect(
+      esquemaVerificarMedio.safeParse({ medioId: ID, nivel: 4 }).success
+    ).toBe(false)
   })
 
   it("cambiar de nivel y rechazar exigen motivo (≤ 500, como motivo_estado)", () => {
@@ -131,8 +131,10 @@ describe("esquemaComprobarCodigo", () => {
         .success
     ).toBe(false)
     expect(
-      esquemaComprobarCodigo.safeParse({ verificacionId: ID, codigo: "AB3-K9P" })
-        .success
+      esquemaComprobarCodigo.safeParse({
+        verificacionId: ID,
+        codigo: "AB3-K9P",
+      }).success
     ).toBe(true)
   })
 })

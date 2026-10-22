@@ -6,24 +6,22 @@
 import type { Route } from "next"
 
 import type { PresentacionEstado } from "@/features/operacion/estados"
-import { contar, normalizarBusqueda } from "@/features/operacion/formato"
+import { contar } from "@/features/operacion/formato"
 import { formatearCompacto } from "@/lib/format"
+import { normalizarNombreGeo } from "@/lib/geo/normalizar"
 import type { Json } from "@/types/database.types"
 
 import {
   MAXIMO_CUENTAS,
   PLATAFORMAS_CUENTA,
   type PlataformaCuenta,
+  seguidoresMaximos,
 } from "./cuentas"
 import type {
   CuentaDeclarada,
   EstadoSolicitud,
   MedioCoincidente,
 } from "./tipos"
-
-/** Ruta de la cola (contrato con el resolvedor `/ir` y el paquete de verificación). */
-export const RUTA_COLA_SOLICITUDES =
-  "/operacion/verificacion?cola=solicitudes" as Route
 
 /** Ruta pública del formulario. */
 export const RUTA_FORMULARIO = "/vincular" as Route
@@ -88,6 +86,35 @@ export function textoSeguidores(seguidores: number | null): string {
   return `${formatearCompacto(seguidores)} ${seguidores === 1 ? "seguidor" : "seguidores"}`
 }
 
+export type LecturaSeguidores =
+  | { tipo: "alcanza"; maximo: number }
+  | { tipo: "bajo"; maximo: number }
+  | { tipo: "sin-dato" }
+
+/**
+ * Lo que dicen los seguidores declarados frente al umbral de AMO
+ * (`medios.umbral_seguidores`): orienta la revisión, no decide. Basta una
+ * cuenta que lo alcance.
+ */
+export function lecturaSeguidores(
+  cuentas: readonly { seguidores: number | null }[],
+  umbral: number
+): LecturaSeguidores {
+  const maximo = seguidoresMaximos(cuentas)
+  if (maximo === null) return { tipo: "sin-dato" }
+  return { tipo: maximo >= umbral ? "alcanza" : "bajo", maximo }
+}
+
+/**
+ * Clave con la que la BD compara nombres de medios: la misma que
+ * `medios.nombre_normalizado` (`private.normalizar_texto`), que además de
+ * tildes y puntuación quita «D.C.» / «Distrito Capital» («Noticias Bogotá
+ * D.C.» y «Noticias Bogotá» son el mismo nombre).
+ */
+export function nombreNormalizadoMedio(nombre: string): string {
+  return normalizarNombreGeo(nombre)
+}
+
 export interface FilaMedio {
   id: string
   nombre: string
@@ -98,8 +125,8 @@ export interface FilaMedio {
 }
 
 /**
- * Medios ya registrados con el mismo nombre que la solicitud (normalizado
- * como `nombre_normalizado` en la BD). Primero los del mismo municipio; un
+ * Medios ya registrados con el mismo nombre que la solicitud
+ * (`nombreNormalizadoMedio`). Primero los del mismo municipio; un
  * medio del mismo municipio registrado después de recibirla salió de ella
  * (p. ej. un intento de invitación que no terminó).
  */
@@ -111,10 +138,10 @@ export function coincidenciasDeMedio(
   },
   medios: readonly FilaMedio[]
 ): MedioCoincidente[] {
-  const nombre = normalizarBusqueda(solicitud.nombreMedio)
+  const nombre = nombreNormalizadoMedio(solicitud.nombreMedio)
   const recibida = Date.parse(solicitud.recibidaAt)
   return medios
-    .filter((medio) => normalizarBusqueda(medio.nombre) === nombre)
+    .filter((medio) => nombreNormalizadoMedio(medio.nombre) === nombre)
     .map((medio) => {
       const mismoMunicipio = medio.municipioCodigo === solicitud.municipioCodigo
       return {

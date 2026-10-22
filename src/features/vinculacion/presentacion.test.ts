@@ -8,11 +8,28 @@ import {
   enlaceWhatsapp,
   ESTADOS_SOLICITUD,
   type FilaMedio,
+  lecturaSeguidores,
   leerCuentasDeclaradas,
   medioYaRegistrado,
+  nombreNormalizadoMedio,
   resumenPendientes,
   textoSeguidores,
 } from "./presentacion"
+
+describe("nombreNormalizadoMedio", () => {
+  // Valores calculados por `private.normalizar_texto` (base local).
+  it.each([
+    ["Noticias Bogotá D.C.", "noticias bogota"],
+    ["Radio DC", "radio"],
+    ["Distrito Capital", "distrito capital"],
+    ["La Voz & El Eco", "la voz y el eco"],
+    ["Ñandú.TV", "nandutv"],
+    ["Café ¥ Ya", "cafe n ya"],
+    ["Noticias de Cúcuta (Norte)", "noticias de cucuta norte"],
+  ])("«%s» → «%s», igual que `medios.nombre_normalizado`", (nombre, bd) => {
+    expect(nombreNormalizadoMedio(nombre)).toBe(bd)
+  })
+})
 
 describe("ESTADOS_SOLICITUD", () => {
   it("nombra los tres estados de la cola", () => {
@@ -75,6 +92,18 @@ describe("coincidenciasDeMedio", () => {
     ...parcial,
   })
 
+  it("reconoce el mismo medio con o sin «D.C.», como la BD", () => {
+    const resultado = coincidenciasDeMedio(
+      { ...SOLICITUD, nombreMedio: "Noticias Bogotá" },
+      [
+        medio({ id: "dc", nombre: "Noticias Bogotá D.C." }),
+        medio({ id: "distrito", nombre: "Noticias Bogotá, Distrito Capital" }),
+        medio({ id: "otro", nombre: "Noticias Bogotá Norte" }),
+      ]
+    )
+    expect(resultado.map((m) => m.id).sort()).toEqual(["dc", "distrito"])
+  })
+
   it("compara sin tildes, mayúsculas ni puntuación", () => {
     const resultado = coincidenciasDeMedio(SOLICITUD, [
       medio({ id: "a", nombre: "NOTICIAS DEL SUR." }),
@@ -134,5 +163,29 @@ describe("resumenPendientes", () => {
     expect(resumenPendientes(0)).toBe("Sin solicitudes por atender")
     expect(resumenPendientes(1)).toBe("1 solicitud por atender")
     expect(resumenPendientes(1200)).toBe("1.200 solicitudes por atender")
+  })
+})
+
+describe("lecturaSeguidores", () => {
+  it("alcanza el umbral si una cuenta llega a él", () => {
+    expect(
+      lecturaSeguidores(
+        [{ seguidores: 12_000 }, { seguidores: 30_000 }, { seguidores: null }],
+        30_000
+      )
+    ).toEqual({ tipo: "alcanza", maximo: 30_000 })
+  })
+
+  it("queda bajo el umbral si ninguna cuenta declarada llega", () => {
+    expect(
+      lecturaSeguidores([{ seguidores: 29_999 }, { seguidores: null }], 30_000)
+    ).toEqual({ tipo: "bajo", maximo: 29_999 })
+  })
+
+  it("sin cifras declaradas no hay lectura", () => {
+    expect(lecturaSeguidores([{ seguidores: null }], 30_000)).toEqual({
+      tipo: "sin-dato",
+    })
+    expect(lecturaSeguidores([], 30_000)).toEqual({ tipo: "sin-dato" })
   })
 })

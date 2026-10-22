@@ -73,8 +73,7 @@ function ContenidoPaso({ paso }: { paso: PasoAlta }) {
   )
 }
 
-const FILA =
-  "flex min-h-18 items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5"
+const FILA = "flex min-h-18 items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5"
 
 /**
  * Pasos del alta como una lista ordenada: cada uno lleva a la pantalla donde
@@ -127,7 +126,7 @@ export function ListaAlta({
               id={idProgreso}
               className="shrink-0 text-sm text-muted-foreground"
             >
-              <span className="font-semibold text-foreground cifras">
+              <span className="font-semibold cifras text-foreground">
                 {formatearNumero(progreso.completos)}
               </span>{" "}
               de {formatearNumero(progreso.total)}

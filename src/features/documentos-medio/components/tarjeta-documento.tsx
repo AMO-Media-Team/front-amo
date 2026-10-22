@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { InsigniaTono } from "@/features/operacion/components/distintivos"
 import { cn } from "@/lib/utils"
 
-import { FICHAS_DOCUMENTO } from "../catalogo"
+import { esVoluntario, FICHAS_DOCUMENTO } from "../catalogo"
 import {
   type AccionDocumento,
   presentarSituacion,
@@ -17,7 +17,7 @@ import {
   TEXTO_ACCION,
 } from "../situacion"
 import { lineaFechas } from "../textos"
-import type { DocumentoCargado, TipoDocumentoMedio } from "../tipos"
+import type { TipoDocumentoMedio } from "../tipos"
 import { AvisoPruebaVida, Nota, NotaRechazo } from "./avisos"
 import { HojaCargarDocumento } from "./hoja-cargar-documento"
 import { HojaVerDocumento } from "./hoja-ver-documento"
@@ -45,7 +45,7 @@ function Notas({
 }) {
   switch (situacion.tipo) {
     case "falta":
-      return tipo === "PRUEBA_VIDA" ? <AvisoPruebaVida compacto /> : null
+      return esVoluntario(tipo) ? <AvisoPruebaVida compacto /> : null
     case "rechazado":
       return <NotaRechazo observaciones={situacion.documento.observaciones} />
     case "vencido":
@@ -57,8 +57,7 @@ function Notas({
     case "en-revision":
       return situacion.vigente ? (
         <Nota tono="info">
-          Mientras revisamos el nuevo, sigue valiendo el que ya estaba
-          aprobado.
+          Mientras revisamos el nuevo, sigue valiendo el que ya estaba aprobado.
         </Nota>
       ) : null
     case "aprobado":
@@ -97,14 +96,16 @@ export function TarjetaDocumento({
 }: TarjetaDocumentoProps) {
   const ficha = FICHAS_DOCUMENTO[tipo]
   const Icono = ICONOS_DOCUMENTO[tipo]
-  const presentacion = presentarSituacion(situacion)
+  const presentacion = presentarSituacion(situacion, {
+    voluntario: esVoluntario(tipo),
+  })
   const idTitulo = useId()
   const [hoja, setHoja] = useState<"cargar" | "ver" | null>(null)
 
   const alCompletar = useCallback(() => {
     setHoja(null)
-    toast.success(`${ficha.titulo}: enviado a revisión`, {
-      description: "Te avisaremos cuando el equipo AMO lo revise.",
+    toast.success("Documento recibido", {
+      description: `${ficha.titulo}: el equipo AMO lo revisará y te avisaremos el resultado.`,
     })
   }, [ficha.titulo])
   const carga = useCargaDocumento(tipo, alCompletar)
@@ -122,10 +123,6 @@ export function TarjetaDocumento({
   const fechas = lineaFechas(situacion)
   const accion = presentacion.accion
   const IconoAccion = accion ? ICONOS_ACCION[accion] : null
-  // La prueba de vida es voluntaria: se ofrece sin empujarla como las demás.
-  const destacar =
-    presentacion.requiereAccion &&
-    !(ficha.biometrico && situacion.tipo === "falta")
   const tonoBorde =
     presentacion.tono === "peligro" || presentacion.tono === "aviso"
       ? BORDE_TONO[presentacion.tono]
@@ -177,7 +174,7 @@ export function TarjetaDocumento({
         ) : null}
 
         {documento || accion ? (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2 *:flex-1 sm:*:flex-none">
             {documento ? (
               <Button
                 type="button"
@@ -193,7 +190,7 @@ export function TarjetaDocumento({
             {accion && IconoAccion ? (
               <Button
                 type="button"
-                variant={destacar ? "default" : "outline"}
+                variant={presentacion.requiereAccion ? "default" : "outline"}
                 size="lg"
                 disabled={activa}
                 onClick={() => setHoja("cargar")}

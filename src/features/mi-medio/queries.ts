@@ -10,8 +10,10 @@ import { listarPaises, obtenerPais } from "@/lib/geo/catalogo"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 
 import { ordenarAudiencia, sumaPorcentajes } from "./audiencia"
+import { estadoCuentasAlta } from "./resumen"
 import type { DocumentoRegistrado } from "./requisitos"
 import type {
+  ConsumoTope,
   CuentaSocialAlta,
   FilaAudienciaPerfil,
   MedioPropio,
@@ -121,11 +123,11 @@ export const documentosDelMedio = cache(
 
 /** ¿Hay número de documento y cuenta cifrados? Sin leer los valores. */
 const cifradosRegistrados = cache(
-  async (
-    medioId: string
-  ): Promise<{ documento: boolean; cuenta: boolean }> => {
+  async (medioId: string): Promise<{ documento: boolean; cuenta: boolean }> => {
     const admin = await crearClienteAdmin()
-    const existe = (columna: "numero_documento_cifrado" | "datos_pago_cifrados") =>
+    const existe = (
+      columna: "numero_documento_cifrado" | "datos_pago_cifrados"
+    ) =>
       admin
         .from("medios_privado")
         .select("medio_id", { count: "exact", head: true })
@@ -137,7 +139,10 @@ const cifradosRegistrados = cache(
     ])
     if (documento.error) fallar("revisar tu documento", documento.error)
     if (cuenta.error) fallar("revisar tu cuenta de pago", cuenta.error)
-    return { documento: (documento.count ?? 0) > 0, cuenta: (cuenta.count ?? 0) > 0 }
+    return {
+      documento: (documento.count ?? 0) > 0,
+      cuenta: (cuenta.count ?? 0) > 0,
+    }
   }
 )
 
@@ -166,7 +171,9 @@ export const pagoResumen = cache(
       // El método decide qué certificado se exige (como en la BD), aunque la
       // cuenta cifrada falte (datos demo cargados sin la llave).
       metodoPago: data?.metodo_pago ?? null,
-      cuentaResumen: cifrados.cuenta ? (data?.datos_pago_resumen ?? null) : null,
+      cuentaResumen: cifrados.cuenta
+        ? (data?.datos_pago_resumen ?? null)
+        : null,
       esDeclarante: data?.es_declarante ?? false,
       obligadoFacturar: data?.obligado_facturar ?? false,
       responsableIva: data?.responsable_iva ?? false,
@@ -187,7 +194,9 @@ async function cuentasAlta(medioId: string): Promise<CuentaSocialAlta[]> {
       .is("deleted_at", null),
     supabase
       .from("verificaciones_cuenta")
-      .select("cuenta_social_id, estado_validacion, created_at")
+      .select(
+        "cuenta_social_id, metodo, estado_validacion, captura_path, created_at"
+      )
       .eq("medio_id", medioId)
       .order("created_at", { ascending: false })
       .limit(200),
@@ -196,19 +205,7 @@ async function cuentasAlta(medioId: string): Promise<CuentaSocialAlta[]> {
   if (verificaciones.error) {
     fallar("leer la verificación de tus cuentas", verificaciones.error)
   }
-  // La más reciente de cada cuenta decide (llegan ordenadas de nueva a vieja).
-  const ultima = new Map<string, string>()
-  for (const fila of verificaciones.data) {
-    if (!ultima.has(fila.cuenta_social_id)) {
-      ultima.set(fila.cuenta_social_id, fila.estado_validacion)
-    }
-  }
-  return cuentas.data.map((cuenta) => ({
-    id: cuenta.id,
-    verificada: cuenta.verificada,
-    enRevision: ultima.get(cuenta.id) === "PENDIENTE",
-    rechazada: ultima.get(cuenta.id) === "RECHAZADA",
-  }))
+  return estadoCuentasAlta(cuentas.data, verificaciones.data)
 }
 
 async function terminosPendientes(): Promise<number> {
@@ -319,11 +316,13 @@ export async function perfilEditable(
     categoriaIds: categorias.categoriaIds,
     categorias: categorias.opciones,
     audiencia: declaradas.map(soloPorcentaje),
-    audienciaVerificada: verificadas.map(({ paisIso2, porcentaje, nombre }) => ({
-      paisIso2,
-      porcentaje,
-      nombre,
-    })),
+    audienciaVerificada: verificadas.map(
+      ({ paisIso2, porcentaje, nombre }) => ({
+        paisIso2,
+        porcentaje,
+        nombre,
+      })
+    ),
     audienciaFija: {
       paises: verificadas.map((fila) => fila.paisIso2),
       porcentaje: sumaPorcentajes(verificadas.map((fila) => fila.porcentaje)),
@@ -352,13 +351,6 @@ export async function pagoEditable(
   }
 }
 
-export interface ConsumoTope {
-  tope: number | null
-  consumido: number
-  /** Año calendario del tope (el de hoy en Bogotá). */
-  anio: number
-}
-
 /**
  * Tope anual del nivel y lo consumido este año (`kpis_medio`, que exige
  * `inicio.medio`). `null` si no se pudo consultar: la página lo explica sin
@@ -373,7 +365,9 @@ export const consumoTope = cache(async (): Promise<ConsumoTope | null> => {
     p_hasta: hoy,
   })
   if (error) {
-    console.error(`[mi-medio] consumo del tope falló (${error.code ?? "sin código"})`)
+    console.error(
+      `[mi-medio] consumo del tope falló (${error.code ?? "sin código"})`
+    )
     return null
   }
   const indice = indicePorKpi(filasKpi(data))

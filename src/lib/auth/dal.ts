@@ -6,6 +6,7 @@ import {
   isAuthSessionMissingError,
 } from "@supabase/supabase-js"
 import type { Route } from "next"
+import { headers } from "next/headers"
 import { forbidden, redirect } from "next/navigation"
 import { cache } from "react"
 
@@ -14,7 +15,9 @@ import { crearClienteServidor } from "@/lib/supabase/server"
 
 import { conNivel, esDeTipoRol, tieneAlgunPermiso } from "./autorizacion"
 import {
+  CABECERA_RUTA_SOLICITADA,
   type ClaimsSesion,
+  destinoDeSolicitud,
   destinoFinal,
   esSesionDeEnlace,
   type EstadoCuenta,
@@ -152,7 +155,19 @@ async function evaluarAccesoSinCache(): Promise<EstadoAcceso> {
  */
 export const evaluarAcceso = cache(evaluarAccesoSinCache)
 
-function redirigirSegun(acceso: EstadoNoListo): never {
+/**
+ * A dónde iba la persona, si el proxy lo informó (`CABECERA_RUTA_SOLICITADA`):
+ * el paso pendiente lo conserva y, al cumplirlo, la lleva allí.
+ */
+async function destinoSolicitado(): Promise<string | undefined> {
+  return destinoDeSolicitud((await headers()).get(CABECERA_RUTA_SOLICITADA))
+}
+
+/**
+ * `siguiente`: destino ya validado que conservan los pasos que lo admiten
+ * (`rutaDePaso`); sin él, al cumplir el paso se llega a Inicio.
+ */
+function redirigirSegun(acceso: EstadoNoListo, siguiente?: string): never {
   switch (acceso.tipo) {
     case "sin-sesion":
       redirect(RUTA_INGRESO)
@@ -160,7 +175,7 @@ function redirigirSegun(acceso: EstadoNoListo): never {
       // Un Server Component no puede borrar cookies: lo hace el Route Handler.
       redirect(RUTA_SALIR)
     case "pendiente":
-      redirect(rutaDePaso(acceso.paso))
+      redirect(rutaDePaso(acceso.paso, siguiente))
   }
 }
 
@@ -227,7 +242,7 @@ export async function requerirUsuario(
   if (acceso.tipo === "pendiente" && opciones.permitirPendientes) {
     return acceso.usuario
   }
-  if (acceso.tipo !== "listo") redirigirSegun(acceso)
+  if (acceso.tipo !== "listo") redirigirSegun(acceso, await destinoSolicitado())
   if ((await verificarVigencia(acceso.claims)) !== "VIGENTE") {
     redirect(RUTA_SALIR)
   }
@@ -270,7 +285,8 @@ export async function requerirPaso(
     return acceso
   }
   if (acceso.tipo === "listo") redirect(destinoFinal(siguiente, acceso.claims))
-  redirigirSegun(acceso)
+  // Otro paso pendiente: conserva el destino que este ya traía.
+  redirigirSegun(acceso, destinoDeSolicitud(siguiente))
 }
 
 /**
@@ -296,7 +312,7 @@ export async function requerirSesionDeEnlace(): Promise<AccesoConUsuario> {
 /** Para el layout de `(app)`: el usuario del shell (las páginas autorizan aparte). */
 export async function obtenerUsuarioShell(): Promise<UsuarioSesion> {
   const acceso = await evaluarAcceso()
-  if (acceso.tipo !== "listo") redirigirSegun(acceso)
+  if (acceso.tipo !== "listo") redirigirSegun(acceso, await destinoSolicitado())
   return acceso.usuario
 }
 

@@ -18,11 +18,7 @@ import { SheetClose } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { formatearTamano } from "@/lib/archivos/formato"
 
-import {
-  AYUDA_FORMATOS,
-  FICHAS_DOCUMENTO,
-  REGLAS_SELECCION,
-} from "../catalogo"
+import { AYUDA_FORMATOS, FICHAS_DOCUMENTO, REGLAS_SELECCION } from "../catalogo"
 import type { Situacion } from "../situacion"
 import type { TipoDocumentoMedio } from "../tipos"
 import { AvisoPruebaVida, Nota, NotaRechazo } from "./avisos"
@@ -70,7 +66,10 @@ function Consejos({ consejos }: { consejos: readonly string[] }) {
       <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
         {consejos.map((consejo) => (
           <li key={consejo} className="flex gap-2 text-pretty">
-            <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+            <Check
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-success"
+            />
             {consejo}
           </li>
         ))}
@@ -213,10 +212,11 @@ export function HojaCargarDocumento({
               if (archivo) carga.elegir(archivo)
             }}
             capture={ficha.camara}
+            // En pantallas con mouse la zona agrega «: arrástralo aquí o elígelo».
             titulo={
               ficha.camara === "user"
-                ? "Toma tu selfie o elígela de tu galería"
-                : "Toma una foto o elige el archivo"
+                ? "Sube el archivo de tu selfie"
+                : "Sube una foto o el PDF del documento"
             }
             descripcion={AYUDA_FORMATOS}
           />

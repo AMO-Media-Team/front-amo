@@ -6,14 +6,20 @@
  * nula o desde hoy en Bogotá). Una carga nueva no borra la anterior: mientras se
  * revisa, la aprobada sigue valiendo.
  */
+import {
+  DIAS_AVISO_VENCIMIENTO,
+  diasEntre,
+} from "@/features/mi-medio/requisitos"
 import type { Tono } from "@/features/operacion/estados"
 
+import { esVoluntario } from "./catalogo"
 import type { DocumentoCargado, TipoDocumentoMedio } from "./tipos"
 
-/** Con esta anticipación (días) se avisa que un documento está por vencer. */
-export const DIAS_AVISO_VENCIMIENTO = 30
-
-const DIA_MS = 86_400_000
+/**
+ * Anticipación del aviso «por vencer» (días) y días entre fechas `YYYY-MM-DD`:
+ * los mismos de la lista de alta de «Mi medio», para que ambas coincidan.
+ */
+export { DIAS_AVISO_VENCIMIENTO, diasEntre }
 
 export type Situacion =
   | { tipo: "falta" }
@@ -38,14 +44,6 @@ export type Situacion =
 
 export type TipoSituacion = Situacion["tipo"]
 
-/** Días de calendario entre dos fechas `YYYY-MM-DD` (negativo si `hasta` ya pasó). */
-export function diasEntre(desde: string, hasta: string): number {
-  return Math.round(
-    (Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) /
-      DIA_MS
-  )
-}
-
 /** Aprobado y dentro de su vigencia el día `hoy`. */
 export function estaVigente(documento: DocumentoCargado, hoy: string): boolean {
   return (
@@ -54,10 +52,7 @@ export function estaVigente(documento: DocumentoCargado, hoy: string): boolean {
   )
 }
 
-function masRecientePrimero(
-  a: DocumentoCargado,
-  b: DocumentoCargado
-): number {
+function masRecientePrimero(a: DocumentoCargado, b: DocumentoCargado): number {
   return Date.parse(b.cargadoAt) - Date.parse(a.cargadoAt)
 }
 
@@ -140,33 +135,50 @@ export interface ResumenDocumentos {
   enRevision: number
   /** Rechazados o vencidos: hay que cargarlos de nuevo. */
   porCorregir: number
-  /** Sin ninguna carga. */
+  /** Sin ninguna carga (sin contar los voluntarios). */
   faltan: number
+  /** Voluntarios sin cargar: el equipo AMO puede resolverlos por videollamada. */
+  voluntarios: number
   porVencer: number
   /** Todo lo exigido está aprobado y vigente. */
   completo: boolean
-  /** Todo lo exigido está aprobado o en revisión (ya se puede enviar). */
+  /**
+   * Todo lo exigido está aprobado o en revisión, salvo lo voluntario (aunque
+   * esté rechazado o vencido): ya se puede enviar el perfil a verificación.
+   */
   todoCargado: boolean
+}
+
+export interface OpcionesResumen {
+  /**
+   * Aún no hay datos de pago: suma el certificado del medio de pago, que no
+   * se puede cargar hasta registrarlos.
+   */
+  pagoPendiente?: boolean
 }
 
 /**
  * Cuenta la situación de los documentos exigidos. Un reemplazo en revisión de
- * un documento que sigue vigente cuenta como aprobado: no deja de valer.
- * `pagoPendiente` suma el certificado del medio de pago, que no se puede
- * cargar hasta registrar los datos de pago.
+ * un documento que sigue vigente cuenta como aprobado: no deja de valer. Un
+ * documento voluntario sin cargar no frena el envío (`todoCargado`), pero
+ * sí la verificación (`completo`): el equipo AMO lo resuelve por videollamada.
  */
 export function resumirDocumentos(
   exigidos: readonly TipoDocumentoMedio[],
   situaciones: SituacionesPorTipo,
-  pagoPendiente = false
+  { pagoPendiente = false }: OpcionesResumen = {}
 ): ResumenDocumentos {
   const conteo = {
     aprobados: 0,
     enRevision: 0,
     porCorregir: 0,
     faltan: pagoPendiente ? 1 : 0,
+    voluntarios: 0,
     porVencer: 0,
   }
+  // Lo voluntario sin cubrir (sin cargar, rechazado o vencido) no frena el
+  // envío: es la regla de la lista de alta de «Mi medio» (`requisitosParaEnviar`).
+  let voluntariosSinCubrir = 0
   for (const tipo of exigidos) {
     const situacion = situacionDeTipo(situaciones, tipo)
     switch (situacion.tipo) {
@@ -181,9 +193,15 @@ export function resumirDocumentos(
       case "rechazado":
       case "vencido":
         conteo.porCorregir += 1
+        if (esVoluntario(tipo)) voluntariosSinCubrir += 1
         break
       case "falta":
-        conteo.faltan += 1
+        if (esVoluntario(tipo)) {
+          conteo.voluntarios += 1
+          voluntariosSinCubrir += 1
+        } else {
+          conteo.faltan += 1
+        }
         break
     }
   }
@@ -193,7 +211,8 @@ export function resumirDocumentos(
     ...conteo,
     completo: total > 0 && conteo.aprobados === total,
     todoCargado:
-      total > 0 && conteo.aprobados + conteo.enRevision === total,
+      total > 0 &&
+      conteo.aprobados + conteo.enRevision + voluntariosSinCubrir === total,
   }
 }
 
@@ -223,19 +242,21 @@ function textoVencimiento(dias: number): string {
 }
 
 /**
- * Etiqueta, tono y acción de la tarjeta. Una prueba de vida aprobada por
+ * Etiqueta, tono y acción de la tarjeta. Un documento voluntario sin cargar
+ * se ofrece sin pedir atención, y una prueba de vida aprobada por
  * videollamada no tiene archivo que reemplazar.
  */
 export function presentarSituacion(
-  situacion: Situacion
+  situacion: Situacion,
+  { voluntario = false }: { voluntario?: boolean } = {}
 ): PresentacionSituacion {
   switch (situacion.tipo) {
     case "falta":
       return {
-        etiqueta: "Sin cargar",
+        etiqueta: voluntario ? "Opcional" : "Sin cargar",
         tono: "neutro",
         accion: "cargar",
-        requiereAccion: true,
+        requiereAccion: !voluntario,
       }
     case "en-revision":
       return {

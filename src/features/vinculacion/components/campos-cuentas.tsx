@@ -58,7 +58,7 @@ function SelectorPlataforma({
             {PLATAFORMAS_CUENTA.map((plataforma) => (
               <label
                 key={plataforma}
-                className="flex h-11 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border bg-background/60 px-1.5 text-sm transition-colors select-none hover:bg-muted/60 has-data-checked:border-primary has-data-checked:bg-primary/8 has-data-checked:font-medium has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 has-data-disabled:cursor-not-allowed has-data-disabled:opacity-60 dark:bg-input/20"
+                className="flex h-11 min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border bg-background/60 px-1.5 text-sm transition-colors select-none hover:bg-muted/60 has-data-checked:border-primary has-data-checked:bg-primary/8 has-data-checked:font-medium has-data-disabled:cursor-not-allowed has-data-disabled:opacity-60 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 dark:bg-input/20"
               >
                 <RadioGroupItem value={plataforma} className="sr-only" />
                 <MarcaPlataforma
@@ -189,7 +189,9 @@ export function CamposCuentas({
   const lleno = fields.length >= MAXIMO_CUENTAS
 
   function agregarCuenta() {
-    const usadas = (getValues("cuentas") ?? []).map((cuenta) => cuenta.plataforma)
+    const usadas = (getValues("cuentas") ?? []).map(
+      (cuenta) => cuenta.plataforma
+    )
     append(cuentaVacia(siguientePlataforma(usadas)), {
       focusName: `cuentas.${fields.length}.usuario`,
     })
@@ -223,7 +225,9 @@ export function CamposCuentas({
         className="h-11 w-full border-dashed"
       >
         <Plus data-icon="inline-start" aria-hidden />
-        {lleno ? `Ya agregaste ${MAXIMO_CUENTAS} cuentas` : "Agregar otra cuenta"}
+        {lleno
+          ? `Ya agregaste ${MAXIMO_CUENTAS} cuentas`
+          : "Agregar otra cuenta"}
       </Button>
     </div>
   )

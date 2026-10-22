@@ -75,7 +75,9 @@ function AsiFunciona({ situacion }: { situacion: SituacionMedio }) {
                   "grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold cifras ring-1 ring-inset",
                   hecha && "bg-success/12 text-success ring-success/25",
                   esActual && "bg-primary text-primary-foreground ring-primary",
-                  !hecha && !esActual && "bg-muted text-muted-foreground ring-border"
+                  !hecha &&
+                    !esActual &&
+                    "bg-muted text-muted-foreground ring-border"
                 )}
               >
                 {hecha ? <Check className="size-3.5" /> : indice + 1}

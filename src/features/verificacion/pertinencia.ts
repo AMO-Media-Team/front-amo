@@ -35,6 +35,17 @@ export function multiplicadorEnRango(valor: number): boolean {
   )
 }
 
+/** Paso de los botones − y + del campo. */
+export const PASO_MULTIPLICADOR = 0.05
+
+/** Suma `delta` y acota al rango admitido (botones − y +). */
+export function pasoMultiplicador(valor: number, delta: number): number {
+  const base = Number.isFinite(valor) ? valor : MULTIPLICADOR_NEUTRO
+  return redondearMultiplicador(
+    Math.min(MULTIPLICADOR_MAXIMO, Math.max(MULTIPLICADOR_MINIMO, base + delta))
+  )
+}
+
 /** Valor del campo al editar: «1,150». */
 export function textoMultiplicador(valor: number): string {
   return redondearMultiplicador(valor).toFixed(3).replace(".", ",")

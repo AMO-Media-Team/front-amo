@@ -1,29 +1,43 @@
 /**
- * Comprobación del código temporal de una verificación por historia
- * (MED-005), módulo puro. La BD solo guarda el sha256 (hex) del código que
- * vio el medio; quien revisa escribe el que aparece en la captura y el
- * servidor compara huellas. Se prueban las escrituras razonables del mismo
- * código (tal cual, en mayúsculas y sin separadores) para no depender de cómo
- * lo formatee la pantalla del medio («AB3-K9P» o «AB3K9P»).
+ * Código temporal de una verificación por historia (MED-005), módulo puro
+ * (cliente y servidor). La BD solo guarda el sha256 (hex) del código que vio
+ * el medio; quien revisa escribe el que aparece en la captura y el servidor
+ * lo compara con `codigoCoincide` de «Mi medio › Cuentas sociales», la misma
+ * normalización con que se generó la huella (una sola fuente de verdad). Aquí
+ * quedan los límites del campo y si la captura llegó a tiempo.
  */
 
+/** Límites del campo donde se escribe el código («K7P 4XQ», «k7p-4xq»…). */
 export const LARGO_MINIMO_CODIGO = 4
 export const LARGO_MAXIMO_CODIGO = 16
 
-const SEPARADORES = /[\s\-_.·]+/g
-
-/** Escrituras candidatas del código, sin repetir y en orden de preferencia. */
-export function variantesCodigo(texto: string): string[] {
-  const recortado = texto.trim()
-  if (!recortado) return []
-  const mayusculas = recortado.toLocaleUpperCase("es-CO")
-  const compacto = mayusculas.replace(SEPARADORES, "")
-  return [...new Set([recortado, mayusculas, compacto])].filter(Boolean)
+/** sha256 en hex de 64 caracteres (como `codigo_hash`). */
+export function esHuellaHex(valor: string | null | undefined): valor is string {
+  return typeof valor === "string" && /^[0-9a-f]{64}$/.test(valor)
 }
 
-/** sha256 en hex de 64 caracteres (como `codigo_hash`). */
-export function esHuellaHex(
-  valor: string | null | undefined
-): valor is string {
-  return typeof valor === "string" && /^[0-9a-f]{64}$/.test(valor)
+export interface MomentoCaptura {
+  /** La captura llegó antes de que venciera el código (la BD lo exige al aprobar). */
+  aTiempo: boolean
+  /** Minutos entre la carga y el vencimiento (positivo = antes). */
+  margenMinutos: number
+}
+
+/**
+ * ¿Se cargó la captura antes de que venciera el código? Compara las mismas
+ * columnas que `private.validar_condicion_transicion` (`updated_at` frente a
+ * `codigo_expira_at`). `null` si la verificación no usa código.
+ */
+export function momentoCaptura(
+  cargadaAt: string,
+  expiraAt: string | null
+): MomentoCaptura | null {
+  if (!expiraAt) return null
+  const carga = Date.parse(cargadaAt)
+  const vence = Date.parse(expiraAt)
+  if (Number.isNaN(carga) || Number.isNaN(vence)) return null
+  return {
+    aTiempo: carga <= vence,
+    margenMinutos: Math.trunc((vence - carga) / 60_000),
+  }
 }

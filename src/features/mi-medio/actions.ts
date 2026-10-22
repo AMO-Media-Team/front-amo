@@ -30,7 +30,11 @@ import {
   type ResultadoFallo,
 } from "@/lib/result"
 import { crearClienteServidor } from "@/lib/supabase/server"
-import { categoriasNoPermitidas, diferenciaCategorias, hayCambioCategorias } from "@/features/gestion-medios/categorias"
+import {
+  categoriasNoPermitidas,
+  diferenciaCategorias,
+  hayCambioCategorias,
+} from "@/features/gestion-medios/categorias"
 import {
   cambiosMedio,
   columnasMedio,
@@ -311,8 +315,7 @@ export async function guardarPerfilMedio(
 
     const validacion = esquemaPerfilMedio(actual.fija).safeParse(entrada)
     if (!validacion.success) return desdeErrorZod(validacion.error)
-    const { actualizadoAt, categoriaIds, audiencia, ...datos } =
-      validacion.data
+    const { actualizadoAt, categoriaIds, audiencia, ...datos } = validacion.data
     if (!obtenerMunicipio(datos.municipioCodigo)) {
       return falloCampo("municipioCodigo", "Elige un municipio de la lista.")
     }

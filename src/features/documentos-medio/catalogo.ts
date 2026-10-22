@@ -157,6 +157,15 @@ export const FICHAS_DOCUMENTO: Readonly<
 }
 
 /**
+ * Documento voluntario: su entrega es facultativa (dato biométrico) y el
+ * equipo AMO puede reemplazarlo por una videollamada. Se pide, pero no
+ * frena el envío a verificación ni se presenta como pendiente.
+ */
+export function esVoluntario(tipo: TipoDocumentoMedio): boolean {
+  return FICHAS_DOCUMENTO[tipo].biometrico
+}
+
+/**
  * Lo que admite el bucket privado `documentos`: PDF o foto (JPG, PNG, WebP,
  * HEIC) de hasta 10 MB. Se comprueba sobre el archivo final, ya comprimido.
  */

@@ -4,10 +4,7 @@
  * los documentos que faltan con su código (`CEDULA_FRENTE, PRUEBA_VIDA…`);
  * aquí se cambian por su nombre legible antes de mostrarlo.
  */
-import {
-  TIPOS_DOCUMENTO_MEDIO,
-  type Tono,
-} from "@/features/operacion/estados"
+import { TIPOS_DOCUMENTO_MEDIO, type Tono } from "@/features/operacion/estados"
 
 import {
   CLAVE_CERTIFICADO_PAGO,
@@ -51,6 +48,22 @@ export function humanizarDetalle(texto: string): string {
       TIPOS_DOCUMENTO_MEDIO[codigo as keyof typeof TIPOS_DOCUMENTO_MEDIO] ??
       codigo
   )
+}
+
+/**
+ * Un nombre del catálogo dentro de una frase: «Cédula (frente)» → «cédula
+ * (frente)», «Integración (API)» → «integración (API)»; las siglas que lo
+ * abren se conservan («RUT de la sociedad»).
+ */
+export function enFrase(nombre: string): string {
+  const primera = nombre.split(/\s/, 1)[0] ?? ""
+  const esSigla =
+    primera.length > 1 &&
+    /\p{Lu}/u.test(primera) &&
+    primera === primera.toLocaleUpperCase("es-CO")
+  return esSigla
+    ? nombre
+    : nombre.charAt(0).toLocaleLowerCase("es-CO") + nombre.slice(1)
 }
 
 /** «Nivel 2 · Persona natural con RUT». */
@@ -114,6 +127,17 @@ export const MOTIVOS_RECHAZO_CUENTA: readonly string[] = [
   "La cuenta de la captura no coincide con la registrada.",
   "La cifra de seguidores no coincide con la captura.",
 ]
+
+export const MOTIVOS_CAMBIO_NIVEL: readonly string[] = [
+  "Cargó los documentos del nivel nuevo y los aprobamos.",
+  "Uno de los documentos de su nivel venció y no lo ha renovado.",
+  "Cambió su forma jurídica (persona natural o sociedad).",
+]
+
+/** Orden en que se listan los tipos de documento (el del catálogo). */
+export const ORDEN_TIPOS_DOCUMENTO = Object.keys(
+  TIPOS_DOCUMENTO_MEDIO
+) as TipoDocumentoMedio[]
 
 export const MOTIVOS_RECHAZO_MEDIO: readonly string[] = [
   "Los documentos no corresponden al titular de la cuenta.",

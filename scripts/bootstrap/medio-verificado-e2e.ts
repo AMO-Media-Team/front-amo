@@ -317,11 +317,10 @@ function pasosDocumentos(estado: EstadoMedioVerificado): PasoMedio[] {
   const vigentes = new Set(estado.documentosVigentes)
   return estado.documentosExigidos
     .filter((tipo) => !vigentes.has(tipo))
-    .map(
-      (tipo): PasoMedio =>
-        tipo === "PRUEBA_VIDA"
-          ? { paso: "VIDEOLLAMADA" }
-          : { paso: "APROBAR_DOCUMENTO", documento: tipo }
+    .map((tipo): PasoMedio =>
+      tipo === "PRUEBA_VIDA"
+        ? { paso: "VIDEOLLAMADA" }
+        : { paso: "APROBAR_DOCUMENTO", documento: tipo }
     )
 }
 

@@ -7,12 +7,17 @@ import { useCallback, useId, useMemo, useState } from "react"
 
 import { useGuardiaSalida } from "@/components/asistente/use-guardia-salida"
 import { DialogoConfirmacion } from "@/components/feedback/dialogo-confirmacion"
+import { PARAMETRO_NIVEL_DOCUMENTOS } from "@/features/mi-medio/alta"
 
 import {
   documentosExigidos,
   documentosOpcionales,
+  explicacionRecomendacion,
+  NIVEL_DE_ENTRADA,
   NIVELES,
-  nivelSugerido,
+  nivelInicial,
+  nivelRecomendado,
+  nivelVerificado,
 } from "../requisitos"
 import {
   resumirDocumentos,
@@ -31,8 +36,11 @@ import { SelectorNivel } from "./selector-nivel"
 import { TarjetaDocumento } from "./tarjeta-documento"
 import { TarjetaPagoPendiente } from "./tarjeta-pago-pendiente"
 
-/** `?nivel=2`: el nivel que se consulta (lo enlaza la página «Nivel» de Mi medio). */
-export const PARAMETRO_NIVEL = "nivel"
+/**
+ * `?nivel=2`: el nivel que se consulta. Su fuente es la de las rutas de «Mi
+ * medio» (`rutaDocumentosDelNivel`), con la que enlaza la página «Nivel».
+ */
+export const PARAMETRO_NIVEL = PARAMETRO_NIVEL_DOCUMENTOS
 
 const parseNivel = parseAsNumberLiteral(NIVELES).withOptions({
   history: "replace",
@@ -44,18 +52,15 @@ function useSubidasActivas() {
   const [activas, setActivas] = useState<ReadonlySet<TipoDocumentoMedio>>(
     () => new Set()
   )
-  const alCambiar = useCallback(
-    (tipo: TipoDocumentoMedio, activa: boolean) => {
-      setActivas((previas) => {
-        if (previas.has(tipo) === activa) return previas
-        const siguientes = new Set(previas)
-        if (activa) siguientes.add(tipo)
-        else siguientes.delete(tipo)
-        return siguientes
-      })
-    },
-    []
-  )
+  const alCambiar = useCallback((tipo: TipoDocumentoMedio, activa: boolean) => {
+    setActivas((previas) => {
+      if (previas.has(tipo) === activa) return previas
+      const siguientes = new Set(previas)
+      if (activa) siguientes.add(tipo)
+      else siguientes.delete(tipo)
+      return siguientes
+    })
+  }, [])
   return { hay: activas.size > 0, alCambiar }
 }
 
@@ -87,17 +92,17 @@ function Seccion({
 }
 
 /**
- * «Mis documentos»: avance, nivel al que aspira el medio y una tarjeta por
- * documento (los que exige ese nivel con su medio de pago y, aparte, los
- * opcionales). El nivel se elige en la URL sin volver al servidor: todo se
- * calcula aquí con lo que ya trajo la página.
+ * «Mis documentos»: avance, nivel que se consulta y una tarjeta por documento
+ * (los que exige ese nivel con su medio de pago y, aparte, los opcionales).
+ * El nivel se elige en la URL sin volver al servidor: todo se calcula aquí
+ * con lo que ya trajo la página.
  */
 export function PanelDocumentos({ datos }: { datos: DatosDocumentosMedio }) {
   const router = useRouter()
   const { medio, perfil, niveles, documentos, hoy } = datos
-  const sugerido = nivelSugerido(medio, perfil)
+  const inicial = nivelInicial(medio)
   const [nivelUrl, setNivelUrl] = useQueryState(PARAMETRO_NIVEL, parseNivel)
-  const nivel = nivelUrl ?? sugerido.nivel
+  const nivel = nivelUrl ?? inicial
   const subidas = useSubidasActivas()
   const [salida, setSalida] = useState<string | null>(null)
 
@@ -107,14 +112,25 @@ export function PanelDocumentos({ datos }: { datos: DatosDocumentosMedio }) {
     () => situacionesPorTipo(documentos, hoy),
     [documentos, hoy]
   )
-  const requisitos = niveles.find((fila) => fila.nivel === nivel)
-  const exigidos = documentosExigidos(requisitos, perfil.metodoPago)
-  const opcionales = documentosOpcionales(exigidos, documentos)
   const pagoPendiente = perfil.metodoPago === null
-  const resumen = resumirDocumentos(exigidos, situaciones, pagoPendiente)
+  const exigidosDe = (consultado: NivelVerificacion) =>
+    documentosExigidos(
+      niveles.find((fila) => fila.nivel === consultado),
+      perfil.metodoPago
+    )
+  const exigidos = exigidosDe(nivel)
+  const opcionales = documentosOpcionales(exigidos, documentos)
+  const resumen = resumirDocumentos(exigidos, situaciones, { pagoPendiente })
+  // Para enviar el perfil basta con lo del nivel de entrada, se consulte el que se consulte.
+  const listoParaEnviar = resumirDocumentos(
+    exigidosDe(NIVEL_DE_ENTRADA),
+    situaciones,
+    { pagoPendiente }
+  ).todoCargado
+  const recomendacion = nivelRecomendado(perfil, inicial)
 
   function elegirNivel(elegido: NivelVerificacion) {
-    void setNivelUrl(elegido === sugerido.nivel ? null : elegido)
+    void setNivelUrl(elegido === inicial ? null : elegido)
   }
 
   const tarjeta = (tipo: TipoDocumentoMedio) => (
@@ -132,14 +148,22 @@ export function PanelDocumentos({ datos }: { datos: DatosDocumentosMedio }) {
         <ResumenDocumentos
           resumen={resumen}
           nivel={nivel}
-          siguiente={siguientePaso(medio, resumen)}
+          siguiente={siguientePaso(medio, listoParaEnviar)}
         />
         <SelectorNivel
           valor={nivel}
           onCambiar={elegirNivel}
           niveles={niveles}
-          nivelActual={medio.estado === "VERIFICADO" ? medio.nivel : 0}
-          explicacion={explicarNivelElegido(nivel, sugerido, medio)}
+          nivelActual={nivelVerificado(medio)}
+          explicacion={explicarNivelElegido(nivel, medio)}
+          sugerencia={
+            recomendacion && recomendacion.nivel !== nivel
+              ? {
+                  nivel: recomendacion.nivel,
+                  texto: explicacionRecomendacion(recomendacion),
+                }
+              : null
+          }
           deshabilitado={subidas.hay}
         />
         <NotaPrivacidad className="hidden lg:flex" />
@@ -153,7 +177,7 @@ export function PanelDocumentos({ datos }: { datos: DatosDocumentosMedio }) {
         {opcionales.length > 0 ? (
           <Seccion
             titulo="Otros documentos"
-            descripcion="Tu nivel no los exige, pero puedes cargarlos o mantenerlos al día."
+            descripcion={`El nivel ${nivel} no los exige, pero puedes cargarlos o mantenerlos al día.`}
           >
             {opcionales.map(tarjeta)}
           </Seccion>

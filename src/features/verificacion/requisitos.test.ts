@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   type DocumentoRequisito,
+  filasDocumentos,
   type NivelRequisitos,
   nivelMaximoListo,
   nivelPropuesto,
@@ -77,9 +78,9 @@ function nivelUnoCompleto(): DocumentoRequisito[] {
 describe("vigenteEn", () => {
   it("aprobado sin vencimiento o con vencimiento desde hoy", () => {
     expect(vigenteEn(documento("RUT", "APROBADO"), HOY)).toBe(true)
-    expect(
-      vigenteEn(documento("RUT", "APROBADO", { venceAt: HOY }), HOY)
-    ).toBe(true)
+    expect(vigenteEn(documento("RUT", "APROBADO", { venceAt: HOY }), HOY)).toBe(
+      true
+    )
     expect(
       vigenteEn(documento("RUT", "APROBADO", { venceAt: "2026-10-21" }), HOY)
     ).toBe(false)
@@ -119,8 +120,7 @@ describe("situacionRequisito", () => {
       "vencido"
     )
     expect(
-      situacionRequisito(["RUT"], [documento("RUT", "VENCIDO")], HOY)
-        .situacion
+      situacionRequisito(["RUT"], [documento("RUT", "VENCIDO")], HOY).situacion
     ).toBe("vencido")
     const rechazado = documento("RUT", "RECHAZADO")
     expect(
@@ -162,7 +162,9 @@ describe("requisitosDelNivel", () => {
   })
 
   it("lista lo pendiente", () => {
-    const documentos = nivelUnoCompleto().filter((d) => d.tipo !== "PRUEBA_VIDA")
+    const documentos = nivelUnoCompleto().filter(
+      (d) => d.tipo !== "PRUEBA_VIDA"
+    )
     const resumen = resumirRequisitos(
       requisitosDelNivel(NIVEL_1, documentos, HOY)
     )
@@ -196,11 +198,15 @@ describe("nivel máximo y propuesto", () => {
     ).toBe(2)
   })
 
-  it("con el medio ya verificado propone otro nivel distinto del actual", () => {
+  it("con el medio ya verificado propone subir: al listo o al siguiente", () => {
     const conRut = [...nivelUnoCompleto(), documento("RUT", "APROBADO")]
     expect(nivelPropuesto(NIVELES, conRut, HOY, 1)).toBe(2)
-    expect(nivelPropuesto(NIVELES, conRut, HOY, 2)).toBe(1)
+    expect(nivelPropuesto(NIVELES, conRut, HOY, 2)).toBe(3)
     expect(nivelPropuesto(NIVELES, nivelUnoCompleto(), HOY, 1)).toBe(2)
+  })
+
+  it("en el nivel más alto propone quedarse en él", () => {
+    expect(nivelPropuesto(NIVELES, nivelUnoCompleto(), HOY, 3)).toBe(3)
   })
 })
 
@@ -210,5 +216,79 @@ describe("tienePruebaDeVida", () => {
     expect(
       tienePruebaDeVida([documento("PRUEBA_VIDA", "PENDIENTE")], HOY)
     ).toBe(false)
+  })
+})
+
+describe("filasDocumentos", () => {
+  const ORDEN: DocumentoRequisito["tipo"][] = [
+    "CEDULA_FRENTE",
+    "CEDULA_REVERSO",
+    "PRUEBA_VIDA",
+    "RUT",
+    "RUT_SOCIEDAD",
+    "CAMARA_COMERCIO",
+    "CERT_BANCARIA",
+    "CERT_BILLETERA",
+    "SEG_SOCIAL",
+  ]
+
+  it("primero lo exigido por el nivel y el certificado de pago, luego lo demás cargado", () => {
+    const filas = filasDocumentos(
+      NIVEL_1,
+      [documento("SEG_SOCIAL", "PENDIENTE"), documento("RUT", "APROBADO")],
+      HOY,
+      ORDEN
+    )
+    expect(filas.map((fila) => [fila.clave, fila.exigido])).toEqual([
+      ["CEDULA_FRENTE", true],
+      ["CEDULA_REVERSO", true],
+      ["PRUEBA_VIDA", true],
+      ["CERT_PAGO", true],
+      ["RUT", false],
+      ["SEG_SOCIAL", false],
+    ])
+  })
+
+  it("un reemplazo por revisar no tapa el aprobado vigente, pero queda a mano", () => {
+    const aprobado = documento("CEDULA_FRENTE", "APROBADO")
+    const reemplazo = documento("CEDULA_FRENTE", "PENDIENTE")
+    const [fila] = filasDocumentos(NIVEL_1, [aprobado, reemplazo], HOY, ORDEN)
+    expect(fila).toMatchObject({
+      situacion: "aprobado",
+      principal: aprobado,
+      porRevisar: reemplazo,
+      historial: [],
+    })
+  })
+
+  it("el historial va del más reciente al más antiguo, sin el principal", () => {
+    const primero = documento("PRUEBA_VIDA", "RECHAZADO")
+    const segundo = documento("PRUEBA_VIDA", "RECHAZADO")
+    const tercero = documento("PRUEBA_VIDA", "PENDIENTE")
+    const fila = filasDocumentos(
+      NIVEL_1,
+      [primero, tercero, segundo],
+      HOY,
+      ORDEN
+    ).find((f) => f.clave === "PRUEBA_VIDA")
+    expect(fila?.principal).toBe(tercero)
+    expect(fila?.historial).toEqual([segundo, primero])
+  })
+
+  it("el certificado de pago agrupa la bancaria y la de billetera", () => {
+    const bancaria = documento("CERT_BANCARIA", "RECHAZADO")
+    const billetera = documento("CERT_BILLETERA", "APROBADO")
+    const fila = filasDocumentos(
+      NIVEL_1,
+      [bancaria, billetera],
+      HOY,
+      ORDEN
+    ).find((f) => f.clave === "CERT_PAGO")
+    expect(fila).toMatchObject({
+      situacion: "aprobado",
+      principal: billetera,
+      porRevisar: null,
+      historial: [bancaria],
+    })
   })
 })

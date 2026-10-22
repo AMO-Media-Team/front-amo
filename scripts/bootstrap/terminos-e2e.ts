@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto"
 
 import type { Database } from "../../src/types/database.types"
+import type { RolCuentaPrueba } from "./organizacion"
 import { type ClienteSupabase, ErrorBootstrap } from "./supabase"
 
 type Enums = Database["public"]["Enums"]
@@ -28,6 +29,11 @@ export const TERMINOS_POR_ROL: Readonly<
     "POLITICA_DATOS",
     "CONDICIONES_COMERCIALES",
   ],
+}
+
+/** Tipo de rol externo de una cuenta de prueba (`null` para los internos, que no aceptan términos). */
+export function tipoRolExterno(rol: RolCuentaPrueba): TipoRolExterno | null {
+  return rol === "MEDIO" || rol === "ANUNCIANTE" ? rol : null
 }
 
 export const AGENTE_ACEPTACION_E2E =

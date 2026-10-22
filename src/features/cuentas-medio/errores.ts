@@ -49,6 +49,8 @@ export const MENSAJES_CUENTAS = {
   cuentaDesactualizada:
     "La cuenta cambió desde que abriste el formulario. Revisa los datos actuales e intenta de nuevo.",
   plataformaDistinta: "La red social de una cuenta no se puede cambiar.",
+  cuentaRepetida:
+    "Ya registraste esta cuenta. Búscala en la lista para verificarla o editarla.",
   perfilBloqueadoVerificada:
     "Una cuenta verificada no cambia de usuario ni de enlace. Si ahora usas otra cuenta, regístrala como nueva.",
   perfilBloqueadoRevision:

@@ -1,12 +1,9 @@
-import type { Route } from "next"
 import { ArrowRight, Wallet } from "lucide-react"
 import { useId } from "react"
 
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { RUTAS_MI_MEDIO } from "@/features/mi-medio/alta"
 import { InsigniaTono } from "@/features/operacion/components/distintivos"
-
-/** Datos de pago del medio (paquete MM). */
-const RUTA_PAGO = "/mi-medio/pago" as Route
 
 /**
  * El certificado del medio de pago depende de cómo quiere recibir los pagos
@@ -46,7 +43,7 @@ export function TarjetaPagoPendiente() {
           </div>
         </div>
         <div className="flex justify-end">
-          <EnlaceBoton href={RUTA_PAGO} variant="outline" size="lg">
+          <EnlaceBoton href={RUTAS_MI_MEDIO.pago} variant="outline" size="lg">
             Registrar datos de pago
             <ArrowRight data-icon="inline-end" aria-hidden />
           </EnlaceBoton>

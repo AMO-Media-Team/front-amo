@@ -361,7 +361,10 @@ function BarraSuma({ suma }: { suma: number }) {
               : "Completo"}
         </span>
       </p>
-      <span aria-hidden className="block h-1.5 overflow-hidden rounded-full bg-muted">
+      <span
+        aria-hidden
+        className="block h-1.5 overflow-hidden rounded-full bg-muted"
+      >
         <span
           className={cn(
             "block h-full rounded-full transition-[width] duration-500 ease-suave motion-reduce:transition-none",

@@ -66,8 +66,10 @@ export type PagoResumen = {
 export type CuentaSocialAlta = {
   id: string
   verificada: boolean
-  /** Tiene una verificación esperando la revisión de AMO. */
+  /** Su verificación, con la captura cargada, espera la revisión de AMO. */
   enRevision: boolean
+  /** Inició la verificación pero falta la captura: aún no le llega a AMO. */
+  esperandoCaptura: boolean
   /** Su última verificación fue rechazada. */
   rechazada: boolean
 }
@@ -105,6 +107,15 @@ export type PerfilEditable = {
   audienciaVerificada: (FilaAudienciaPerfil & { nombre: string })[]
   audienciaFija: AudienciaFija
   paises: OpcionPais[]
+}
+
+/** Tope anual del nivel y lo consumido en el año (`kpis_medio`). */
+export type ConsumoTope = {
+  /** `null`: sin tope (o sin nivel). */
+  tope: number | null
+  consumido: number
+  /** Año calendario del tope (el de hoy en Bogotá). */
+  anio: number
 }
 
 /** Valores del formulario de pago y lo que ya está guardado. */

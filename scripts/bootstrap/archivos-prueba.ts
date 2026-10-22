@@ -40,8 +40,15 @@ export function pngDeMuestra(
   fondo: ColorRgb,
   franja: ColorRgb
 ): Buffer {
-  if (!Number.isInteger(ancho) || !Number.isInteger(alto) || ancho < 1 || alto < 1) {
-    throw new RangeError("El PNG necesita un ancho y un alto enteros positivos.")
+  if (
+    !Number.isInteger(ancho) ||
+    !Number.isInteger(alto) ||
+    ancho < 1 ||
+    alto < 1
+  ) {
+    throw new RangeError(
+      "El PNG necesita un ancho y un alto enteros positivos."
+    )
   }
   const cabecera = Buffer.alloc(13)
   cabecera.writeUInt32BE(ancho, 0)

@@ -88,14 +88,15 @@ export function TarjetaSituacion({
   situacion,
   nombreNivel,
   progreso,
-  pasosFaltantes,
+  pasosFaltantes = 0,
   children,
   className,
 }: {
   situacion: SituacionMedio
   nombreNivel: string | null
-  progreso: ProgresoAlta
-  pasosFaltantes: number
+  /** Avance del alta (solo se dibuja en el alta). */
+  progreso?: ProgresoAlta
+  pasosFaltantes?: number
   children?: ReactNode
   className?: string
 }) {
@@ -125,7 +126,7 @@ export function TarjetaSituacion({
         />
       ) : null}
       <div className="flex items-start gap-4">
-        {situacion.tipo === "alta" ? (
+        {situacion.tipo === "alta" && progreso ? (
           <AnilloAvance progreso={progreso} />
         ) : (
           <span

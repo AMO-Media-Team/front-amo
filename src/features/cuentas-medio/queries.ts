@@ -14,6 +14,7 @@ import "server-only"
  */
 import { cache } from "react"
 
+import { mimeDeArchivo } from "@/lib/archivos/mime"
 import { crearClienteAdminOpcional } from "@/lib/supabase/admin"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import type { Json } from "@/types/database.types"
@@ -119,6 +120,12 @@ type FilaVerificacion = {
   validada_at: string | null
 }
 
+/** MIME por la extensión de la ruta: el visor lo necesita y la ruta no se expone. */
+function tipoDeCaptura(ruta: string | null): string | null {
+  if (!ruta) return null
+  return mimeDeArchivo({ name: ruta, type: "" }) || null
+}
+
 function aVerificacion(fila: FilaVerificacion): VerificacionCuentaMedio {
   return {
     id: fila.id,
@@ -127,6 +134,7 @@ function aVerificacion(fila: FilaVerificacion): VerificacionCuentaMedio {
     seguidoresReportados: fila.seguidores_reportados,
     seguidoresVerificados: fila.seguidores_verificados,
     tieneCaptura: fila.captura_path !== null,
+    capturaTipo: tipoDeCaptura(fila.captura_path),
     codigoExpiraAt: fila.codigo_expira_at,
     observaciones: fila.observaciones,
     creadaAt: fila.created_at,

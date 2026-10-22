@@ -26,10 +26,10 @@ import {
   type AccesoColas,
   type Cola,
   paginaAcotada,
+  paginaTrasFueraDeRango,
   rangoPagina,
 } from "./colas"
 import { type FilaPertinencia, ordenarPertinencia } from "./pertinencia"
-import type { TipoDocumentoMedio } from "./requisitos"
 import type { RangoFranja } from "./seguidores"
 import type {
   ColaCuentas,
@@ -60,12 +60,16 @@ export function hoyBogota(): string {
   return serializarFecha(new Date())
 }
 
+/**
+ * PostgREST responde 416 (`PGRST103`) a una página más allá del final, y sin
+ * el total: quien llama lo cuenta aparte y pide la última que sí existe.
+ */
+function fueraDeRango(error: { code?: string } | null): boolean {
+  return error?.code === "PGRST103"
+}
+
 /** La página pedida dentro del total (si ya no existe, la última). */
-function paginaDe<T>(
-  filas: T[],
-  total: number,
-  pagina: number
-): Pagina<T> {
+function paginaDe<T>(filas: T[], total: number, pagina: number): Pagina<T> {
   return { filas, total, pagina: paginaAcotada(pagina, total) }
 }
 
@@ -181,7 +185,8 @@ async function actividadDeMedios(
         .eq("verificada", true)
         .is("deleted_at", null),
     ])
-    if (documentos?.error) fallar("leer los documentos pendientes", documentos.error)
+    if (documentos?.error)
+      fallar("leer los documentos pendientes", documentos.error)
     if (verificaciones.error)
       fallar("leer las verificaciones pendientes", verificaciones.error)
     if (cuentas.error) fallar("leer las cuentas verificadas", cuentas.error)
@@ -239,10 +244,10 @@ export async function colaMedios(
     mediosSinEnviar(),
   ])
   // Una página que ya no existe (otro la vació) cae a la última que sí.
-  if (respuesta.error?.code === "PGRST103") {
-    const total = respuesta.count ?? 0
+  if (fueraDeRango(respuesta.error)) {
+    const total = await contarMediosEnviados()
     return total > 0
-      ? colaMedios(paginaAcotada(pagina, total), { verDocumentos })
+      ? colaMedios(paginaTrasFueraDeRango(pagina, total), { verDocumentos })
       : { filas: [], total: 0, pagina: 1, sinEnviar }
   }
   if (respuesta.error) fallar("leer la cola de medios", respuesta.error)
@@ -252,24 +257,22 @@ export async function colaMedios(
     filas.map((fila) => fila.id),
     verDocumentos
   )
-  const medios = filas.map(
-    (fila): MedioEnCola => ({
-      id: fila.id,
-      nombre: fila.nombre,
-      tipo: fila.tipo,
-      municipio: nombreMunicipio(fila.municipio_codigo),
-      departamento: departamentoJuntoAMunicipio(fila.departamento_codigo, {
-        corto: true,
-      }),
-      enviadoAt: fila.enviado_verificacion_at as string,
-      reenvio: fila.rechazado_at !== null,
-      documentosPorRevisar: verDocumentos
-        ? (actividad.documentos.get(fila.id) ?? 0)
-        : null,
-      cuentasPorVerificar: actividad.cuentasPorVerificar.get(fila.id) ?? 0,
-      cuentasVerificadas: actividad.cuentasVerificadas.get(fila.id) ?? 0,
-    })
-  )
+  const medios = filas.map((fila): MedioEnCola => ({
+    id: fila.id,
+    nombre: fila.nombre,
+    tipo: fila.tipo,
+    municipio: nombreMunicipio(fila.municipio_codigo),
+    departamento: departamentoJuntoAMunicipio(fila.departamento_codigo, {
+      corto: true,
+    }),
+    enviadoAt: fila.enviado_verificacion_at as string,
+    reenvio: fila.rechazado_at !== null,
+    documentosPorRevisar: verDocumentos
+      ? (actividad.documentos.get(fila.id) ?? 0)
+      : null,
+    cuentasPorVerificar: actividad.cuentasPorVerificar.get(fila.id) ?? 0,
+    cuentasVerificadas: actividad.cuentasVerificadas.get(fila.id) ?? 0,
+  }))
   return {
     ...paginaDe(medios, respuesta.count ?? medios.length, pagina),
     sinEnviar,
@@ -277,6 +280,37 @@ export async function colaMedios(
 }
 
 // ── Cola de documentos ───────────────────────────────────────────────────────
+
+const COLUMNAS_DOCUMENTO =
+  "id, tipo, metodo, archivo_path, estado_validacion, fecha_vencimiento, observaciones, validado_at, created_at"
+
+type FilaDocumento = Pick<
+  Tablas["documentos_medio"]["Row"],
+  | "id"
+  | "tipo"
+  | "metodo"
+  | "archivo_path"
+  | "estado_validacion"
+  | "fecha_vencimiento"
+  | "observaciones"
+  | "validado_at"
+  | "created_at"
+>
+
+/** Fila de `documentos_medio` → lo que ve quien revisa (la ruta solo da el MIME). */
+function documentoExpediente(fila: FilaDocumento): DocumentoExpediente {
+  return {
+    id: fila.id,
+    tipo: fila.tipo,
+    estado: fila.estado_validacion,
+    metodo: fila.metodo === "VIDEOLLAMADA" ? "VIDEOLLAMADA" : "ARCHIVO",
+    venceAt: fila.fecha_vencimiento,
+    subidoAt: fila.created_at,
+    observaciones: fila.observaciones,
+    validadoAt: fila.validado_at,
+    mime: mimeDeRuta(fila.archivo_path),
+  }
+}
 
 /** Documentos por revisar, el más antiguo primero. */
 export async function colaDocumentos(
@@ -287,7 +321,7 @@ export async function colaDocumentos(
   const { data, count, error } = await supabase
     .from("documentos_medio")
     .select(
-      `id, tipo, archivo_path, created_at,
+      `${COLUMNAS_DOCUMENTO},
        medio:medios!inner ( id, nombre, estado, nivel_verificacion, deleted_at )`,
       { count: "exact" }
     )
@@ -296,25 +330,22 @@ export async function colaDocumentos(
     .order("created_at", { ascending: true })
     .order("id")
     .range(desde, hasta)
-  if (error?.code === "PGRST103" && (count ?? 0) > 0) {
-    return colaDocumentos(paginaAcotada(pagina, count ?? 0))
+  if (fueraDeRango(error)) {
+    const total = await contarDocumentosPorRevisar()
+    return total > 0
+      ? colaDocumentos(paginaTrasFueraDeRango(pagina, total))
+      : { filas: [], total: 0, pagina: 1 }
   }
-  if (error?.code === "PGRST103") return { filas: [], total: 0, pagina: 1 }
   if (error) fallar("leer la cola de documentos", error)
-  const filas = data.map(
-    (fila): DocumentoEnCola => ({
-      id: fila.id,
-      tipo: fila.tipo,
-      subidoAt: fila.created_at,
-      mime: mimeDeRuta(fila.archivo_path) ?? "application/octet-stream",
-      medio: {
-        id: fila.medio.id,
-        nombre: fila.medio.nombre,
-        estado: fila.medio.estado,
-        nivel: fila.medio.nivel_verificacion,
-      },
-    })
-  )
+  const filas = data.map((fila): DocumentoEnCola => ({
+    ...documentoExpediente(fila),
+    medio: {
+      id: fila.medio.id,
+      nombre: fila.medio.nombre,
+      estado: fila.medio.estado,
+      nivel: fila.medio.nivel_verificacion,
+    },
+  }))
   return paginaDe(filas, count ?? filas.length, pagina)
 }
 
@@ -403,10 +434,10 @@ export async function colaCuentas(pagina: number): Promise<ColaCuentas> {
       .overrideTypes<FilaVerificacion[], { merge: false }>(),
     contarEsperandoCaptura(),
   ])
-  if (respuesta.error?.code === "PGRST103") {
-    const total = respuesta.count ?? 0
+  if (fueraDeRango(respuesta.error)) {
+    const total = await contarVerificacionesConCaptura()
     return total > 0
-      ? colaCuentas(paginaAcotada(pagina, total))
+      ? colaCuentas(paginaTrasFueraDeRango(pagina, total))
       : { filas: [], total: 0, pagina: 1, esperandoCaptura }
   }
   if (respuesta.error) fallar("leer la cola de cuentas", respuesta.error)
@@ -460,23 +491,11 @@ async function documentosExpediente(
   const supabase = await clienteSolicitud()
   const { data, error } = await supabase
     .from("documentos_medio")
-    .select(
-      "id, tipo, metodo, archivo_path, estado_validacion, fecha_vencimiento, observaciones, validado_at, created_at"
-    )
+    .select(COLUMNAS_DOCUMENTO)
     .eq("medio_id", medioId)
     .order("created_at", { ascending: false })
   if (error) fallar("leer los documentos del medio", error)
-  return data.map((fila) => ({
-    id: fila.id,
-    tipo: fila.tipo as TipoDocumentoMedio,
-    estado: fila.estado_validacion,
-    metodo: fila.metodo === "VIDEOLLAMADA" ? "VIDEOLLAMADA" : "ARCHIVO",
-    venceAt: fila.fecha_vencimiento,
-    subidoAt: fila.created_at,
-    observaciones: fila.observaciones,
-    validadoAt: fila.validado_at,
-    mime: mimeDeRuta(fila.archivo_path),
-  }))
+  return data.map(documentoExpediente)
 }
 
 async function verificacionesAbiertas(
@@ -535,21 +554,19 @@ export async function expedienteMedio(
       motivoEstado: medio.motivoEstado,
     },
     documentos,
-    cuentas: cuentas.map(
-      (cuenta): CuentaExpediente => ({
-        id: cuenta.id,
-        plataforma: cuenta.plataforma,
-        handle: cuenta.handle,
-        url: cuenta.url,
-        seguidoresVerificados: cuenta.seguidores,
-        ultimaVerificacionAt: cuenta.ultimaVerificacionAt,
-        verificada: cuenta.verificada,
-        vigencia: cuenta.vigencia,
-        venceAt: cuenta.venceAt,
-        franja: cuenta.franja?.nombre ?? null,
-        pendiente: abiertas.get(cuenta.id) ?? null,
-      })
-    ),
+    cuentas: cuentas.map((cuenta): CuentaExpediente => ({
+      id: cuenta.id,
+      plataforma: cuenta.plataforma,
+      handle: cuenta.handle,
+      url: cuenta.url,
+      seguidoresVerificados: cuenta.seguidores,
+      ultimaVerificacionAt: cuenta.ultimaVerificacionAt,
+      verificada: cuenta.verificada,
+      vigencia: cuenta.vigencia,
+      venceAt: cuenta.venceAt,
+      franja: cuenta.franja?.nombre ?? null,
+      pendiente: abiertas.get(cuenta.id) ?? null,
+    })),
     niveles,
     franjas,
     hoy: hoyBogota(),

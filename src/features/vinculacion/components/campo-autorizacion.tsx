@@ -127,8 +127,8 @@ export function CampoAutorizacion({
                 Autorizo a AMO a tratar mis datos personales
               </FieldLabel>
               <FieldDescription id={idAyuda}>
-                Los usaremos solo para revisar esta solicitud y contactarte, como
-                lo establece la Ley 1581 de 2012. Puedes pedir que los
+                Los usaremos solo para revisar esta solicitud y contactarte,
+                como lo establece la Ley 1581 de 2012. Puedes pedir que los
                 corrijamos o eliminemos cuando quieras.
                 {politica ? (
                   <>

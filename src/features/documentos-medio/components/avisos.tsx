@@ -110,8 +110,8 @@ export function AvisoPruebaVida({
       <p className="mt-1.5">
         <strong>¿Prefieres no enviarla?</strong> Deja este documento sin cargar
         y envía tu perfil a verificación: te contactaremos al correo o al
-        celular de tu cuenta para agendar una videollamada corta, sin grabarla
-        ni guardar imágenes de tu cara.
+        celular de tu cuenta para agendar una videollamada corta. De la
+        videollamada no guardamos imágenes de tu cara.
       </p>
     </Nota>
   )

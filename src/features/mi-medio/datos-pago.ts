@@ -32,6 +32,33 @@ export const TIPOS_DOCUMENTO_IDENTIDAD_BD: readonly TipoDocumentoIdentidad[] = [
 
 export const METODOS_PAGO_BD: readonly MetodoPago[] = ["BANCARIO", "BILLETERA"]
 
+/** Cómo se nombra cada tipo de documento en el formulario. */
+export const TIPOS_DOCUMENTO_IDENTIDAD: Readonly<
+  Record<TipoDocumentoIdentidad, string>
+> = {
+  CC: "Cédula de ciudadanía",
+  CE: "Cédula de extranjería",
+  PPT: "Permiso por Protección Temporal (PPT)",
+  PASAPORTE: "Pasaporte",
+  NIT: "NIT",
+}
+
+/** Sigla corta para el resumen («CC •••• 6789»). */
+export const SIGLAS_DOCUMENTO: Readonly<
+  Record<TipoDocumentoIdentidad, string>
+> = {
+  CC: "CC",
+  CE: "CE",
+  PPT: "PPT",
+  PASAPORTE: "Pasaporte",
+  NIT: "NIT",
+}
+
+export const METODOS_PAGO: Readonly<Record<MetodoPago, string>> = {
+  BANCARIO: "Cuenta bancaria",
+  BILLETERA: "Billetera digital",
+}
+
 /** Columnas cifradas de `medios_privado`. */
 export type ColumnaCifrada = "numero_documento_cifrado" | "datos_pago_cifrados"
 

@@ -84,8 +84,9 @@ function cargarModuloDeServidor<T>(especificador: string): T {
 
 /** Cifrado de `src/lib/cifrado.ts` con las llaves de `.env.local` (`AMO_CIFRADO_KEY`). */
 function cifradorDelEntorno(): CifradorPago {
-  const { cifrar, descifrar, huella, enmascarar } =
-    cargarModuloDeServidor<typeof ModuloCifrado>("../../src/lib/cifrado")
+  const { cifrar, descifrar, huella, enmascarar } = cargarModuloDeServidor<
+    typeof ModuloCifrado
+  >("../../src/lib/cifrado")
   return { cifrar, descifrar, huella, enmascarar }
 }
 
@@ -106,9 +107,11 @@ async function municipioActivo(
   const activos = () =>
     servicio
       .from("municipios")
-      .select("codigo, departamentos!inner(activo)")
+      .select(
+        "codigo, departamento:departamentos!municipios_departamento_codigo_fkey!inner(activo)"
+      )
       .eq("activo", true)
-      .eq("departamentos.activo", true)
+      .eq("departamento.activo", true)
   const { data: elegido, error } = await activos()
     .eq("codigo", preferido)
     .maybeSingle()
@@ -239,7 +242,8 @@ async function vaciarMedio(
   medioId: string
 ): Promise<void> {
   const borrar = [
-    () => servicio.from("verificaciones_cuenta").delete().eq("medio_id", medioId),
+    () =>
+      servicio.from("verificaciones_cuenta").delete().eq("medio_id", medioId),
     () => servicio.from("cuentas_sociales").delete().eq("medio_id", medioId),
     () => servicio.from("documentos_medio").delete().eq("medio_id", medioId),
     () => servicio.from("medios_privado").delete().eq("medio_id", medioId),
@@ -374,7 +378,8 @@ export async function restablecerMedioNuevo(
       .from("medios")
       .delete()
       .eq("id", MEDIO_NUEVO_E2E_ID)
-    if (errorBorrado) fallo("No se pudo borrar el medio nuevo E2E", errorBorrado)
+    if (errorBorrado)
+      fallo("No se pudo borrar el medio nuevo E2E", errorBorrado)
   } else if (accion === "LIMPIAR") {
     await vaciarMedio(servicio, MEDIO_NUEVO_E2E_ID)
     if (fila?.enviado_verificacion_at) {
@@ -382,7 +387,8 @@ export async function restablecerMedioNuevo(
         .from("medios")
         .update({ enviado_verificacion_at: null })
         .eq("id", MEDIO_NUEVO_E2E_ID)
-      if (errorEnvio) fallo("No se pudo sacar de la cola de verificación", errorEnvio)
+      if (errorEnvio)
+        fallo("No se pudo sacar de la cola de verificación", errorEnvio)
     }
   }
   await asegurarFilaMedio(servicio, MEDIO_NUEVO_E2E)
@@ -422,7 +428,9 @@ async function diasReverificacion(servicio: ClienteSupabase): Promise<number> {
   if (error) fallo("No se pudo leer medios.reverificacion_dias", error)
   const dias = Number(data.valor)
   if (!Number.isInteger(dias) || dias <= 0) {
-    throw new ErrorBootstrap("medios.reverificacion_dias no es un entero positivo.")
+    throw new ErrorBootstrap(
+      "medios.reverificacion_dias no es un entero positivo."
+    )
   }
   return dias
 }
@@ -496,10 +504,7 @@ async function leerMedioVerificado(
           }
         : null,
       pagoAlDia: pagoAlDia(privado.data, MEDIO_E2E_ID, cifrador),
-      documentosVigentes: tiposVigentes(
-        aprobados.data,
-        serializarFecha(ahora)
-      ),
+      documentosVigentes: tiposVigentes(aprobados.data, serializarFecha(ahora)),
       documentosExigidos: documentosExigidos(
         nivel.data.documentos_requeridos,
         PAGO_MEDIO_E2E.metodo
@@ -623,7 +628,8 @@ async function verificarCuenta(contexto: ContextoPasos): Promise<void> {
         })
         .select("id")
         .single()
-      if (error) fallo("No se pudo registrar la verificación de la cuenta", error)
+      if (error)
+        fallo("No se pudo registrar la verificación de la cuenta", error)
       return data.id
     }
   )
@@ -642,12 +648,15 @@ async function verificarCuenta(contexto: ContextoPasos): Promise<void> {
 }
 
 async function guardarPago(contexto: ContextoPasos): Promise<void> {
-  const { error } = await contexto.servicio.rpc("guardar_datos_pago_medio_srv", {
-    p_medio_id: MEDIO_E2E_ID,
-    p_actor_id: contexto.operador.usuarioId,
-    p_session_id: contexto.operador.sesionId,
-    p_datos: datosPagoE2E(MEDIO_E2E_ID, contexto.cifrador),
-  })
+  const { error } = await contexto.servicio.rpc(
+    "guardar_datos_pago_medio_srv",
+    {
+      p_medio_id: MEDIO_E2E_ID,
+      p_actor_id: contexto.operador.usuarioId,
+      p_session_id: contexto.operador.sesionId,
+      p_datos: datosPagoE2E(MEDIO_E2E_ID, contexto.cifrador),
+    }
+  )
   if (error) fallo("No se pudieron guardar los datos de pago", error)
 }
 
@@ -722,7 +731,8 @@ async function reenviarComoMedio(contexto: ContextoPasos): Promise<void> {
   const cliente = crearClientePublico(contexto.entorno)
   const { email, password, id } = contexto.usuario
   const ingreso = await cliente.auth.signInWithPassword({ email, password })
-  if (ingreso.error) fallo("El usuario del Medio E2E no pudo ingresar", ingreso.error)
+  if (ingreso.error)
+    fallo("El usuario del Medio E2E no pudo ingresar", ingreso.error)
   try {
     const { data, error } = await cliente.auth.getClaims()
     if (error || !data) {
@@ -736,7 +746,8 @@ async function reenviarComoMedio(contexto: ContextoPasos): Promise<void> {
         p_session_id: data.claims.session_id,
       }
     )
-    if (errorEnvio) fallo("No se pudo reenviar el medio a verificación", errorEnvio)
+    if (errorEnvio)
+      fallo("No se pudo reenviar el medio a verificación", errorEnvio)
   } finally {
     await cliente.auth.signOut({ scope: "local" })
   }

@@ -25,9 +25,7 @@ const RESTRICCIONES_DOCUMENTOS: Restricciones = {
     "Este archivo ya estaba registrado. Actualiza la página para verlo.",
 }
 
-export function interpretarErrorDocumento(
-  error: ErrorBd
-): ErrorBdInterpretado {
+export function interpretarErrorDocumento(error: ErrorBd): ErrorBdInterpretado {
   return interpretarErrorBd(error, RESTRICCIONES_DOCUMENTOS)
 }
 

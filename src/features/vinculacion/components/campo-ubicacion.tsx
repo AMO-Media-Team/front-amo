@@ -118,7 +118,8 @@ export function CampoUbicacion({
                   id={idDepartamento}
                   valor={departamento}
                   etiquetaValor={
-                    departamentoActual?.nombreCorto ?? `Departamento ${departamento}`
+                    departamentoActual?.nombreCorto ??
+                    `Departamento ${departamento}`
                   }
                   placeholder="Elige el departamento"
                   placeholderBusqueda="Busca un departamento…"

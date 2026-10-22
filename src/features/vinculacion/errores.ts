@@ -10,6 +10,8 @@ import { type ErroresCampo, fallo, type ResultadoFallo } from "@/lib/result"
 export const MENSAJES_VINCULACION = {
   envioFallido:
     "No pudimos enviar tu solicitud. Revisa tu conexión e intenta de nuevo en unos minutos; lo que escribiste sigue aquí.",
+  correoYaEnviado:
+    "Ya recibimos tu solicitud con este correo. Si lo escribiste mal, corrígelo para enviarla de nuevo.",
   municipioDesconocido: "Elige un municipio de la lista.",
   solicitudInexistente:
     "La solicitud ya no está en la cola. Actualiza la página para ver la información vigente.",
@@ -23,6 +25,8 @@ export const MENSAJES_VINCULACION = {
     "No tienes roles de medio que puedas asignar. Pide a un administrador que la atienda.",
   sinPermisoRegistrar:
     "Para registrar un medio nuevo necesitas el permiso «Editar medios». Puedes vincular la persona a un medio ya registrado.",
+  sinMedioParaVincular:
+    "Para invitar hay que registrar el medio, y eso exige el permiso «Editar medios». Pide a un administrador que la atienda.",
   sinMarcarInvitada:
     "La invitación quedó creada, pero la solicitud sigue en la cola. Descártala con el motivo «Invitada» para cerrarla.",
 } as const

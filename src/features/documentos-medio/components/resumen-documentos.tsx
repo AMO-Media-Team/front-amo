@@ -1,23 +1,16 @@
-import type { Route } from "next"
 import { ArrowRight, CircleAlert, CircleCheck, ListChecks } from "lucide-react"
 import { useId } from "react"
 
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { RUTAS_MI_MEDIO } from "@/features/mi-medio/alta"
 import { BarraLlenado } from "@/features/operacion/components/distintivos"
 import { formatearFecha } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import type { ResumenDocumentos as Resumen } from "../situacion"
-import {
-  detallesResumen,
-  type SiguientePaso,
-  tituloResumen,
-} from "../textos"
+import { detallesResumen, type SiguientePaso, tituloResumen } from "../textos"
 import type { NivelVerificacion } from "../tipos"
 import { Nota } from "./avisos"
-
-/** Hub del medio (paquete MM): desde ahí se envía el perfil a verificación. */
-const RUTA_MI_MEDIO = "/mi-medio" as Route
 
 function Icono({ resumen }: { resumen: Resumen }) {
   if (resumen.completo) {
@@ -43,7 +36,7 @@ function Siguiente({ paso }: { paso: SiguientePaso }) {
     <Nota tono="info" titulo="Ya puedes enviar tu perfil a verificación">
       <p>Hazlo desde Mi medio cuando tengas listo lo demás.</p>
       <EnlaceBoton
-        href={RUTA_MI_MEDIO}
+        href={RUTAS_MI_MEDIO.inicio}
         variant="outline"
         size="sm"
         className="mt-2"

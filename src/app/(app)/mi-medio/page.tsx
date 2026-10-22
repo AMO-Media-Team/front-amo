@@ -24,7 +24,13 @@ async function SeccionResumen({ medioId }: { medioId: string }) {
  */
 export default async function PaginaMiMedio() {
   const usuario = await requerirPermiso("medios.editar_propio")
-  const medio = usuario.medioId ? await medioPropio(usuario.medioId) : null
+  const { medioId } = usuario
+  // Si la lectura falla, el encabezado queda genérico y la sección (que repite
+  // la misma consulta, memorizada por solicitud) muestra el error con
+  // «Reintentar»: no se cae la página entera ni se confunde con «sin medio».
+  const medio = medioId
+    ? await medioPropio(medioId).catch(() => undefined)
+    : null
 
   return (
     <ContenedorPagina>
@@ -33,10 +39,10 @@ export default async function PaginaMiMedio() {
         titulo={medio?.nombre ?? "Mi medio"}
         descripcion="Tu perfil, tus documentos, tus datos de pago y tus cuentas, en un solo lugar."
       />
-      {medio ? (
+      {medioId && medio !== null ? (
         <LimiteErrorMiMedio recurso="tu medio">
           <Suspense fallback={<EsqueletoAltaMedio />}>
-            <SeccionResumen medioId={medio.id} />
+            <SeccionResumen medioId={medioId} />
           </Suspense>
         </LimiteErrorMiMedio>
       ) : (

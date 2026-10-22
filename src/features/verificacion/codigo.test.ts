@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { esHuellaHex, variantesCodigo } from "./codigo"
-
-describe("variantesCodigo", () => {
-  it("prueba la escritura original, en mayúsculas y sin separadores", () => {
-    expect(variantesCodigo(" ab3-k9p ")).toEqual(["ab3-k9p", "AB3-K9P", "AB3K9P"])
-  })
-
-  it("no repite variantes iguales", () => {
-    expect(variantesCodigo("AB3K9P")).toEqual(["AB3K9P"])
-    expect(variantesCodigo("ab3k9p")).toEqual(["ab3k9p", "AB3K9P"])
-  })
-
-  it("quita espacios, guiones y puntos intermedios", () => {
-    expect(variantesCodigo("AB3 K9P").at(-1)).toBe("AB3K9P")
-    expect(variantesCodigo("AB3.K9P").at(-1)).toBe("AB3K9P")
-  })
-
-  it("un texto vacío no tiene variantes", () => {
-    expect(variantesCodigo("   ")).toEqual([])
-  })
-})
+import { esHuellaHex, momentoCaptura } from "./codigo"
 
 describe("esHuellaHex", () => {
   it("solo hex de 64 en minúsculas", () => {
@@ -28,5 +8,30 @@ describe("esHuellaHex", () => {
     expect(esHuellaHex("A".repeat(64))).toBe(false)
     expect(esHuellaHex("a".repeat(63))).toBe(false)
     expect(esHuellaHex(null)).toBe(false)
+  })
+})
+
+describe("momentoCaptura", () => {
+  it("a tiempo si se cargó antes del vencimiento, con el margen en minutos", () => {
+    expect(
+      momentoCaptura("2026-10-22T15:00:00Z", "2026-10-22T15:30:00Z")
+    ).toEqual({ aTiempo: true, margenMinutos: 30 })
+  })
+
+  it("tarde si se cargó después (la BD no deja aprobarla)", () => {
+    expect(
+      momentoCaptura("2026-10-22T16:05:00Z", "2026-10-22T16:00:00Z")
+    ).toEqual({ aTiempo: false, margenMinutos: -5 })
+  })
+
+  it("el mismo instante del vencimiento aún vale", () => {
+    expect(
+      momentoCaptura("2026-10-22T16:00:00Z", "2026-10-22T16:00:00Z")?.aTiempo
+    ).toBe(true)
+  })
+
+  it("sin código (verificación manual) no aplica", () => {
+    expect(momentoCaptura("2026-10-22T16:00:00Z", null)).toBeNull()
+    expect(momentoCaptura("no es fecha", "2026-10-22T16:00:00Z")).toBeNull()
   })
 })

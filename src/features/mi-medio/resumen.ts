@@ -22,7 +22,55 @@ import {
   estadoRequisitos,
   nivelObjetivo,
 } from "./requisitos"
-import type { NivelVerificacion, ResumenMiMedio } from "./tipos"
+import type {
+  CuentaSocialAlta,
+  NivelVerificacion,
+  ResumenMiMedio,
+} from "./tipos"
+
+/** Lo que se lee de `cuentas_sociales` y `verificaciones_cuenta` para el alta. */
+export interface FilaCuentaAlta {
+  id: string
+  verificada: boolean
+}
+
+export interface FilaVerificacionAlta {
+  cuenta_social_id: string
+  metodo: string
+  estado_validacion: string
+  captura_path: string | null
+}
+
+/**
+ * En qué va cada cuenta para la lista de alta. Decide la verificación más
+ * reciente (llegan de la más nueva a la más vieja). Una PENDIENTE sin captura
+ * (código generado o manual a medias) aún no le llega al equipo AMO: no cuenta
+ * como «en revisión», como en «Mis cuentas».
+ */
+export function estadoCuentasAlta(
+  cuentas: readonly FilaCuentaAlta[],
+  verificaciones: readonly FilaVerificacionAlta[]
+): CuentaSocialAlta[] {
+  const ultima = new Map<string, FilaVerificacionAlta>()
+  for (const fila of verificaciones) {
+    if (!ultima.has(fila.cuenta_social_id)) {
+      ultima.set(fila.cuenta_social_id, fila)
+    }
+  }
+  return cuentas.map((cuenta) => {
+    const verificacion = ultima.get(cuenta.id)
+    const pendiente = verificacion?.estado_validacion === "PENDIENTE"
+    const conCaptura =
+      verificacion?.captura_path != null || verificacion?.metodo === "API"
+    return {
+      id: cuenta.id,
+      verificada: cuenta.verificada,
+      enRevision: pendiente && conCaptura,
+      esperandoCaptura: pendiente && !conCaptura,
+      rechazada: verificacion?.estado_validacion === "RECHAZADA",
+    }
+  })
+}
 
 export interface VistaAlta {
   situacion: SituacionMedio
@@ -77,6 +125,9 @@ export function datosAlta(
       verificadas: resumen.cuentas.filter((c) => c.verificada).length,
       enRevision: resumen.cuentas.filter((c) => !c.verificada && c.enRevision)
         .length,
+      sinCaptura: resumen.cuentas.filter(
+        (c) => !c.verificada && c.esperandoCaptura
+      ).length,
       rechazadas: resumen.cuentas.filter(
         (c) => !c.verificada && !c.enRevision && c.rechazada
       ).length,

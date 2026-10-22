@@ -9,11 +9,7 @@
  * `datos_sensibles.ver` (la política de `documentos_medio` pide ambos).
  */
 import type { Route } from "next"
-import {
-  createLoader,
-  parseAsInteger,
-  parseAsStringLiteral,
-} from "nuqs/server"
+import { createLoader, parseAsInteger, parseAsStringLiteral } from "nuqs/server"
 
 export const COLAS = ["medios", "cuentas", "documentos", "solicitudes"] as const
 
@@ -89,6 +85,19 @@ export function paginaAcotada(
   return Math.min(ultima, Math.max(1, Math.trunc(pagina)))
 }
 
+/**
+ * Página a la que se cae cuando la pedida ya no existe (otro vació la cola):
+ * la última con `total` elementos y siempre menor que la pedida (la primera
+ * nunca está fuera de rango), así el reintento termina aunque el total
+ * cambie entre la consulta y el conteo.
+ */
+export function paginaTrasFueraDeRango(pagina: number, total: number): number {
+  return Math.max(
+    1,
+    Math.min(Math.trunc(pagina) - 1, paginaAcotada(pagina, total))
+  )
+}
+
 /** Rango `[desde, hasta]` (inclusivo) de PostgREST para una página. */
 export function rangoPagina(
   pagina: number,
@@ -106,7 +115,9 @@ export function rutaCola(cola: Cola, pagina = 1): Route {
   if (cola !== COLA_POR_DEFECTO) parametros.set("cola", cola)
   if (pagina > 1) parametros.set("pagina", String(Math.trunc(pagina)))
   const consulta = parametros.toString()
-  return (consulta ? `${RUTA_VERIFICACION}?${consulta}` : RUTA_VERIFICACION) as Route
+  return (
+    consulta ? `${RUTA_VERIFICACION}?${consulta}` : RUTA_VERIFICACION
+  ) as Route
 }
 
 /** Pestaña de verificación de la ficha del medio (expediente y decisión). */

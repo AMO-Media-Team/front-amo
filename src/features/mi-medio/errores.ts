@@ -74,7 +74,10 @@ const RESTRICCIONES_PERFIL = {
     mensaje: "Cada categoría se elige una sola vez.",
     campo: "categoriaIds",
   },
-  medio_audiencia_paises_suma_chk: { mensaje: SUMA_AUDIENCIA, campo: "audiencia" },
+  medio_audiencia_paises_suma_chk: {
+    mensaje: SUMA_AUDIENCIA,
+    campo: "audiencia",
+  },
   medio_audiencia_paises_porcentaje_chk: {
     mensaje: "Cada porcentaje debe estar entre 0 y 100 %.",
     campo: "audiencia",
@@ -92,11 +95,12 @@ const RESTRICCIONES_PERFIL = {
 /** Qué tabla escribía la solicitud que falló (ubica el `AMO_CONFIG_INVALIDA`). */
 export type EscrituraPerfil = "medio" | "categorias" | "audiencia"
 
-const CAMPO_DE_ESCRITURA: Readonly<Record<EscrituraPerfil, CampoErrorPerfil>> = {
-  medio: "municipioCodigo",
-  categorias: "categoriaIds",
-  audiencia: "audiencia",
-}
+const CAMPO_DE_ESCRITURA: Readonly<Record<EscrituraPerfil, CampoErrorPerfil>> =
+  {
+    medio: "municipioCodigo",
+    categorias: "categoriaIds",
+    audiencia: "audiencia",
+  }
 
 const RESPALDO_CONFIG: Readonly<Record<EscrituraPerfil, string>> = {
   medio: MUNICIPIO_NO_HABILITADO,
@@ -109,7 +113,9 @@ function conCampo<C extends string>(
   campos: readonly C[]
 ): ErrorInterpretado<C> {
   const conocido = campos.find((c) => c === campo)
-  return conocido ? { mensaje, campo: conocido, esperado } : { mensaje, esperado }
+  return conocido
+    ? { mensaje, campo: conocido, esperado }
+    : { mensaje, esperado }
 }
 
 const CAMPOS_ERROR_PERFIL: readonly CampoErrorPerfil[] = [
@@ -170,7 +176,9 @@ export function interpretarErrorPago(
 }
 
 /** `enviar_medio_a_verificacion_srv`: su `detail` ya dice qué falta. */
-export function interpretarErrorEnvio(error: ErrorBd): ErrorInterpretado<never> {
+export function interpretarErrorEnvio(
+  error: ErrorBd
+): ErrorInterpretado<never> {
   const { mensaje, esperado } = interpretarErrorBd(error)
   return { mensaje, esperado }
 }

@@ -103,6 +103,18 @@ export function accionMedioNuevo(
   return recienRegistrado ? "LIMPIAR" : "RECREAR"
 }
 
+/** Lo que hizo el reinicio, en palabras, para el registro de la corrida. */
+export function describirAccionMedioNuevo(accion: AccionMedioNuevo): string {
+  switch (accion) {
+    case "CREAR":
+      return "registrado (PENDIENTE)"
+    case "LIMPIAR":
+      return "reiniciado a recién registrado"
+    case "RECREAR":
+      return "registrado de nuevo (había pasado por una decisión del equipo AMO)"
+  }
+}
+
 // ── Datos base ───────────────────────────────────────────────────────────────
 
 /** Qué agregar y qué quitar para pasar de `actual` a `deseado`. */

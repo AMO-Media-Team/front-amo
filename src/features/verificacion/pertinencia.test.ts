@@ -6,6 +6,7 @@ import {
   multiplicadorEnRango,
   ordenarPertinencia,
   parsearMultiplicador,
+  pasoMultiplicador,
   redondearMultiplicador,
   textoMultiplicador,
 } from "./pertinencia"
@@ -76,5 +77,21 @@ describe("ordenarPertinencia", () => {
       fila("Envigado", 1),
     ]).map((f) => f.municipio)
     expect(orden).toEqual(["Ipiales", "Envigado", "Pasto"])
+  })
+})
+
+describe("pasoMultiplicador", () => {
+  it("sube y baja de a un paso sin errores de coma flotante", () => {
+    expect(pasoMultiplicador(1, 0.05)).toBe(1.05)
+    expect(pasoMultiplicador(1.15, -0.05)).toBe(1.1)
+  })
+
+  it("se queda en los límites del rango", () => {
+    expect(pasoMultiplicador(1.48, 0.05)).toBe(1.5)
+    expect(pasoMultiplicador(0.52, -0.05)).toBe(0.5)
+  })
+
+  it("sin un valor válido parte del neutro", () => {
+    expect(pasoMultiplicador(Number.NaN, 0.05)).toBe(1.05)
   })
 })

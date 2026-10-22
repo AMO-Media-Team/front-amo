@@ -15,15 +15,31 @@ describe("normalizarUsuarioCuenta", () => {
   it.each([
     ["INSTAGRAM", "@Noticias.Pasto", "noticias.pasto"],
     ["INSTAGRAM", "  noticias_pasto  ", "noticias_pasto"],
-    ["INSTAGRAM", "https://www.instagram.com/noticias.pasto/?hl=es", "noticias.pasto"],
+    [
+      "INSTAGRAM",
+      "https://www.instagram.com/noticias.pasto/?hl=es",
+      "noticias.pasto",
+    ],
     ["INSTAGRAM", "instagram.com/noticias.pasto", "noticias.pasto"],
     ["TIKTOK", "@LaVozDelSur", "lavozdelsur"],
     ["TIKTOK", "https://www.tiktok.com/@lavozdelsur?lang=es", "lavozdelsur"],
-    ["TIKTOK", "https://www.tiktok.com/@lavozdelsur/video/7412345678901234567", "lavozdelsur"],
+    [
+      "TIKTOK",
+      "https://www.tiktok.com/@lavozdelsur/video/7412345678901234567",
+      "lavozdelsur",
+    ],
     ["FACEBOOK", "NoticiasPasto", "NoticiasPasto"],
     ["FACEBOOK", "https://m.facebook.com/NoticiasPasto/", "NoticiasPasto"],
-    ["FACEBOOK", "https://www.facebook.com/profile.php?id=100089234567890", "100089234567890"],
-    ["FACEBOOK", "https://www.facebook.com/people/Noticias-Pasto/100089234567890/", "100089234567890"],
+    [
+      "FACEBOOK",
+      "https://www.facebook.com/profile.php?id=100089234567890",
+      "100089234567890",
+    ],
+    [
+      "FACEBOOK",
+      "https://www.facebook.com/people/Noticias-Pasto/100089234567890/",
+      "100089234567890",
+    ],
     ["FACEBOOK", "Pasto-Informa", "Pasto-Informa"],
   ] as const)("%s «%s» → %s", (plataforma, texto, usuario) => {
     expect(normalizarUsuarioCuenta(plataforma, texto)).toEqual({
@@ -75,12 +91,12 @@ describe("normalizarUsuarioCuenta", () => {
   })
 
   it("aplica las reglas de usuario de cada red", () => {
-    expect(normalizarUsuarioCuenta("INSTAGRAM", "noticias pasto")).toMatchObject(
-      { ok: false }
-    )
-    expect(normalizarUsuarioCuenta("INSTAGRAM", "a".repeat(31))).toMatchObject(
-      { ok: false }
-    )
+    expect(
+      normalizarUsuarioCuenta("INSTAGRAM", "noticias pasto")
+    ).toMatchObject({ ok: false })
+    expect(normalizarUsuarioCuenta("INSTAGRAM", "a".repeat(31))).toMatchObject({
+      ok: false,
+    })
     expect(normalizarUsuarioCuenta("TIKTOK", "a")).toMatchObject({ ok: false })
     expect(normalizarUsuarioCuenta("FACEBOOK", "Noticias Pasto")).toMatchObject(
       { ok: false }
@@ -93,7 +109,10 @@ describe("normalizarUsuarioCuenta", () => {
 
   it("no analiza entradas enormes", () => {
     expect(
-      normalizarUsuarioCuenta("INSTAGRAM", `https://instagram.com/${"a".repeat(400)}`)
+      normalizarUsuarioCuenta(
+        "INSTAGRAM",
+        `https://instagram.com/${"a".repeat(400)}`
+      )
     ).toMatchObject({ ok: false })
   })
 })

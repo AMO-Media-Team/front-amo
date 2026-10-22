@@ -6,6 +6,7 @@ import {
   COLAS,
   COLAS_VERIFICACION,
   paginaAcotada,
+  paginaTrasFueraDeRango,
   rangoPagina,
   rutaCola,
   rutaRevisionMedio,
@@ -14,9 +15,10 @@ import {
 
 describe("parámetros de la URL", () => {
   it("toma la cola y la página, con medios y 1 por defecto", () => {
-    expect(cargarParametrosVerificacion("?cola=documentos&pagina=3")).toEqual(
-      { cola: "documentos", pagina: 3 }
-    )
+    expect(cargarParametrosVerificacion("?cola=documentos&pagina=3")).toEqual({
+      cola: "documentos",
+      pagina: 3,
+    })
     expect(cargarParametrosVerificacion("")).toEqual({
       cola: "medios",
       pagina: 1,
@@ -62,6 +64,18 @@ describe("paginación", () => {
     expect(paginaAcotada(-3, 0)).toBe(1)
     expect(paginaAcotada(Number.NaN, 100)).toBe(1)
     expect(paginaAcotada(2.7, 100, 20)).toBe(2)
+  })
+
+  it("tras una página fuera de rango cae a la última que existe", () => {
+    expect(paginaTrasFueraDeRango(5, 30)).toBe(2)
+    expect(paginaTrasFueraDeRango(3, 0)).toBe(1)
+  })
+
+  it("el reintento siempre baja de página aunque el total haya crecido", () => {
+    // La consulta vio pocas filas y el conteo ya ve muchas: igual baja.
+    expect(paginaTrasFueraDeRango(3, 500)).toBe(2)
+    expect(paginaTrasFueraDeRango(2, 500)).toBe(1)
+    expect(paginaTrasFueraDeRango(1, 500)).toBe(1)
   })
 
   it("calcula el rango inclusivo de PostgREST", () => {

@@ -14,6 +14,7 @@ import {
   esquemaDescripcionArchivo,
   type LimitesArchivo,
 } from "@/lib/archivos/esquemas"
+import { MIB } from "@/lib/archivos/formato"
 import type { ReglasArchivo } from "@/lib/archivos/validar"
 import { Constants } from "@/types/database.types"
 
@@ -40,8 +41,21 @@ export const LIMITES_CAPTURA: LimitesArchivo = {
   maxBytes: BUCKETS.documentos.maxBytes,
 }
 
-/** Lo que la zona de carga revisa antes de subir (y el motor tras comprimir). */
+/** Lo que el motor de subida exige al archivo final (ya comprimido). */
 export const REGLAS_CAPTURA: ReglasArchivo = LIMITES_CAPTURA
+
+/**
+ * Al elegir: una captura o foto del celular puede pesar más de 10 MB y se
+ * reduce en el dispositivo antes de subirla, así que la zona de carga solo
+ * descarta lo desmesurado; el límite real se aplica después de comprimir.
+ */
+export const REGLAS_SELECCION_CAPTURA: ReglasArchivo = {
+  mimes: MIMES_CAPTURA,
+  maxBytes: 40 * MIB,
+}
+
+export const AYUDA_CAPTURA =
+  "Imagen JPG, PNG, WebP o HEIC. Se reduce sola antes de enviarla."
 
 const id = z.uuid({ error: "Identificador inválido." })
 
@@ -155,7 +169,11 @@ function resolver(
 ): DatosCuenta | null {
   const resultado = interpretarPerfil(datos.plataforma, datos.perfil)
   if (!resultado.ok) {
-    ctx.addIssue({ code: "custom", path: ["perfil"], message: resultado.mensaje })
+    ctx.addIssue({
+      code: "custom",
+      path: ["perfil"],
+      message: resultado.mensaje,
+    })
     return null
   }
   return {
@@ -172,22 +190,42 @@ export const esquemaRegistrarCuenta = camposCuenta.transform(
 
 /**
  * Edición: la plataforma no cambia (la BD no lo permite); viaja para resolver
- * el perfil y el servidor la compara con la guardada.
+ * el perfil y el servidor la compara con la guardada. `perfil: null` = el
+ * usuario no cambia (así una cuenta verificada, cuyo usuario no se edita,
+ * guarda su tarifa aunque su usuario sea anterior a las reglas de hoy).
  */
-export const esquemaEditarCuenta = camposCuenta
-  .extend({
+export const esquemaEditarCuenta = z
+  .object({
     cuentaId: id,
     actualizadaAt: z.string().min(1, "Falta la versión del registro.").max(64),
+    plataforma,
+    perfil: perfil.nullable(),
+    tarifa,
   })
   .transform((datos, ctx) => {
-    const cuenta = resolver(datos, ctx)
-    if (!cuenta) return z.NEVER
-    return {
-      ...cuenta,
+    const base = {
       cuentaId: datos.cuentaId,
       actualizadaAt: datos.actualizadaAt,
+      plataforma: datos.plataforma,
+      tarifaReferencia: datos.tarifa,
     }
+    if (datos.perfil === null) return { ...base, perfil: null }
+    const cuenta = resolver({ ...datos, perfil: datos.perfil }, ctx)
+    if (!cuenta) return z.NEVER
+    return { ...base, perfil: { handle: cuenta.handle, url: cuenta.url } }
   })
+
+/**
+ * Formulario de alta y edición (cliente). Al editar, el perfil solo se
+ * valida si se cambió: el guardado puede ser anterior a las reglas de hoy, y
+ * sin cambios viaja como `null` a `esquemaEditarCuenta`.
+ */
+export function esquemaFormularioCuenta(perfilInicial: string | null) {
+  return camposCuenta.superRefine((datos, ctx) => {
+    if (perfilInicial !== null && datos.perfil.trim() === perfilInicial) return
+    resolver(datos, ctx)
+  })
+}
 
 export type EntradaCuenta = z.input<typeof esquemaRegistrarCuenta>
 export type EntradaEditarCuenta = z.input<typeof esquemaEditarCuenta>

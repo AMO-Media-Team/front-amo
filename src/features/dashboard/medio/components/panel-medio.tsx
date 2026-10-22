@@ -1,9 +1,20 @@
 import "server-only"
 
 import { RadioTower } from "lucide-react"
+import { Suspense } from "react"
 
 import { EsqueletoTarjetaGrafico } from "@/components/charts/esqueleto-grafico"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import {
+  enAlta,
+  RUTAS_MI_MEDIO,
+  situacionMedio,
+} from "@/features/mi-medio/alta"
+import { AltaMedio } from "@/features/mi-medio/components/alta-medio"
+import { LimiteErrorMiMedio } from "@/features/mi-medio/components/limite-error-mi-medio"
+import { TarjetaSituacion } from "@/features/mi-medio/components/tarjeta-situacion"
+import { medioPropio, resumenMiMedio } from "@/features/mi-medio/queries"
 import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { cn } from "@/lib/utils"
@@ -35,6 +46,7 @@ import {
 } from "../queries"
 import {
   EsqueletoHeroGanancias,
+  EsqueletoInicioMedio,
   EsqueletoReputacion,
   EsqueletoTopeAnual,
 } from "./esqueletos-medio"
@@ -194,32 +206,24 @@ const RAIZ =
 const COLUMNA =
   "contents @4xl/panel:flex @4xl/panel:min-w-0 @4xl/panel:flex-col @4xl/panel:gap-5"
 
-/**
- * Panel del medio, mobile-first: lo ganado (cifra héroe), el avance del tope
- * anual de su nivel, sus próximas acciones con cuenta regresiva, la serie de
- * ganancias, los negocios en curso y su reputación. Las RPC son definer y
- * filtran por su medio (`mi_medio_id()`).
- */
-export function PanelMedio({
-  usuario,
-  periodo,
-  ahora,
-}: {
+interface PropsPanel {
   usuario: UsuarioSesion
   periodo: PeriodoPanel
   ahora: Date
-}) {
-  const { medioId } = usuario
-  if (!medioId) {
-    return (
-      <EstadoVacio
-        icono={RadioTower}
-        titulo="Tu cuenta aún no está vinculada a un medio"
-        descripcion="Cuando el equipo de AMO la asocie a tu medio verás aquí tus ganancias, tu avance y tus pendientes."
-        className="flex-none py-16"
-      />
-    )
-  }
+}
+
+/**
+ * Indicadores del medio verificado, mobile-first: lo ganado (cifra héroe), el
+ * avance del tope anual de su nivel, sus próximas acciones con cuenta
+ * regresiva, la serie de ganancias, los negocios en curso y su reputación.
+ * Las RPC son definer y filtran por su medio (`mi_medio_id()`).
+ */
+function IndicadoresMedio({
+  usuario,
+  periodo,
+  ahora,
+  medioId,
+}: PropsPanel & { medioId: string }) {
   const conNegocios = tieneAlgunPermiso(usuario, ["asignaciones.ver_propias"])
 
   return (
@@ -283,5 +287,72 @@ export function PanelMedio({
         </BloquePanel>
       </div>
     </div>
+  )
+}
+
+function SinMedioVinculado() {
+  return (
+    <EstadoVacio
+      icono={RadioTower}
+      titulo="Tu cuenta aún no está vinculada a un medio"
+      descripcion="Cuando el equipo de AMO la asocie a tu medio verás aquí tus ganancias, tu avance y tus pendientes."
+      className="flex-none py-16"
+    />
+  )
+}
+
+/**
+ * Mientras el medio no está verificado sus indicadores estarían vacíos: la
+ * lista de alta los reemplaza (lo que le falta y el envío a verificación). Un
+ * medio suspendido conserva su historia, con la situación encima.
+ */
+async function PanelSegunVerificacion({
+  medioId,
+  ...props
+}: PropsPanel & { medioId: string }) {
+  const medio = await medioPropio(medioId)
+  if (!medio) return <SinMedioVinculado />
+  const situacion = situacionMedio({
+    estado: medio.estado,
+    nivel: medio.nivel,
+    enviadoVerificacionAt: medio.enviadoVerificacionAt,
+    motivoEstado: medio.motivoEstado,
+  })
+  if (enAlta(situacion)) {
+    const resumen = await resumenMiMedio(medioId)
+    return resumen ? <AltaMedio resumen={resumen} /> : <SinMedioVinculado />
+  }
+  return (
+    <div className="flex flex-col gap-4 sm:gap-5">
+      {situacion.tipo === "suspendido" ? (
+        <TarjetaSituacion situacion={situacion} nombreNivel={null}>
+          <EnlaceBoton
+            href={RUTAS_MI_MEDIO.inicio}
+            variant="outline"
+            className="w-full sm:w-fit"
+          >
+            Ver mi medio
+          </EnlaceBoton>
+        </TarjetaSituacion>
+      ) : null}
+      <IndicadoresMedio {...props} medioId={medioId} />
+    </div>
+  )
+}
+
+/**
+ * Panel del medio en Inicio: sus indicadores si está verificado o, durante el
+ * alta, la lista de alta de «Mi medio». La situación se lee una vez (la
+ * consulta se memoriza por solicitud y la comparten los bloques).
+ */
+export function PanelMedio(props: PropsPanel) {
+  const { medioId } = props.usuario
+  if (!medioId) return <SinMedioVinculado />
+  return (
+    <LimiteErrorMiMedio recurso="tu medio">
+      <Suspense fallback={<EsqueletoInicioMedio />}>
+        <PanelSegunVerificacion {...props} medioId={medioId} />
+      </Suspense>
+    </LimiteErrorMiMedio>
   )
 }

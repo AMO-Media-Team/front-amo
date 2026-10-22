@@ -8,7 +8,6 @@ import {
   RotateCcw,
   UserRoundSearch,
 } from "lucide-react"
-import type { Route } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
@@ -179,7 +178,7 @@ function SinEnviar({
         {primeros.map((medio) => (
           <li key={medio.id}>
             <Link
-              href={`/operacion/medios/${medio.id}` as Route}
+              href={rutaRevisionMedio(medio.id)}
               className="inline-flex min-h-8 items-center gap-1.5 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium transition-colors hover:bg-muted focus-visible:anillo-foco"
               title={`Registrado el ${formatearFecha(medio.creadoAt)}`}
             >

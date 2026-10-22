@@ -1,8 +1,10 @@
 import {
+  BadgeCheck,
   Contact,
   FileText,
   Handshake,
   LayoutDashboard,
+  MapPinned,
   UsersRound,
 } from "lucide-react"
 import type { Metadata } from "next"
@@ -37,6 +39,16 @@ import {
 import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
 import { cargarDatosGestion } from "@/features/usuarios/gestion"
 import type { OrganizacionFija } from "@/features/usuarios/tipos"
+import {
+  PESTANA_PERTINENCIA,
+  PESTANA_VERIFICACION,
+} from "@/features/verificacion/colas"
+import {
+  EsqueletoExpediente,
+  EsqueletoPertinencia,
+} from "@/features/verificacion/components/esqueletos"
+import { SeccionPertinenciaMedio } from "@/features/verificacion/components/seccion-pertinencia"
+import { SeccionVerificacionMedio } from "@/features/verificacion/components/seccion-verificacion"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -49,10 +61,11 @@ export async function generateMetadata({
 }
 
 /**
- * Ficha de un medio: cabecera e indicadores, y pestañas Resumen, Cuentas
- * sociales, Asignaciones, Documentos y Usuarios. El equipo AMO edita sus datos
- * e invita a su equipo desde aquí. Cada sección consulta por su cuenta y llega
- * en streaming; lo que el rol no puede ver o hacer no se consulta.
+ * Ficha de un medio: cabecera e indicadores, y pestañas Resumen, Verificación,
+ * Cuentas sociales, Asignaciones, Documentos, Pertinencia y Usuarios. El
+ * equipo AMO edita sus datos, lo verifica e invita a su equipo desde aquí.
+ * Cada sección consulta por su cuenta y llega en streaming; lo que el rol no
+ * puede ver o hacer no se consulta.
  */
 export default async function PaginaMedio({
   params,
@@ -69,6 +82,9 @@ export default async function PaginaMedio({
   const puedeEditar = tieneAlgunPermiso(usuario, ["medios.editar"])
   const verUsuarios = tieneAlgunPermiso(usuario, ["usuarios.ver"])
   const puedeInvitar = tieneAlgunPermiso(usuario, ["usuarios.invitar"])
+  const puedeClasificar = tieneAlgunPermiso(usuario, [
+    "medios.clasificar_pertinencia",
+  ])
 
   const [medio, cuentas, categorias, gestion] = await Promise.all([
     obtenerMedio(id),
@@ -95,6 +111,28 @@ export default async function PaginaMedio({
         </Diferida>
       ),
     },
+    // ADM-001: expediente y decisión (las colas de verificación enlazan aquí).
+    ...(verVerificaciones
+      ? [
+          {
+            clave: PESTANA_VERIFICACION,
+            titulo: "Verificación",
+            icono: <BadgeCheck aria-hidden />,
+            contenido: (
+              <Diferida
+                recurso="el expediente de verificación"
+                respaldo={<EsqueletoExpediente />}
+              >
+                <SeccionVerificacionMedio
+                  medio={medio}
+                  verDocumentos={verDocumentos}
+                  verSensibles={verSensibles}
+                />
+              </Diferida>
+            ),
+          },
+        ]
+      : []),
     {
       clave: "cuentas",
       titulo: "Cuentas sociales",
@@ -131,6 +169,20 @@ export default async function PaginaMedio({
       ),
     })
   }
+  // ADM-006: la consulta quien ve el medio; la clasifica quien tiene el permiso.
+  pestanas.push({
+    clave: PESTANA_PERTINENCIA,
+    titulo: "Pertinencia",
+    icono: <MapPinned aria-hidden />,
+    contenido: (
+      <Diferida
+        recurso="la pertinencia geográfica"
+        respaldo={<EsqueletoPertinencia />}
+      >
+        <SeccionPertinenciaMedio medio={medio} puedeEditar={puedeClasificar} />
+      </Diferida>
+    ),
+  })
   if (verUsuarios) {
     pestanas.push({
       clave: PESTANA_USUARIOS,

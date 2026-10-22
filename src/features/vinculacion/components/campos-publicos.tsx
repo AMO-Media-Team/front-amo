@@ -35,10 +35,7 @@ import { formatearNumero } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { Constants } from "@/types/database.types"
 
-import {
-  type EntradaSolicitudVinculacion,
-  LIMITES_SOLICITUD,
-} from "../schemas"
+import { type EntradaSolicitudVinculacion, LIMITES_SOLICITUD } from "../schemas"
 
 /**
  * Campos del formulario público `/vincular`, con la misma presencia que los
@@ -51,7 +48,8 @@ type Campo = FieldPath<EntradaSolicitudVinculacion>
 
 /** Error y estado de un campo del formulario de la solicitud. */
 export function useCampo(nombre: Campo) {
-  const { control, getFieldState } = useFormContext<EntradaSolicitudVinculacion>()
+  const { control, getFieldState } =
+    useFormContext<EntradaSolicitudVinculacion>()
   const formState = useFormState({ control, name: nombre })
   return getFieldState(nombre, formState)
 }
@@ -115,7 +113,10 @@ export function CampoTextoPublico({
     invalid
   )
   return (
-    <Field data-invalid={invalid || undefined} className={cn("gap-2", className)}>
+    <Field
+      data-invalid={invalid || undefined}
+      className={cn("gap-2", className)}
+    >
       <EtiquetaCampo htmlFor={id} opcional={opcional}>
         {etiqueta}
       </EtiquetaCampo>

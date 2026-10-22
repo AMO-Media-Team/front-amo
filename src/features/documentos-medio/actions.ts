@@ -97,8 +97,7 @@ async function documentoPorRuta(
   medioId: string,
   ruta: string
 ): Promise<
-  | { fila: FilaDocumento | null; error: null }
-  | { fila: null; error: ErrorBd }
+  { fila: FilaDocumento | null; error: null } | { fila: null; error: ErrorBd }
 > {
   const { data, error } = await supabase
     .from("documentos_medio")

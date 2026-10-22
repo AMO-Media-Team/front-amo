@@ -4,13 +4,11 @@
  * captura: el código se muestra una sola vez (`CodigoGenerado`) y la captura
  * se firma por el id de su verificación.
  */
-import type {
-  EstadoValidacion,
-  Plataforma,
-} from "@/features/operacion/estados"
+import type { EstadoValidacion, Plataforma } from "@/features/operacion/estados"
 import type { Database } from "@/types/database.types"
 
-export type MetodoVerificacion = Database["public"]["Enums"]["metodo_verificacion"]
+export type MetodoVerificacion =
+  Database["public"]["Enums"]["metodo_verificacion"]
 
 /** Un intento de verificación (o de reverificación) de la cuenta. */
 export interface VerificacionCuentaMedio {
@@ -20,6 +18,8 @@ export interface VerificacionCuentaMedio {
   seguidoresReportados: number
   seguidoresVerificados: number | null
   tieneCaptura: boolean
+  /** MIME de la captura (por la extensión de su ruta, que no sale del servidor). */
+  capturaTipo: string | null
   /** Solo en CODIGO_HISTORIA: hasta cuándo se puede cargar la captura. */
   codigoExpiraAt: string | null
   /** Observaciones de quien la revisó (motivo del rechazo). */

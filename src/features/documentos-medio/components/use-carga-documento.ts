@@ -56,8 +56,11 @@ export function useCargaDocumento(
     reglas: REGLAS_DOCUMENTO,
   })
   const [eleccion, setEleccion] = useState<Eleccion | null>(null)
-  const { subir: subirArchivo, reintentar: reintentarSubida, reiniciar } =
-    subida
+  const {
+    subir: subirArchivo,
+    reintentar: reintentarSubida,
+    reiniciar,
+  } = subida
 
   // La vista previa se libera al cambiar de archivo y al salir de la página.
   useEffect(() => {

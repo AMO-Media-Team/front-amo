@@ -62,12 +62,7 @@ export interface ItemNavegacion {
 }
 
 export type IdGrupoNavegacion =
-  | "general"
-  | "negocio"
-  | "operacion"
-  | "finanzas"
-  | "administracion"
-  | "cuenta"
+  "general" | "negocio" | "operacion" | "finanzas" | "administracion" | "cuenta"
 
 export interface GrupoNavegacion {
   id: IdGrupoNavegacion

@@ -1,9 +1,10 @@
 "use client"
 
-import { ArrowLeft, MailCheck } from "lucide-react"
+import { ArrowLeft, MailCheck, PencilLine } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { Button } from "@/components/ui/button"
 
 const PASOS = [
   "Revisamos tus redes y los datos de tu medio.",
@@ -19,9 +20,15 @@ const PASOS = [
 export function SolicitudEnviada({
   nombreMedio,
   email,
+  onCorregir,
 }: {
   nombreMedio: string
   email: string
+  /**
+   * Vuelve al formulario con lo escrito para corregir el correo: con el mismo
+   * correo la BD no registra un segundo envío.
+   */
+  onCorregir: () => void
 }) {
   const titulo = useRef<HTMLHeadingElement>(null)
 
@@ -58,7 +65,7 @@ export function SolicitudEnviada({
             <li key={paso} className="flex items-start gap-3 text-sm">
               <span
                 aria-hidden
-                className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/12 text-xs font-semibold text-primary cifras"
+                className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/12 text-xs font-semibold cifras text-primary"
               >
                 {indice + 1}
               </span>
@@ -69,13 +76,24 @@ export function SolicitudEnviada({
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
         ¿Ya tienes una cuenta en AMO? Ingresa con ella: no hace falta otra
-        solicitud. ¿Escribiste mal el correo? Envía la solicitud de nuevo con el
-        correcto.
+        solicitud. ¿Escribiste mal el correo? Corrígelo y envíala de nuevo.
       </p>
-      <EnlaceBoton variant="outline" size="lg" className="h-11" href="/ingresar">
-        <ArrowLeft data-icon="inline-start" aria-hidden />
-        Ir a ingresar
-      </EnlaceBoton>
+      <div className="flex flex-col gap-3">
+        <EnlaceBoton size="lg" className="h-11" href="/ingresar">
+          <ArrowLeft data-icon="inline-start" aria-hidden />
+          Ir a ingresar
+        </EnlaceBoton>
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          className="h-11"
+          onClick={onCorregir}
+        >
+          <PencilLine data-icon="inline-start" aria-hidden />
+          Corregir el correo
+        </Button>
+      </div>
     </div>
   )
 }

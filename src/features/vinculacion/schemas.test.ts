@@ -48,7 +48,11 @@ describe("esquemaSolicitudVinculacion", () => {
       mensaje: "Hola,\n\n queremos unirnos.",
       autorizaDatos: true,
       cuentas: [
-        { plataforma: "INSTAGRAM", usuario: "noticias.sur", seguidores: 45_000 },
+        {
+          plataforma: "INSTAGRAM",
+          usuario: "noticias.sur",
+          seguidores: 45_000,
+        },
         { plataforma: "TIKTOK", usuario: "noticiassur", seguidores: null },
       ],
     })
@@ -168,9 +172,9 @@ describe("cuentaVacia y VALORES_SOLICITUD", () => {
 
 describe("esEnvioAutomatico", () => {
   it("detecta el campo trampa con contenido", () => {
-    expect(esEnvioAutomatico({ ...VALIDA, sitioWeb: "https://spam.example" })).toBe(
-      true
-    )
+    expect(
+      esEnvioAutomatico({ ...VALIDA, sitioWeb: "https://spam.example" })
+    ).toBe(true)
     expect(esEnvioAutomatico({ sitioWeb: 1 })).toBe(true)
   })
 
@@ -194,7 +198,11 @@ describe("datosParaRpc", () => {
       celular: "300 123 4567",
       municipio_codigo: "52001",
       cuentas: [
-        { plataforma: "INSTAGRAM", usuario: "noticias.sur", seguidores: 45_000 },
+        {
+          plataforma: "INSTAGRAM",
+          usuario: "noticias.sur",
+          seguidores: 45_000,
+        },
         { plataforma: "TIKTOK", usuario: "noticiassur" },
       ],
       mensaje: "Hola,\n\n queremos unirnos.",

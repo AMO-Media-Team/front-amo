@@ -8,7 +8,6 @@ import {
   ordenarDepartamentos,
   ordenarMunicipios,
 } from "@/features/territorio/presentacion"
-import { normalizarBusqueda } from "@/features/operacion/formato"
 import { rolesAsignables } from "@/features/usuarios/queries"
 import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
@@ -25,6 +24,7 @@ import {
   coincidenciasDeMedio,
   type FilaMedio,
   leerCuentasDeclaradas,
+  nombreNormalizadoMedio,
   RUTA_FORMULARIO,
 } from "./presentacion"
 import type {
@@ -235,7 +235,7 @@ async function mediosConNombres(
   supabase: ClienteUsuario,
   nombres: readonly string[]
 ): Promise<FilaMedio[]> {
-  const normalizados = [...new Set(nombres.map(normalizarBusqueda))].filter(
+  const normalizados = [...new Set(nombres.map(nombreNormalizadoMedio))].filter(
     Boolean
   )
   if (normalizados.length === 0) return []
@@ -341,14 +341,3 @@ export async function colaSolicitudes(
     urlFormulario: `${envCliente.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, "")}${RUTA_FORMULARIO}`,
   }
 }
-
-/** Contador de la pestaña «Solicitudes» de `/operacion/verificacion` (RLS). */
-export const contarSolicitudesPendientes = cache(async (): Promise<number> => {
-  const supabase = await crearClienteServidor()
-  const { count, error } = await supabase
-    .from("solicitudes_vinculacion")
-    .select("id", { count: "exact", head: true })
-    .eq("estado", "PENDIENTE")
-  if (error) fallar("contar las solicitudes pendientes", error)
-  return count ?? 0
-})

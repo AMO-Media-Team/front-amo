@@ -21,6 +21,7 @@ import "server-only"
 
 import { refresh } from "next/cache"
 
+import { codigoCoincide } from "@/features/cuentas-medio/codigo"
 import { type ContextoActor, contextoDelActor } from "@/lib/auth/contexto-actor"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
@@ -41,11 +42,7 @@ import { crearClienteServidor } from "@/lib/supabase/server"
 import type { Json } from "@/types/database.types"
 
 import { esHuellaHex } from "./codigo"
-import {
-  interpretarErrorVerificacion,
-  MENSAJES_VERIFICACION,
-} from "./errores"
-import { coincideCodigo } from "./huella-codigo"
+import { interpretarErrorVerificacion, MENSAJES_VERIFICACION } from "./errores"
 import {
   type EntradaAprobarCuenta,
   type EntradaAprobarDocumento,
@@ -361,7 +358,8 @@ export async function rechazarVerificacionCuenta(
 /**
  * ¿El código que se ve en la captura es el que la plataforma generó? Se
  * compara su sha256 con `codigo_hash` sin revelar nada más: el código en
- * claro nunca se guardó.
+ * claro nunca se guardó. La comparación es la de «Mi medio › Cuentas
+ * sociales», que generó la huella (misma normalización).
  */
 export async function comprobarCodigoHistoria(
   entrada: EntradaComprobarCodigo
@@ -383,7 +381,7 @@ export async function comprobarCodigoHistoria(
     if (data.metodo !== "CODIGO_HISTORIA" || !esHuellaHex(data.codigo_hash)) {
       return fallo(MENSAJES_VERIFICACION.sinCodigo)
     }
-    return exito({ coincide: coincideCodigo(codigo, data.codigo_hash) })
+    return exito({ coincide: codigoCoincide(codigo, data.codigo_hash) })
   } catch (error) {
     return falloInesperado("comprobarCodigoHistoria", error)
   }

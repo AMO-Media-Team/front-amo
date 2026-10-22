@@ -60,7 +60,10 @@ export function documentosExigidos(
  * Nivel para el que el medio reúne documentos: el 1 mientras no esté
  * verificado (es el que lo habilita) y el siguiente al actual después.
  */
-export function nivelObjetivo(estado: EstadoMedio, nivelActual: number): number {
+export function nivelObjetivo(
+  estado: EstadoMedio,
+  nivelActual: number
+): number {
   if (estado === "PENDIENTE" || estado === "RECHAZADO" || nivelActual < 1) {
     return 1
   }
@@ -79,11 +82,7 @@ export interface DocumentoRegistrado {
 }
 
 export type SituacionDocumento =
-  | "aprobado"
-  | "en-revision"
-  | "rechazado"
-  | "vencido"
-  | "falta"
+  "aprobado" | "en-revision" | "rechazado" | "vencido" | "falta"
 
 export interface EstadoRequisito {
   tipo: TipoDocumentoMedio
@@ -104,7 +103,9 @@ const MS_DIA = 86_400_000
 
 /** Días de calendario entre dos fechas 'YYYY-MM-DD' (b − a). */
 export function diasEntre(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / MS_DIA)
+  return Math.round(
+    (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / MS_DIA
+  )
 }
 
 function vigente(documento: DocumentoRegistrado, hoy: string): boolean {
@@ -115,10 +116,7 @@ function vigente(documento: DocumentoRegistrado, hoy: string): boolean {
 }
 
 /** Más reciente primero (las cargas nuevas reemplazan a las anteriores). */
-function porRecientes(
-  a: DocumentoRegistrado,
-  b: DocumentoRegistrado
-): number {
+function porRecientes(a: DocumentoRegistrado, b: DocumentoRegistrado): number {
   return b.creadoAt.localeCompare(a.creadoAt)
 }
 
@@ -149,7 +147,8 @@ export function estadoRequisito(
       ...base,
       situacion: "aprobado",
       fechaVencimiento: vence,
-      porVencer: vence !== null && diasEntre(hoy, vence) <= DIAS_AVISO_VENCIMIENTO,
+      porVencer:
+        vence !== null && diasEntre(hoy, vence) <= DIAS_AVISO_VENCIMIENTO,
       porVideollamada: aprobado.metodo === "VIDEOLLAMADA",
       renovacionEnRevision: delTipo.some(
         (d) => d.estado === "PENDIENTE" && d.creadoAt > aprobado.creadoAt

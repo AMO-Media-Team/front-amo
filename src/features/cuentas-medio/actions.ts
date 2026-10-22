@@ -32,7 +32,11 @@ import { refresh } from "next/cache"
 import { type ContextoActor, contextoDelActor } from "@/lib/auth/contexto-actor"
 import { requerirPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
-import type { ArchivoSubido, SubidaPreparada, UrlFirmada } from "@/lib/archivos/tipos"
+import type {
+  ArchivoSubido,
+  SubidaPreparada,
+  UrlFirmada,
+} from "@/lib/archivos/tipos"
 import { type ErrorBd, MENSAJE_INESPERADO } from "@/lib/errores-bd"
 import {
   desdeErrorZod,
@@ -55,6 +59,7 @@ import { generarCodigo, huellaCodigo, vencimientoCodigo } from "./codigo"
 import { interpretarErrorCuenta, MENSAJES_CUENTAS } from "./errores"
 import { parametrosVerificacion } from "./queries"
 import {
+  type DatosCuenta,
   type EntradaCapturaCodigo,
   type EntradaCuenta,
   type EntradaCuentaId,
@@ -207,7 +212,8 @@ async function descartarSinCaptura(
     .is("captura_path", null)
     .select("id")
   if (error) return falloBd("descartar solicitud sin captura", error)
-  if (data.length === 0) return conflicto(MENSAJES_CUENTAS.verificacionEnRevision)
+  if (data.length === 0)
+    return conflicto(MENSAJES_CUENTAS.verificacionEnRevision)
   return null
 }
 
@@ -229,7 +235,9 @@ async function comprobarCaptura(
   cuentaId: string,
   captura: ArchivoSubido
 ): Promise<ResultadoFallo | null> {
-  if (!archivoPerteneceA(captura, carpetaCapturaCuentaSocial(medioId, cuentaId))) {
+  if (
+    !archivoPerteneceA(captura, carpetaCapturaCuentaSocial(medioId, cuentaId))
+  ) {
     return fallo(MENSAJES_CUENTAS.capturaAjena)
   }
   const objeto = await confirmarObjeto({
@@ -239,6 +247,33 @@ async function comprobarCaptura(
     esperado: { tamano: captura.tamano, tipo: captura.tipo },
   })
   return objeto.ok ? null : objeto
+}
+
+/**
+ * ¿El medio ya registró esa cuenta (otra fila viva con la misma red y el
+ * mismo usuario)? El índice único lo impediría igual, pero con un mensaje
+ * pensado para una cuenta de otro medio.
+ */
+async function repetidaEnElMedio(
+  supabase: ClienteUsuario,
+  medioId: string,
+  datos: Pick<DatosCuenta, "plataforma" | "handle">,
+  excluirId: string | null
+): Promise<ResultadoFallo | null> {
+  let consulta = supabase
+    .from("cuentas_sociales")
+    .select("id")
+    .eq("medio_id", medioId)
+    .eq("plataforma", datos.plataforma)
+    .eq("handle", datos.handle)
+    .is("deleted_at", null)
+    .limit(1)
+  if (excluirId) consulta = consulta.neq("id", excluirId)
+  const { data, error } = await consulta
+  if (error) return falloBd("buscar cuenta repetida", error)
+  if (data.length === 0) return null
+  const mensaje = MENSAJES_CUENTAS.cuentaRepetida
+  return fallo(mensaje, { perfil: [mensaje] })
 }
 
 /** Verificación que ya guarda esa captura (la acción se repitió). */
@@ -270,6 +305,8 @@ export async function registrarCuenta(
 
   try {
     const supabase = await crearClienteServidor()
+    const repetida = await repetidaEnElMedio(supabase, medioId, datos, null)
+    if (repetida) return repetida
     const { data, error } = await supabase
       .from("cuentas_sociales")
       .insert({
@@ -314,13 +351,24 @@ export async function editarCuenta(
       return fallo(MENSAJES_CUENTAS.plataformaDistinta)
     }
 
-    const cambiaPerfil =
-      cuenta.handle !== datos.handle || cuenta.url !== datos.url
+    // Solo cuenta el usuario: una URL guardada en otra forma (sin `www.`, sin
+    // barra final) no es un cambio y no debe bloquear la tarifa.
+    const perfilNuevo =
+      datos.perfil && datos.perfil.handle !== cuenta.handle
+        ? datos.perfil
+        : null
     const cambiaTarifa = cuenta.tarifa_referencia !== datos.tarifaReferencia
-    if (!cambiaPerfil && !cambiaTarifa) {
+    if (!perfilNuevo && !cambiaTarifa) {
       return exito({ id: cuenta.id, actualizadaAt })
     }
-    if (cambiaPerfil) {
+    if (perfilNuevo) {
+      const repetida = await repetidaEnElMedio(
+        supabase,
+        medioId,
+        { plataforma: datos.plataforma, handle: perfilNuevo.handle },
+        cuenta.id
+      )
+      if (repetida) return repetida
       const bloqueo = await liberarPerfil(usuario, supabase, cuenta)
       if (bloqueo) return bloqueo
     }
@@ -328,7 +376,9 @@ export async function editarCuenta(
     const { data, error } = await supabase
       .from("cuentas_sociales")
       .update({
-        ...(cambiaPerfil ? { handle: datos.handle, url: datos.url } : {}),
+        ...(perfilNuevo
+          ? { handle: perfilNuevo.handle, url: perfilNuevo.url }
+          : {}),
         ...(cambiaTarifa ? { tarifa_referencia: datos.tarifaReferencia } : {}),
       })
       .eq("id", cuenta.id)
@@ -499,7 +549,12 @@ export async function enviarVerificacionManual(
     const repetida = await verificacionConCaptura(supabase, captura.ruta)
     if (repetida && esFallo(repetida)) return repetida
     if (repetida) return exito({ verificacionId: repetida.id })
-    const invalida = await comprobarCaptura(supabase, medioId, cuenta.id, captura)
+    const invalida = await comprobarCaptura(
+      supabase,
+      medioId,
+      cuenta.id,
+      captura
+    )
     if (invalida) return invalida
 
     const pendiente = await leerPendiente(supabase, cuenta.id)

@@ -18,7 +18,9 @@ export function enCentesimas(porcentaje: number): number {
 }
 
 export function sumaPorcentajes(porcentajes: readonly number[]): number {
-  return porcentajes.reduce((suma, valor) => suma + enCentesimas(valor), 0) / 100
+  return (
+    porcentajes.reduce((suma, valor) => suma + enCentesimas(valor), 0) / 100
+  )
 }
 
 export interface PorcentajePais {

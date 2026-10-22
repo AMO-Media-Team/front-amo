@@ -234,7 +234,9 @@ export function estadoCuenta(
   const enCurso = verificacionEnCurso(cuenta.verificaciones, ahora)
   const rechazo = ultimoRechazo(cuenta.verificaciones)
   const limite =
-    vigencia.vigencia === "en_gracia" ? vigencia.elegibleHasta : vigencia.venceAt
+    vigencia.vigencia === "en_gracia"
+      ? vigencia.elegibleHasta
+      : vigencia.venceAt
   return {
     principal: principalDe(vigencia, enCurso, rechazo),
     vigencia,

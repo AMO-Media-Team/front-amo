@@ -44,6 +44,32 @@ function Tarjeta({
   )
 }
 
+/**
+ * `loading.tsx` de las secciones de «Mi medio»: mismo contenedor que
+ * `ContenedorPagina` (sin la transición, que corre al llegar la página), el
+ * encabezado de la sección y el esqueleto del contenido.
+ */
+export function EsqueletoPaginaMiMedio({
+  estrecha = false,
+  children,
+}: {
+  /** Formularios: el ancho `estrecho` de `ContenedorPagina`. */
+  estrecha?: boolean
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
+        estrecha ? "max-w-3xl" : "max-w-7xl"
+      )}
+    >
+      <EsqueletoEncabezadoSeccion />
+      {children}
+    </div>
+  )
+}
+
 /** Encabezado de sección: vuelta, título y descripción. */
 export function EsqueletoEncabezadoSeccion() {
   return (
@@ -151,28 +177,54 @@ export function EsqueletoFormulario({
   )
 }
 
-/** Página de nivel: nivel actual, tope y documentos. */
+/** Página de nivel: nivel y tope, documentos, camino y los tres niveles. */
 export function EsqueletoNivel() {
   return (
-    <Zona
-      etiqueta="Cargando tu nivel…"
-      className="grid gap-4 sm:gap-5 lg:grid-cols-2 lg:items-start"
-    >
+    <Zona etiqueta="Cargando tu nivel…" className="flex flex-col gap-5">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-2 lg:items-start">
+        <div className="flex flex-col gap-4 sm:gap-5">
+          <Tarjeta className="p-4 sm:p-5">
+            <Esqueleto className="h-5 w-28" />
+            <div className="flex items-center gap-3">
+              <Esqueleto className="size-12 rounded-2xl" />
+              <div className="flex flex-1 flex-col gap-2">
+                <Esqueleto className="h-5 w-3/5" />
+                <Esqueleto className="h-4 w-1/4" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Esqueleto className="h-14 rounded-xl" />
+              <Esqueleto className="h-14 rounded-xl" />
+            </div>
+          </Tarjeta>
+          <Tarjeta className="p-4 sm:p-5">
+            <Esqueleto className="h-5 w-40" />
+            <Esqueleto className="h-8 w-1/2" />
+            <Esqueleto className="h-3 w-full rounded-full" />
+            <Esqueleto className="h-3.5 w-4/5" />
+          </Tarjeta>
+        </div>
+        <Tarjeta className="p-4 sm:p-5">
+          <Esqueleto className="h-5 w-44" />
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Esqueleto className="size-8 rounded-lg" />
+              <Esqueleto className="h-4 flex-1" />
+              <Esqueleto className="h-5 w-20 rounded-full" />
+            </div>
+          ))}
+        </Tarjeta>
+      </div>
       <Tarjeta>
-        <Esqueleto className="h-5 w-32" />
-        <Esqueleto className="h-8 w-3/5" />
-        <Esqueleto className="h-3 w-full rounded-full" />
-        <Esqueleto className="h-3.5 w-4/5" />
-      </Tarjeta>
-      <Tarjeta>
-        <Esqueleto className="h-5 w-40" />
-        {[0, 1, 2, 3].map((i) => (
+        <Esqueleto className="h-6 w-56" />
+        <Esqueleto className="h-4 w-4/5" />
+        {[0, 1, 2].map((i) => (
           <div key={i} className="flex items-center gap-3">
-            <Esqueleto className="size-8 rounded-lg" />
+            <Esqueleto className="size-6 rounded-full" />
             <Esqueleto className="h-4 flex-1" />
-            <Esqueleto className="h-5 w-20 rounded-full" />
           </div>
         ))}
+        <Esqueleto className="h-9 w-44" />
       </Tarjeta>
     </Zona>
   )

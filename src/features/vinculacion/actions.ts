@@ -20,7 +20,6 @@ import { refresh } from "next/cache"
 
 import { registrarMedio } from "@/features/gestion-medios/actions"
 import { normalizarEspacios } from "@/features/gestion-medios/schemas"
-import { normalizarBusqueda } from "@/features/operacion/formato"
 import { crearUsuario } from "@/features/usuarios/actions"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 import { contextoDelActor } from "@/lib/auth/contexto-actor"
@@ -51,6 +50,7 @@ import {
   renombrarCampos,
 } from "./errores"
 import { huellaConexion } from "./ip"
+import { nombreNormalizadoMedio } from "./presentacion"
 import {
   CAMPOS_MEDIO_EN_HOJA,
   CAMPOS_USUARIO_EN_HOJA,
@@ -166,7 +166,7 @@ async function medioDeIntentoAnterior(
   const { data, error } = await supabase
     .from("medios")
     .select("id, nombre")
-    .eq("nombre_normalizado", normalizarBusqueda(nombre))
+    .eq("nombre_normalizado", nombreNormalizadoMedio(nombre))
     .eq("municipio_codigo", municipioCodigo)
     .gte("created_at", solicitud.creadaAt)
     .is("deleted_at", null)

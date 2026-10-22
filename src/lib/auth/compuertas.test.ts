@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   aTerminoPendiente,
+  destinoDeSolicitud,
   destinoFinal,
   esSesionDeEnlace,
   type EstadoCuenta,
@@ -193,6 +194,40 @@ describe("rutaDePaso", () => {
       "/cambiar-contrasena"
     )
     expect(rutaDePaso("mfa-configurar", "/reportes")).toBe("/mfa/configurar")
+  })
+})
+
+describe("destinoDeSolicitud", () => {
+  it("conserva una ruta privada con su búsqueda", () => {
+    expect(destinoDeSolicitud("/ir/asignaciones/1")).toBe("/ir/asignaciones/1")
+    expect(destinoDeSolicitud("/reportes/finanzas?periodo=30d")).toBe(
+      "/reportes/finanzas?periodo=30d"
+    )
+  })
+
+  it("no anota Inicio, la raíz ni las rutas públicas", () => {
+    expect(destinoDeSolicitud("/inicio")).toBeUndefined()
+    expect(destinoDeSolicitud("/")).toBeUndefined()
+    expect(destinoDeSolicitud("/ingresar?next=%2Freportes")).toBeUndefined()
+    expect(destinoDeSolicitud("/auth/salir")).toBeUndefined()
+  })
+
+  it("descarta lo ausente y los destinos externos o manipulados", () => {
+    expect(destinoDeSolicitud(undefined)).toBeUndefined()
+    expect(destinoDeSolicitud(null)).toBeUndefined()
+    expect(destinoDeSolicitud("")).toBeUndefined()
+    expect(destinoDeSolicitud("https://otro.sitio/inicio")).toBeUndefined()
+    expect(destinoDeSolicitud("//otro.sitio")).toBeUndefined()
+    expect(destinoDeSolicitud("/\\otro.sitio")).toBeUndefined()
+  })
+
+  it("con rutaDePaso, lleva el destino al paso de términos", () => {
+    expect(
+      rutaDePaso("aceptar-terminos", destinoDeSolicitud("/notificaciones"))
+    ).toBe("/aceptar-terminos?next=%2Fnotificaciones")
+    expect(rutaDePaso("aceptar-terminos", destinoDeSolicitud("/inicio"))).toBe(
+      "/aceptar-terminos"
+    )
   })
 })
 

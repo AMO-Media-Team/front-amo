@@ -11,7 +11,10 @@
  */
 import { z } from "zod"
 
-import { cantidadDecimales, textoANumero } from "@/features/configuracion/numeros"
+import {
+  cantidadDecimales,
+  textoANumero,
+} from "@/features/configuracion/numeros"
 import {
   esquemaRegistrarMedio,
   normalizarEspacios,
@@ -263,12 +266,19 @@ function validarEntidad(
   otra: string,
   catalogo: readonly string[]
 ) {
-  const nombre = campo === "banco" ? "el banco" : "la billetera"
+  const [nombre, delNombre] =
+    campo === "banco"
+      ? ["el banco", "del banco"]
+      : ["la billetera", "de la billetera"]
   if (elegida === OTRA_ENTIDAD) {
     if (otra.length < LIMITES_PAGO.entidadMin) {
-      avisar(contexto, campoOtra, `Escribe el nombre de ${nombre}.`)
+      avisar(contexto, campoOtra, `Escribe el nombre ${delNombre}.`)
     } else if (otra.length > LIMITES_PAGO.entidadMax) {
-      avisar(contexto, campoOtra, `Máximo ${LIMITES_PAGO.entidadMax} caracteres.`)
+      avisar(
+        contexto,
+        campoOtra,
+        `Máximo ${LIMITES_PAGO.entidadMax} caracteres.`
+      )
     }
   } else if (!catalogo.includes(elegida)) {
     avisar(contexto, campo, `Elige ${nombre}.`)
@@ -388,20 +398,18 @@ export function esquemaDatosPago(guardado: PagoGuardado = SIN_PAGO_GUARDADO) {
       validarDocumento(datos, contexto, guardado)
       validarCuenta(datos, contexto, guardado)
     })
-    .transform(
-      (datos): DatosPagoMedio => ({
-        titularNombre: datos.titularNombre,
-        tipoDocumento: datos.tipoDocumento as TipoDocumentoIdentidad,
-        numeroDocumento:
-          datos.numeroDocumento.trim() === ""
-            ? null
-            : normalizarNumeroDocumento(datos.numeroDocumento),
-        cuenta: escribeCuenta(datos, guardado) ? resolverCuenta(datos) : null,
-        esDeclarante: datos.esDeclarante,
-        obligadoFacturar: datos.obligadoFacturar,
-        responsableIva: datos.responsableIva,
-      })
-    )
+    .transform((datos): DatosPagoMedio => ({
+      titularNombre: datos.titularNombre,
+      tipoDocumento: datos.tipoDocumento as TipoDocumentoIdentidad,
+      numeroDocumento:
+        datos.numeroDocumento.trim() === ""
+          ? null
+          : normalizarNumeroDocumento(datos.numeroDocumento),
+      cuenta: escribeCuenta(datos, guardado) ? resolverCuenta(datos) : null,
+      esDeclarante: datos.esDeclarante,
+      obligadoFacturar: datos.obligadoFacturar,
+      responsableIva: datos.responsableIva,
+    }))
 }
 
 export type EntradaDatosPago = z.input<ReturnType<typeof esquemaDatosPago>>

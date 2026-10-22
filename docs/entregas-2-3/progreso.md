@@ -110,3 +110,8 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 - 2026-10-22 · Integración de la fase 1 (líder): grupo «Mi negocio» (Mi medio), «Verificación» en Operación,
   `/vincular` público, resolvedor `/ir/[entidad]/[id]` y enlaces de notificación por entidad. Comandos nuevos
   `pnpm db:local` y entorno `local` en `db:*`. Workflow de la fase 1 lanzado (7 paquetes + 3 revisores).
+- 2026-10-22 · El primer workflow de la fase 1 se cortó por el límite de uso (ningún agente terminó; el trabajo parcial
+  quedó en el commit `d9f7857` de Andrés). Correcciones de BD tras la revisión de `docs/modelo-datos.md`: trigger
+  `trg_medios_privado_b_pago_completo`, aviso del 80 % deduplicado por nivel según la bitácora, sin
+  `solicitudes_vinculacion_invitada_chk`, «Enviar a verificación» con medio borrado; 17 suites en verde (30/30 en
+  onboarding). `pnpm db:local` probado (55 s). Workflow de la fase 1 relanzado en modo «retomar».

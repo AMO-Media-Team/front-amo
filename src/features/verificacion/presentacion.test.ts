@@ -3,13 +3,16 @@ import { describe, expect, it } from "vitest"
 import { TIPOS_DOCUMENTO_MEDIO } from "@/features/operacion/estados"
 
 import {
+  enFrase,
   etiquetaNivelCompleta,
   GUIA_DOCUMENTO,
   humanizarDetalle,
+  MOTIVOS_CAMBIO_NIVEL,
   MOTIVOS_RECHAZO_CUENTA,
   MOTIVOS_RECHAZO_DOCUMENTO,
   MOTIVOS_RECHAZO_MEDIO,
   NOMBRE_CERTIFICADO_PAGO,
+  ORDEN_TIPOS_DOCUMENTO,
   SITUACIONES_REQUISITO,
   tituloRequisito,
 } from "./presentacion"
@@ -33,7 +36,9 @@ describe("humanizarDetalle", () => {
 
   it("traduce el aviso del medio de pago sin método", () => {
     expect(
-      humanizarDetalle("Faltan: CERT_BANCARIA o CERT_BILLETERA (medio de pago).")
+      humanizarDetalle(
+        "Faltan: CERT_BANCARIA o CERT_BILLETERA (medio de pago)."
+      )
     ).toBe(
       "Faltan: Certificación bancaria o Certificación de billetera (medio de pago)."
     )
@@ -78,9 +83,32 @@ describe("ayudas de revisión", () => {
       ...MOTIVOS_RECHAZO_DOCUMENTO,
       ...MOTIVOS_RECHAZO_CUENTA,
       ...MOTIVOS_RECHAZO_MEDIO,
+      ...MOTIVOS_CAMBIO_NIVEL,
     ]) {
       expect(motivo.length).toBeGreaterThanOrEqual(5)
       expect(motivo.length).toBeLessThanOrEqual(500)
     }
+  })
+})
+
+describe("ORDEN_TIPOS_DOCUMENTO", () => {
+  it("lista cada tipo una vez, cédula primero", () => {
+    expect(new Set(ORDEN_TIPOS_DOCUMENTO).size).toBe(
+      Object.keys(TIPOS_DOCUMENTO_MEDIO).length
+    )
+    expect(ORDEN_TIPOS_DOCUMENTO[0]).toBe("CEDULA_FRENTE")
+  })
+})
+
+describe("enFrase", () => {
+  it("pone en minúscula solo la inicial", () => {
+    expect(enFrase("Cédula (frente)")).toBe("cédula (frente)")
+    expect(enFrase("Integración (API)")).toBe("integración (API)")
+    expect(enFrase("Cámara de comercio")).toBe("cámara de comercio")
+  })
+
+  it("conserva las siglas", () => {
+    expect(enFrase("RUT")).toBe("RUT")
+    expect(enFrase("RUT de la sociedad")).toBe("RUT de la sociedad")
   })
 })

@@ -29,6 +29,17 @@ export const RUTAS_MI_MEDIO = {
   nivel: ruta("/mi-medio/nivel"),
 } as const
 
+/**
+ * `?nivel=1|2|3` de «Mis documentos»: el nivel cuyos documentos se consultan.
+ * Lo lee la lista de documentos y lo escribe «Nivel» al enlazarla.
+ */
+export const PARAMETRO_NIVEL_DOCUMENTOS = "nivel"
+
+/** «Mis documentos» abierta en los documentos de un nivel. */
+export function rutaDocumentosDelNivel(nivel: number): Route {
+  return ruta(`/mi-medio/documentos?${PARAMETRO_NIVEL_DOCUMENTOS}=${nivel}`)
+}
+
 /** Pantalla de la compuerta de términos, de regreso a «Mi medio». */
 export const RUTA_TERMINOS = ruta(
   `/aceptar-terminos?next=${encodeURIComponent(RUTAS_MI_MEDIO.inicio)}`
@@ -82,7 +93,8 @@ export function enAlta(situacion: SituacionMedio): boolean {
 
 // ── Pasos ───────────────────────────────────────────────────────────────────
 
-export type IdPasoAlta = "perfil" | "documentos" | "pago" | "cuentas" | "terminos"
+export type IdPasoAlta =
+  "perfil" | "documentos" | "pago" | "cuentas" | "terminos"
 
 /**
  * - `completo`: listo.
@@ -128,7 +140,10 @@ export interface DatosAlta {
   cuentas: {
     registradas: number
     verificadas: number
+    /** Con la captura cargada, esperando la revisión de AMO. */
     enRevision: number
+    /** Verificación iniciada sin captura: aún no le llega a AMO. */
+    sinCaptura: number
     rechazadas: number
   }
   terminos: { pendientes: number }
@@ -178,7 +193,7 @@ function pasoDocumentos({ documentos }: DatosAlta): PasoAlta {
   let detalle: string
   if (conProblema.length > 0) {
     estado = "atencion"
-    detalle = `${plural(conProblema.length, "documento necesita", "documentos necesitan")} que lo cargues de nuevo.`
+    detalle = `${plural(conProblema.length, "documento necesita que lo cargues", "documentos necesitan que los cargues")} de nuevo.`
   } else if (completo && porVencer.length > 0) {
     estado = "atencion"
     detalle = `${plural(porVencer.length, "documento vence", "documentos vencen")} pronto: carga uno vigente.`
@@ -250,6 +265,9 @@ function pasoCuentas({ cuentas }: DatosAlta): PasoAlta {
   } else if (cuentas.enRevision > 0) {
     estado = "completo"
     detalle = `${plural(cuentas.enRevision, "cuenta en revisión", "cuentas en revisión")}.`
+  } else if (cuentas.sinCaptura > 0) {
+    estado = "en-curso"
+    detalle = "Termina de verificar tu cuenta: falta cargar la captura."
   } else if (cuentas.rechazadas > 0) {
     estado = "atencion"
     detalle = "La verificación no fue aprobada: vuelve a intentarlo."

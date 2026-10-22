@@ -10,9 +10,9 @@
  *    `insufficient_aal` si la cuenta tiene un factor verificado.
  * 4. `debe_cambiar_password` → cambio de contraseña.
  * 5. El rol exige MFA y no hay factor → configurar MFA.
- * 6. Rol externo con términos vigentes sin aceptar → aceptar términos
- *    (AUT-012). Va al final: la aceptación queda ligada a una cuenta ya
- *    asegurada (contraseña propia y, si aplica, segundo factor).
+ * 6. Rol externo (anunciante o medio) con términos vigentes sin aceptar →
+ *    aceptar términos (AUT-012). Va al final: la aceptación queda ligada a
+ *    una cuenta ya asegurada (contraseña propia y, si aplica, segundo factor).
  * 7. Permiso de la página o acción — lo resuelve el DAL.
  */
 import type { JwtPayload } from "@supabase/supabase-js"
@@ -20,7 +20,7 @@ import type { Route } from "next"
 
 import type { Database } from "@/types/database.types"
 
-import { destinoTrasIngreso } from "./navegacion"
+import { destinoTrasIngreso, RUTA_INICIO } from "./navegacion"
 import type { NivelAutenticacion, TipoRol } from "./tipos"
 
 export type PasoPendiente =
@@ -85,6 +85,28 @@ export function rutaDePaso(paso: PasoPendiente, siguiente?: string): Route {
   const ruta = RUTAS_PASO[paso]
   if (!PASOS_CON_DESTINO.has(paso) || !siguiente) return ruta
   return `${ruta}?${new URLSearchParams({ next: siguiente })}` as Route
+}
+
+/**
+ * Cabecera de la solicitud con la ruta pedida (`pathname` + `search`). Un
+ * Server Component no conoce su URL: si el proxy la agrega, el DAL lleva al
+ * paso pendiente sin perder a dónde iba la persona (p. ej. el enlace de una
+ * notificación cuando se publican términos nuevos). Sin ella, el paso termina
+ * en Inicio. Viene del cliente si el proxy no la reescribe: se valida como
+ * cualquier `?next=`.
+ */
+export const CABECERA_RUTA_SOLICITADA = "x-amo-ruta"
+
+/**
+ * Destino que conserva un paso pendiente al que el DAL redirige: la ruta
+ * pedida si es interna y privada. Inicio no se anota (es el destino por
+ * defecto) para no alargar la URL.
+ */
+export function destinoDeSolicitud(
+  rutaSolicitada: string | null | undefined
+): Route | undefined {
+  const destino = destinoTrasIngreso(rutaSolicitada)
+  return destino === RUTA_INICIO ? undefined : destino
 }
 
 // ── Términos y política de datos (AUT-012) ───────────────────────────────────
