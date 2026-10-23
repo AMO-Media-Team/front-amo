@@ -3980,6 +3980,14 @@ export type Database = {
           quitados: number
         }[]
       }
+      impedimentos_aceptar: {
+        Args: { p_oferta_id: string }
+        Returns: {
+          cuenta_social_id: string
+          exclusividad: boolean
+          tope_medio: boolean
+        }[]
+      }
       kpis_admin: {
         Args: {
           p_desde: string
@@ -4066,15 +4074,29 @@ export type Database = {
         Args: { p_ids?: number[]; p_leida?: boolean }
         Returns: number
       }
+      marketplace_facetas: {
+        Args: { p_plataforma?: Database["public"]["Enums"]["plataforma"] }
+        Returns: {
+          id: string
+          nombre: string
+          ofertas: number
+          tipo: string
+        }[]
+      }
       marketplace_medio: {
         Args: {
+          p_anunciante?: string
           p_desplazamiento?: number
           p_incluir_rechazadas?: boolean
           p_limite?: number
           p_orden?: string
           p_plataforma?: Database["public"]["Enums"]["plataforma"]
+          p_publica_desde?: string
+          p_publica_hasta?: string
+          p_sector?: string
         }
         Returns: {
+          anunciante_id: string
           anunciante_nombre: string
           categorias_objetivo: string[]
           cortes_requeridos: Database["public"]["Enums"]["corte_metrica"][]
@@ -4218,6 +4240,7 @@ export type Database = {
           estado: Database["public"]["Enums"]["asignacion_estado"]
           estado_previo_disputa: Database["public"]["Enums"]["asignacion_estado"]
           evidencia_validada_at: string
+          exclusividad_dias: number
           fecha_limite_aceptacion: string
           fecha_limite_publicacion: string
           formato_id: string
@@ -4226,6 +4249,7 @@ export type Database = {
           franja_id: string
           handle: string
           id: string
+          instrucciones: string
           liquidacion_id: string
           liquidada_at: string
           marca: string
@@ -4250,6 +4274,7 @@ export type Database = {
           publicada_at: string
           rechazada_at: string
           reclamo_hasta: string
+          restricciones: string
           retenciones_aplicadas: Json
           seguidores_al_aceptar: number
           slot: number
@@ -4353,6 +4378,7 @@ export type Database = {
           accion: string
           asignacion_id: string
           corte: Database["public"]["Enums"]["corte_metrica"]
+          metrica_id: string
           numero: number
           oferta_titulo: string
           vence_at: string

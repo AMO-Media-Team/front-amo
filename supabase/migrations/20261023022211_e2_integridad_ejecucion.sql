@@ -221,7 +221,7 @@ begin
                and tstzrange(o.ventana_inicio, o.ventana_fin + make_interval(days => coalesce(o.exclusividad_dias, 0)))
                    && tstzrange(o2.ventana_inicio, o2.ventana_fin + make_interval(days => coalesce(o2.exclusividad_dias, 0)))) then
     raise exception using errcode = 'P0001', message = 'AMO_EXCLUSIVIDAD',
-      detail = 'Tienes un compromiso de exclusividad con otra marca del mismo sector en esas fechas.';
+      detail = 'Esta oferta o una que ya aceptaste pide exclusividad, y en esas fechas tienes pauta de otra marca del mismo sector.';
   end if;
   -- 10. Asignación con valores congelados y sus montos (misma transacción).
   insert into public.asignaciones (oferta_id, campana_id, anunciante_id, medio_id, cuenta_social_id, plataforma, slot,
@@ -262,6 +262,10 @@ begin
                     where a.id = p_asignacion_id and p.id = p_actor_id) then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
   end if;
+  if not exists (select 1 from public.asignaciones a where a.id = p_asignacion_id and a.estado = 'ACEPTADA') then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Ya no puedes desistir: descargaste el contenido o la asignación cambió de estado.';
+  end if;
   perform public.transicionar_srv('asignaciones', p_asignacion_id, 'RECHAZADA', p_actor_id, p_session_id, p_motivo, '{}');
   return p_asignacion_id;
 end $$;
@@ -277,18 +281,29 @@ exception when sqlstate 'P0001' then
   return null;
 end $$;
 revoke all on function private.monto_medio_estimado(uuid, uuid) from public, anon, authenticated;
+create function private.monto_bruto_estimado(p_oferta_id uuid, p_cuenta_social_id uuid) returns numeric
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  return (select p.monto_bruto from private.calcular_precio(p_oferta_id, p_cuenta_social_id, private.ahora()) p);
+exception when sqlstate 'P0001' then
+  return null;
+end $$;
+revoke all on function private.monto_bruto_estimado(uuid, uuid) from public, anon, authenticated;
 
 -- MED-008: ofertas que el medio puede aceptar hoy, con el pago de cada cuenta suya que cabe en un cupo libre. Las que ya
--- tomó van en «Mis campañas» y las que rechazó solo aparecen si se piden.
+-- tomó van en «Mis campañas» y las que rechazó solo aparecen si se piden. Filtros: plataforma, sector del anunciante,
+-- anunciante y días de publicación (la ventana se cruza con [p_publica_desde, p_publica_hasta], días de Bogotá).
 create function public.marketplace_medio(p_plataforma public.plataforma default null,
                                          p_incluir_rechazadas boolean default false, p_orden text default 'fecha',
-                                         p_limite integer default 30, p_desplazamiento integer default 0)
+                                         p_limite integer default 30, p_desplazamiento integer default 0,
+                                         p_sector uuid default null, p_anunciante uuid default null,
+                                         p_publica_desde date default null, p_publica_hasta date default null)
 returns table (id uuid, titulo text, formato_id uuid, formato_nombre text, plataforma public.plataforma,
                publicaciones_por_medio smallint, permite_multiples_cupos boolean, ventana_inicio timestamptz,
                ventana_fin timestamptz, fecha_limite_aceptacion timestamptz, permanencia_minima_dias smallint,
-               exclusividad_dias smallint, cortes_requeridos public.corte_metrica[], marca text, anunciante_nombre text,
-               sector_id uuid, categorias_objetivo uuid[], rechazada_por_mi boolean, vista boolean, pago_maximo numeric,
-               cuentas jsonb, total bigint)
+               exclusividad_dias smallint, cortes_requeridos public.corte_metrica[], marca text, anunciante_id uuid,
+               anunciante_nombre text, sector_id uuid, categorias_objetivo uuid[], rechazada_por_mi boolean, vista boolean,
+               pago_maximo numeric, cuentas jsonb, total bigint)
 language plpgsql stable security definer set search_path = '' as $$
 declare v_medio uuid := private.mi_medio_id(); v_umbral integer := private.config_entero('medios.umbral_seguidores');
 begin
@@ -302,8 +317,8 @@ begin
   with base as (
     select o.id, o.titulo, o.formato_id, f.nombre as formato_nombre, o.plataforma, o.publicaciones_por_medio,
            o.permite_multiples_cupos, o.ventana_inicio, o.ventana_fin, o.fecha_limite_aceptacion,
-           o.permanencia_minima_dias, o.exclusividad_dias, o.cortes_requeridos, c.marca, an.nombre_comercial,
-           an.sector_id, o.categorias_objetivo, o.seguidores_minimos,
+           o.permanencia_minima_dias, o.exclusividad_dias, o.cortes_requeridos, c.marca, an.id as anunciante_id,
+           an.nombre_comercial, an.sector_id, o.categorias_objetivo, o.seguidores_minimos,
            exists (select 1 from public.asignaciones a where a.oferta_id = o.id and a.medio_id = v_medio
                      and a.estado = 'RECHAZADA' and a.aceptada_at is null) as rechazada,
            exists (select 1 from public.oferta_vistas v where v.oferta_id = o.id and v.medio_id = v_medio) as vista
@@ -313,6 +328,10 @@ begin
     join public.formatos f on f.id = o.formato_id
     where o.deleted_at is null and o.estado in ('PUBLICADA', 'EN_EJECUCION')
       and (p_plataforma is null or o.plataforma = p_plataforma)
+      and (p_sector is null or an.sector_id = p_sector)
+      and (p_anunciante is null or an.id = p_anunciante)
+      and (p_publica_desde is null or o.ventana_fin > private.inicio_dia(p_publica_desde))
+      and (p_publica_hasta is null or o.ventana_inicio < private.inicio_dia(p_publica_hasta + 1))
       and private.oferta_visible_para(o.id, v_medio)
       and (o.permite_multiples_cupos
            or not exists (select 1 from public.asignaciones a where a.oferta_id = o.id and a.medio_id = v_medio
@@ -333,15 +352,92 @@ begin
   )
   select b.id, b.titulo, b.formato_id, b.formato_nombre, b.plataforma, b.publicaciones_por_medio, b.permite_multiples_cupos,
          b.ventana_inicio, b.ventana_fin, b.fecha_limite_aceptacion, b.permanencia_minima_dias, b.exclusividad_dias,
-         b.cortes_requeridos, b.marca, b.nombre_comercial, b.sector_id, b.categorias_objetivo, b.rechazada, b.vista,
-         pg.pago_maximo, pg.cuentas, count(*) over ()
+         b.cortes_requeridos, b.marca, b.anunciante_id, b.nombre_comercial, b.sector_id, b.categorias_objetivo,
+         b.rechazada, b.vista, pg.pago_maximo, pg.cuentas, count(*) over ()
   from base b join pagos pg on pg.id = b.id
   where coalesce(p_incluir_rechazadas, false) or not b.rechazada
   order by case when p_orden = 'pago' then pg.pago_maximo end desc nulls last, b.fecha_limite_aceptacion, b.id
   limit least(greatest(coalesce(p_limite, 30), 1), 100) offset greatest(coalesce(p_desplazamiento, 0), 0);
 end $$;
-revoke all on function public.marketplace_medio(public.plataforma, boolean, text, integer, integer) from public, anon;
-grant execute on function public.marketplace_medio(public.plataforma, boolean, text, integer, integer) to authenticated;
+revoke all on function public.marketplace_medio(public.plataforma, boolean, text, integer, integer, uuid, uuid, date, date)
+  from public, anon;
+grant execute on function public.marketplace_medio(public.plataforma, boolean, text, integer, integer, uuid, uuid, date, date)
+  to authenticated;
+
+-- MED-008: opciones de los filtros del marketplace (sectores y anunciantes con ofertas que el medio puede aceptar hoy,
+-- sin contar las que rechazó), con cuántas ofertas tiene cada una. Recorre todas las páginas del marketplace.
+create function public.marketplace_facetas(p_plataforma public.plataforma default null)
+returns table (tipo text, id uuid, nombre text, ofertas bigint)
+language plpgsql stable security definer set search_path = '' as $$
+declare v_anunciantes uuid[] := '{}'; v_nombres text[] := '{}'; v_sectores uuid[] := '{}'; v_pagina integer := 0;
+        v_n integer;
+begin
+  if not private.acceso_valido() or not private.tiene_permiso('ofertas.marketplace') then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+  end if;
+  loop
+    select v_anunciantes || coalesce(array_agg(m.anunciante_id), '{}'), v_nombres || coalesce(array_agg(m.anunciante_nombre), '{}'),
+           v_sectores || coalesce(array_agg(m.sector_id), '{}'), count(*)
+      into v_anunciantes, v_nombres, v_sectores, v_n
+    from public.marketplace_medio(p_plataforma, false, 'fecha', 100, v_pagina * 100) m;
+    exit when v_n < 100;
+    v_pagina := v_pagina + 1;
+  end loop;
+  return query
+  with disponibles as (
+    select x.anunciante_id, x.anunciante_nombre, x.sector_id
+    from unnest(v_anunciantes, v_nombres, v_sectores) x (anunciante_id, anunciante_nombre, sector_id)
+  )
+  select 'SECTOR'::text, s.id, s.nombre::text, count(*)
+  from disponibles d join public.sectores s on s.id = d.sector_id
+  group by s.id, s.nombre
+  union all
+  select 'ANUNCIANTE'::text, d.anunciante_id, d.anunciante_nombre, count(*)
+  from disponibles d
+  group by d.anunciante_id, d.anunciante_nombre
+  order by 1, 3;
+end $$;
+revoke all on function public.marketplace_facetas(public.plataforma) from public, anon;
+grant execute on function public.marketplace_facetas(public.plataforma) to authenticated;
+
+-- MED-009/MED-010: lo que impediría aceptar la oferta con cada cuenta del medio, con las mismas reglas que
+-- reservar_cupo: exclusividad por sector (la oferta o una aceptada la pide y las fechas se cruzan) y tope de
+-- participación del medio en la campaña con el pago de esa cuenta. Solo dice sí o no: no revela presupuestos.
+create function public.impedimentos_aceptar(p_oferta_id uuid)
+returns table (cuenta_social_id uuid, exclusividad boolean, tope_medio boolean)
+language plpgsql stable security definer set search_path = '' as $$
+declare v_medio uuid := private.mi_medio_id(); o public.ofertas; c public.campanas; v_sector uuid; v_excl boolean;
+        v_medio_camp numeric;
+begin
+  if not private.acceso_valido() or not private.tiene_permiso('ofertas.marketplace') then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+  end if;
+  select * into o from public.ofertas x where x.id = p_oferta_id;
+  if o.id is null or v_medio is null or not private.oferta_visible_para(o.id, v_medio) then
+    return;
+  end if;
+  select * into c from public.campanas x where x.id = o.campana_id;
+  select an.sector_id into v_sector from public.anunciantes an where an.id = o.anunciante_id;
+  v_excl := exists (select 1 from public.asignaciones a2
+                    join public.ofertas o2 on o2.id = a2.oferta_id
+                    join public.anunciantes an2 on an2.id = a2.anunciante_id
+                    where a2.medio_id = v_medio and private.consume_cupo(a2.estado, a2.estado_previo_disputa)
+                      and a2.anunciante_id <> o.anunciante_id and an2.sector_id = v_sector
+                      and (o.exclusividad_dias is not null or o2.exclusividad_dias is not null)
+                      and tstzrange(o.ventana_inicio, o.ventana_fin + make_interval(days => coalesce(o.exclusividad_dias, 0)))
+                          && tstzrange(o2.ventana_inicio, o2.ventana_fin + make_interval(days => coalesce(o2.exclusividad_dias, 0))));
+  select coalesce(sum(a.monto_bruto), 0) into v_medio_camp from public.asignaciones a
+  where a.campana_id = c.id and a.medio_id = v_medio and private.consume_cupo(a.estado, a.estado_previo_disputa);
+  return query
+  select cs.id, v_excl,
+         coalesce(v_medio_camp + private.monto_bruto_estimado(o.id, cs.id) > o.tope_porcentaje_por_medio * c.presupuesto_total,
+                  false)
+  from public.cuentas_sociales cs
+  where cs.medio_id = v_medio and cs.plataforma = o.plataforma and cs.deleted_at is null and private.cuenta_vigente(cs.id)
+  order by cs.id;
+end $$;
+revoke all on function public.impedimentos_aceptar(uuid) from public, anon;
+grant execute on function public.impedimentos_aceptar(uuid) to authenticated;
 
 -- MED-008: por qué un medio no ve ofertas (la primera razón que aplica) u OK.
 create function public.mi_elegibilidad_marketplace() returns table (motivo text, detalle text)
@@ -404,7 +500,13 @@ begin
       perform private.notificar(
         (select coalesce(array_agg(distinct u.id), '{}') from public.medios m
            cross join lateral unnest(private.usuarios_medio(m.id)) u (id)
-          where m.estado = 'VERIFICADO' and m.deleted_at is null and private.oferta_visible_para(o.id, m.id)),
+          where m.estado = 'VERIFICADO' and m.deleted_at is null and m.id <> a.medio_id
+            and private.oferta_visible_para(o.id, m.id)
+            and not exists (select 1 from public.asignaciones x
+                            where x.oferta_id = o.id and x.medio_id = m.id
+                              and ((x.estado = 'RECHAZADA' and x.aceptada_at is null)
+                                   or (not o.permite_multiples_cupos
+                                       and private.consume_cupo(x.estado, x.estado_previo_disputa))))),
         'oferta.cupo_liberado',
         jsonb_build_object('oferta', o.titulo, 'fecha_limite', private.formato_fecha(o.fecha_limite_aceptacion)),
         'ofertas', o.id::text, null, 1::smallint);
@@ -434,7 +536,7 @@ returns table (id uuid, oferta_id uuid, campana_id uuid, anunciante_id uuid, cue
                oferta_titulo text, marca text, anunciante_nombre text, formato_id uuid, formato_nombre text,
                ventana_inicio timestamptz, ventana_fin timestamptz, fecha_limite_aceptacion timestamptz,
                cortes_requeridos public.corte_metrica[], permanencia_minima_dias smallint, handle text,
-               reclamo_hasta timestamptz)
+               reclamo_hasta timestamptz, exclusividad_dias smallint, instrucciones text, restricciones text)
 language sql stable security definer set search_path = '' as $$
   with cfg as (select private.config_booleano('comision.visible_para_medio') as visible,
                       make_interval(hours => private.config_entero('disputas.plazo_vencida_horas')) as reclamo)
@@ -454,7 +556,8 @@ language sql stable security definer set search_path = '' as $$
          a.created_at, a.updated_at,
          o.titulo, c.marca, an.nombre_comercial, o.formato_id, f.nombre, o.ventana_inicio, o.ventana_fin,
          o.fecha_limite_aceptacion, o.cortes_requeridos, o.permanencia_minima_dias, cs.handle::text,
-         case when a.estado = 'VENCIDA_SIN_PUBLICAR' then a.vencida_at + cfg.reclamo end
+         case when a.estado = 'VENCIDA_SIN_PUBLICAR' then a.vencida_at + cfg.reclamo end,
+         o.exclusividad_dias, o.instrucciones, o.restricciones
   from public.asignaciones a
   join public.ofertas o on o.id = a.oferta_id
   join public.campanas c on c.id = a.campana_id
@@ -481,11 +584,11 @@ grant execute on function public.mis_asignaciones_medio(public.asignacion_estado
 drop function public.proximas_acciones_medio(integer);
 create function public.proximas_acciones_medio(p_limite integer default 10)
 returns table (asignacion_id uuid, oferta_titulo text, accion text, vence_at timestamptz, numero smallint,
-               corte public.corte_metrica)
+               corte public.corte_metrica, metrica_id uuid)
 language plpgsql stable security definer set search_path = '' set "TimeZone" to 'America/Bogota' as $$
 declare v_me uuid; v_plazo interval := make_interval(hours => private.config_entero('metricas.plazo_carga_horas'));
 begin
-  perform private.exigir_permiso('inicio.medio');
+  perform private.exigir_permiso('inicio.medio', 'asignaciones.ver_propias');
   v_me := private.mi_medio_id();
   return query
   with abiertas as (
@@ -495,19 +598,19 @@ begin
       and a.estado in ('ACEPTADA', 'CONTENIDO_ENTREGADO', 'PUBLICADA', 'EVIDENCIA_VALIDADA', 'METRICAS_CARGADAS')
   ), acciones as (
     select x.id, 'DESCARGAR'::text as accion, x.fecha_limite_publicacion as vence, null::smallint as numero,
-           null::public.corte_metrica as corte
+           null::public.corte_metrica as corte, null::uuid as metrica_id
     from abiertas x where x.estado = 'ACEPTADA'
     union all
-    select x.id, 'DESCARGAR_NUEVA_VERSION', x.fecha_limite_publicacion, null, null
+    select x.id, 'DESCARGAR_NUEVA_VERSION', x.fecha_limite_publicacion, null, null, null
     from abiertas x
     join public.creativos cr on cr.oferta_id = x.oferta_id and cr.vigente
     where x.estado = 'CONTENIDO_ENTREGADO' and x.creativo_descargado_id is distinct from cr.id
     union all
-    select x.id, 'CORREGIR_EVIDENCIA', x.fecha_limite_publicacion, p.numero, null
+    select x.id, 'CORREGIR_EVIDENCIA', x.fecha_limite_publicacion, p.numero, null, null
     from abiertas x join public.publicaciones p on p.asignacion_id = x.id and p.estado_validacion = 'RECHAZADA'
-    where x.estado = 'CONTENIDO_ENTREGADO'
+    where x.estado in ('CONTENIDO_ENTREGADO', 'PUBLICADA')
     union all
-    select x.id, 'PUBLICAR', x.fecha_limite_publicacion, null, null
+    select x.id, 'PUBLICAR', x.fecha_limite_publicacion, null, null, null
     from abiertas x
     where x.estado = 'CONTENIDO_ENTREGADO'
       and not exists (select 1 from public.publicaciones p where p.asignacion_id = x.id and p.estado_validacion = 'RECHAZADA')
@@ -515,7 +618,7 @@ begin
     select x.id, 'CARGAR_METRICA_' || k.corte::text,
            p.fecha_publicacion + case k.corte when 'H24' then interval '24 hours' when 'H72' then interval '72 hours'
                                               else interval '7 days' end + v_plazo,
-           p.numero, k.corte
+           p.numero, k.corte, null
     from abiertas x
     join public.ofertas o on o.id = x.oferta_id
     join public.publicaciones p on p.asignacion_id = x.id and p.estado_validacion <> 'RECHAZADA'
@@ -523,16 +626,16 @@ begin
     where x.estado in ('PUBLICADA', 'EVIDENCIA_VALIDADA') and k.corte <> 'PERSONALIZADO'
       and not exists (select 1 from public.metricas m where m.publicacion_id = p.id and m.corte = k.corte)
     union all
-    select x.id, 'CORREGIR_METRICAS', m.validada_at + v_plazo, p.numero, m.corte
+    select x.id, 'CORREGIR_METRICAS', m.validada_at + v_plazo, p.numero, m.corte, m.id
     from abiertas x
     join public.metricas m on m.asignacion_id = x.id and m.estado_validacion = 'RECHAZADA'
     join public.publicaciones p on p.id = m.publicacion_id
   )
-  select ac.id, o.titulo, ac.accion, min(ac.vence), ac.numero, ac.corte
+  select ac.id, o.titulo, ac.accion, min(ac.vence), ac.numero, ac.corte, ac.metrica_id
   from acciones ac
   join public.asignaciones a on a.id = ac.id
   join public.ofertas o on o.id = a.oferta_id
-  group by ac.id, o.titulo, ac.accion, ac.numero, ac.corte
+  group by ac.id, o.titulo, ac.accion, ac.numero, ac.corte, ac.metrica_id
   order by min(ac.vence) nulls last, ac.accion, ac.numero
   limit least(greatest(coalesce(p_limite, 10), 1), 100);
 end $$;
@@ -585,8 +688,22 @@ begin
                           from public.creativo_archivos f where f.creativo_id = cr.id), '[]'::jsonb));
 end $function$;
 
--- INT-002: URL única (forma canónica sin barra final ni mayúsculas) y forma de publicación por plataforma.
-create unique index publicaciones_url_post_key on public.publicaciones (lower(rtrim(url_post, '/')));
+-- INT-002: una publicación por post. La clave identifica el contenido y no el texto del enlace: el mismo código de
+-- Instagram en /p/ y /reel/, el id del video de TikTok con cualquier @, y el id de Facebook en cualquier orden de
+-- parámetros. Lo demás (enlaces cortos sin resolver) se compara en minúsculas y sin barra final. Una evidencia RECHAZADA
+-- libera el enlace (alguien pudo registrar el post de otro medio).
+create function private.clave_post(p_url text) returns text
+language sql immutable parallel safe set search_path = '' as $$
+  select coalesce(
+    'ig:' || (regexp_match(p_url, '^https://www\.instagram\.com/(?:p|reel)/([A-Za-z0-9_-]+)', 'i'))[1],
+    'ig:historia:' || (regexp_match(p_url, '^https://www\.instagram\.com/stories/[^/]+/([0-9]+)', 'i'))[1],
+    'tt:' || (regexp_match(p_url, '^https://www\.tiktok\.com/@[^/]+/(?:video|photo)/([0-9]+)', 'i'))[1],
+    'fb:' || (regexp_match(p_url, '^https://www\.facebook\.com/[^#]*[?&](?:story_fbid|fbid|v)=([^&#]+)', 'i'))[1],
+    'fb:' || (regexp_match(p_url, '^https://www\.facebook\.com/(?:[^/?#]+/(?:posts|videos|photos)/(?:[^/?#]+/)?|reel/)([^/?#]+)', 'i'))[1],
+    lower(rtrim(p_url, '/'))) $$;
+revoke all on function private.clave_post(text) from public, anon, authenticated, service_role;
+create unique index publicaciones_url_post_key on public.publicaciones (private.clave_post(url_post))
+  where estado_validacion <> 'RECHAZADA';
 alter table public.publicaciones drop constraint publicaciones_url_chk;
 alter table public.publicaciones add constraint publicaciones_url_chk check (char_length(url_post) <= 500 and (
      (plataforma = 'FACEBOOK' and url_post ~* '^https://(www\.facebook\.com/([^/?#]+/(posts|videos|photos)/([^/?#]+/)?[^/?#]+|reel/[^/?#]+|share/([prv]/)?[^/?#]+|groups/[^/?#]+/(posts|permalink)/[^/?#]+|stories/[^/?#]+(/[^/?#]+)?|(watch|video\.php)\?(.*&)?v=[^&#]+|(photo|photo\.php)\?(.*&)?fbid=[^&#]+|(permalink|story)\.php\?(.*&)?story_fbid=[^&#]+|groups/[^/?#]+\?(.*&)?multi_permalinks=[^&#]+)|fb\.watch/[A-Za-z0-9_-]+)/?([?&][^#]*)?$')
@@ -698,14 +815,36 @@ create policy "metricas: update" on public.metricas for update to authenticated
               or (medio_id = (select private.mi_medio_id()) and estado_validacion in ('PENDIENTE', 'RECHAZADA')
                   and (select private.tiene_permiso('asignaciones.ejecutar')) and private.puedo_cargar_metricas(publicacion_id)));
 
--- NOT-005: aviso de métricas atrasadas por corte (48 h tras cada corte), una vez por asignación y corte.
+-- NOT-005: aviso de métricas atrasadas por corte (48 h tras cada corte), una vez por publicación y corte. El
+-- recordatorio pasa también a ser por publicación: en una oferta de varias, la segunda tiene sus propios cortes.
 create table private.avisos_metricas_atrasadas (
   asignacion_id uuid not null references public.asignaciones (id) on delete cascade,
+  numero smallint not null,
   corte public.corte_metrica not null,
   enviado_at timestamptz not null default private.ahora(),
-  constraint avisos_metricas_atrasadas_pkey primary key (asignacion_id, corte)
+  constraint avisos_metricas_atrasadas_pkey primary key (asignacion_id, numero, corte)
 );
 revoke all on table private.avisos_metricas_atrasadas from public, anon, authenticated, service_role;
+alter table private.recordatorios_metricas add column numero smallint not null default 1;
+alter table private.recordatorios_metricas drop constraint recordatorios_metricas_pkey,
+  add constraint recordatorios_metricas_pkey primary key (asignacion_id, numero, corte);
+
+-- El corte como lo lee el medio en la pantalla («24 horas», no «H24»).
+create function private.corte_en_palabras(p_corte public.corte_metrica) returns text
+language sql immutable parallel safe set search_path = '' as $$
+  select case p_corte when 'H24' then '24 horas' when 'H72' then '72 horas' when 'D7' then '7 días'
+                      else lower(p_corte::text) end $$;
+revoke all on function private.corte_en_palabras(public.corte_metrica) from public, anon, authenticated, service_role;
+
+update public.plantillas_notificacion
+   set cuerpo = 'Carga las métricas de {{corte}}{{publicacion}} de «{{oferta}}» antes del {{fecha_limite}}.',
+       variables = array['oferta', 'corte', 'publicacion', 'fecha_limite']
+ where clave = 'asignacion.recordatorio_metricas' and canal = 'APP';
+update public.plantillas_notificacion
+   set cuerpo = 'Las métricas de {{corte}}{{publicacion}} de «{{oferta}}» están atrasadas. Cárgalas cuanto antes para '
+                || 'no retrasar tu pago.',
+       variables = array['oferta', 'corte', 'publicacion']
+ where clave = 'asignacion.metricas_atrasadas' and canal = 'APP';
 
 create or replace function private.generar_recordatorios() returns integer
 language plpgsql volatile security definer set search_path = '' as $$
@@ -728,11 +867,11 @@ begin
       'asignaciones', x.id::text, null, 1::smallint);
   end loop;
 
-  for x in select y.id, y.oferta_id, y.medio_id, y.corte, y.vence
-           from (select a.id, a.oferta_id, a.medio_id, k.corte,
-                        min(p.fecha_publicacion + case k.corte when 'H24' then interval '24 hours'
-                                                               when 'H72' then interval '72 hours'
-                                                               else interval '7 days' end) as vence
+  for x in select y.id, y.oferta_id, y.medio_id, y.publicaciones, y.numero, y.corte, y.vence
+           from (select a.id, a.oferta_id, a.medio_id, a.publicaciones, p.numero, k.corte,
+                        p.fecha_publicacion + case k.corte when 'H24' then interval '24 hours'
+                                                           when 'H72' then interval '72 hours'
+                                                           else interval '7 days' end as vence
                  from public.asignaciones a
                  join public.ofertas o on o.id = a.oferta_id
                  join public.publicaciones p on p.asignacion_id = a.id and p.estado_validacion <> 'RECHAZADA'
@@ -742,22 +881,24 @@ begin
                                                           when 'H72' then interval '72 hours'
                                                           else interval '7 days' end <= v_ahora
                    and not exists (select 1 from public.metricas m
-                                   where m.publicacion_id = p.id and m.corte = k.corte and m.estado_validacion <> 'RECHAZADA')
-                 group by a.id, a.oferta_id, a.medio_id, k.corte) y
+                                   where m.publicacion_id = p.id and m.corte = k.corte and m.estado_validacion <> 'RECHAZADA')) y
            where not exists (select 1 from private.recordatorios_metricas e
-                             where e.asignacion_id = y.id and e.corte = y.corte) loop
+                             where e.asignacion_id = y.id and e.numero = y.numero and e.corte = y.corte) loop
     v_env := private.notificar(private.usuarios_medio(x.medio_id), 'asignacion.recordatorio_metricas',
-      jsonb_build_object('oferta_id', x.oferta_id, 'corte', x.corte::text, 'fecha_limite', private.formato_fecha(x.vence + v_plazo)),
+      jsonb_build_object('oferta_id', x.oferta_id, 'corte', private.corte_en_palabras(x.corte),
+                         'publicacion', case when x.publicaciones > 1 then format(' (publicación %s)', x.numero) else '' end,
+                         'numero', x.numero, 'corte_clave', x.corte::text,
+                         'fecha_limite', private.formato_fecha(x.vence + v_plazo)),
       'asignaciones', x.id::text, null, 1::smallint);
     if v_env > 0 then
-      insert into private.recordatorios_metricas (asignacion_id, corte) values (x.id, x.corte)
-      on conflict (asignacion_id, corte) do nothing;
+      insert into private.recordatorios_metricas (asignacion_id, numero, corte) values (x.id, x.numero, x.corte)
+      on conflict (asignacion_id, numero, corte) do nothing;
     end if;
     v_n := v_n + v_env;
   end loop;
 
-  -- NOT-005: plazo de carga vencido para un corte (corte + metricas.plazo_carga_horas), una vez por asignación y corte.
-  for x in select a.id, a.oferta_id, a.medio_id, k.corte
+  -- NOT-005: plazo de carga vencido para un corte (corte + metricas.plazo_carga_horas), una vez por publicación y corte.
+  for x in select a.id, a.oferta_id, a.medio_id, a.publicaciones, p.numero, k.corte
            from public.asignaciones a
            join public.ofertas o on o.id = a.oferta_id
            join public.publicaciones p on p.asignacion_id = a.id and p.estado_validacion <> 'RECHAZADA'
@@ -767,13 +908,16 @@ begin
                                                     else interval '7 days' end + v_plazo <= v_ahora
              and not exists (select 1 from public.metricas m
                              where m.publicacion_id = p.id and m.corte = k.corte and m.estado_validacion <> 'RECHAZADA')
-             and not exists (select 1 from private.avisos_metricas_atrasadas e where e.asignacion_id = a.id and e.corte = k.corte)
-           group by a.id, a.oferta_id, a.medio_id, k.corte loop
+             and not exists (select 1 from private.avisos_metricas_atrasadas e
+                             where e.asignacion_id = a.id and e.numero = p.numero and e.corte = k.corte) loop
     v_env := private.notificar(private.usuarios_medio(x.medio_id), 'asignacion.metricas_atrasadas',
-      jsonb_build_object('oferta_id', x.oferta_id, 'corte', x.corte::text), 'asignaciones', x.id::text, null, 2::smallint);
+      jsonb_build_object('oferta_id', x.oferta_id, 'corte', private.corte_en_palabras(x.corte),
+                         'publicacion', case when x.publicaciones > 1 then format(' (publicación %s)', x.numero) else '' end,
+                         'numero', x.numero, 'corte_clave', x.corte::text),
+      'asignaciones', x.id::text, null, 2::smallint);
     if v_env > 0 then
-      insert into private.avisos_metricas_atrasadas (asignacion_id, corte) values (x.id, x.corte)
-      on conflict (asignacion_id, corte) do nothing;
+      insert into private.avisos_metricas_atrasadas (asignacion_id, numero, corte) values (x.id, x.numero, x.corte)
+      on conflict (asignacion_id, numero, corte) do nothing;
     end if;
     v_n := v_n + v_env;
   end loop;
@@ -789,7 +933,7 @@ returns uuid
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   v_tipo public.rol_tipo; a public.asignaciones; o public.ofertas; cr public.creativos; pub public.publicaciones;
-  v_ahora timestamptz := private.ahora(); v_id uuid;
+  v_ahora timestamptz := private.ahora(); v_id uuid; v_handle text; v_handle_url text;
 begin
   v_tipo := private.validar_actor(p_actor_id, 'asignaciones.ejecutar', p_session_id);
   if v_tipo is distinct from 'MEDIO' then
@@ -819,9 +963,23 @@ begin
     raise exception using errcode = 'P0001', message = 'AMO_FUERA_DE_VENTANA',
       detail = 'La fecha de publicación está fuera de la ventana de la oferta.';
   end if;
+  -- Un enlace que nombra la cuenta (TikTok @usuario, historia de Instagram) tiene que ser de la cuenta de la asignación.
+  v_handle_url := coalesce((regexp_match(p_url, '^https://www\.tiktok\.com/@([^/]+)/', 'i'))[1],
+                           (regexp_match(p_url, '^https://www\.instagram\.com/stories/([^/]+)/', 'i'))[1]);
+  if lower(v_handle_url) = 'highlights' then
+    v_handle_url := null;                                   -- historia destacada: el enlace no nombra la cuenta
+  end if;
+  select c.handle into v_handle from public.cuentas_sociales c where c.id = a.cuenta_social_id;
+  if v_handle_url is not null and v_handle is not null and lower(v_handle_url) <> lower(v_handle) then
+    raise exception using errcode = 'P0001', message = 'AMO_URL_OTRA_CUENTA',
+      detail = format('El enlace es de @%s y esta campaña es con @%s. Pega el enlace de la publicación en tu cuenta.',
+                      v_handle_url, v_handle);
+  end if;
   -- NOT-006/MED-013: la versión vigente AL PUBLICAR (activado_at, no created_at) o una posterior debe estar descargada.
+  -- El medio declara la hora al minuto: una versión activada dentro de ese minuto ya cuenta como vigente.
   select * into cr from public.creativos c
-  where c.oferta_id = o.id and c.activado_at is not null and c.activado_at <= p_fecha_publicacion
+  where c.oferta_id = o.id and c.activado_at is not null
+    and date_trunc('minute', c.activado_at) <= p_fecha_publicacion
   order by c.activado_at desc limit 1;
   if cr.id is not null
      and not exists (select 1 from public.descargas_contenido d join public.creativos c2 on c2.id = d.creativo_id
@@ -1002,6 +1160,62 @@ end $$;
 revoke all on function public.seguimiento_campana(uuid) from public, anon;
 grant execute on function public.seguimiento_campana(uuid) to authenticated;
 
+-- El anunciante ve el perfil público de todo medio que aceptó alguna de sus ofertas, aunque luego desistiera (aparece en
+-- el seguimiento).
+create or replace function private.anunciante_ve_medio(p_medio_id uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.asignaciones a
+                 where a.medio_id = p_medio_id and a.anunciante_id = (select private.mi_anunciante_id())
+                   and (a.estado <> 'RECHAZADA' or a.aceptada_at is not null)) $$;
+
+-- En Storage, el anunciante dueño lee la captura de una publicación registrada y la de una métrica APROBADA; nada de
+-- capturas pendientes, rechazadas o subidas sin enviar. El equipo con `asignaciones.ver` y el medio dueño leen todo.
+create function private.puedo_ver_archivo_asignacion(p_name text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.asignaciones a
+    where a.id = private.seg_uuid(p_name, 2)
+      and ((select private.tiene_permiso('asignaciones.ver'))
+           or a.medio_id = (select private.mi_medio_id())
+           or (a.anunciante_id = (select private.mi_anunciante_id()) and a.aceptada_at is not null
+               and ((private.seg(p_name, 3) = 'publicacion'
+                     and exists (select 1 from public.publicaciones p
+                                 where p.asignacion_id = a.id and p_name in (p.captura_path, p.miniatura_path)))
+                    or (private.seg(p_name, 3) = 'metrica'
+                        and exists (select 1 from public.metricas m
+                                    where m.asignacion_id = a.id and m.estado_validacion = 'APROBADA'
+                                      and p_name in (m.captura_path, m.miniatura_path))))))) $$;
+revoke all on function private.puedo_ver_archivo_asignacion(text) from public, anon;
+grant execute on function private.puedo_ver_archivo_asignacion(text) to authenticated;
+create or replace function private.lista_blanca_authenticated() returns text[]
+language sql immutable set search_path = '' as $$
+  select array['ahora', 'hoy', 'inicio_dia', 'normalizar_texto', 'uuid_v7', 'enmascarar', 'header',
+               'modo_carga', 'purga_habilitada',
+               'actor_id', 'contexto_confiable', 'mi_rol_id', 'mi_anunciante_id', 'mi_medio_id', 'tiene_permiso',
+               'acceso_valido', 'config_entero', 'config_decimal', 'config_texto', 'config_booleano', 'config_lista',
+               'cuenta_vigente', 'anunciante_ve_medio',
+               'hay_cambios', 'estados_con_cupo', 'consume_cupo', 'oferta_visible_para_mi', 'tengo_asignacion_en',
+               'tengo_asignacion_activa_en', 'puedo_descargar_creativos_de', 'puedo_ver_asignacion',
+               'puedo_cargar_metricas', 'calcular_precio', 'registrar_vista_oferta', 'estimar_oferta_agregado',
+               -- M9 analítica
+               'exigir_permiso', 'rango_kpi', 'cubeta', 'cubetas', 'kpi_ensamblar', 'desempeno_verificadas',
+               'cumplimiento_aplica', 'cumplimiento_ok', 'medios_en_riesgo_al', 'geo_valores', 'geo_validar',
+               -- M10 storage
+               'seg', 'seg_uuid', 'es_mi_oferta', 'puedo_subir_creativo', 'puedo_subir_evidencia', 'soy_parte_disputa',
+               'soy_dueno_soporte',
+               -- E2 fase 2
+               'creativo_activado', 'validar_campana_guardar',
+               -- E2 fase 3
+               'puedo_ver_archivo_asignacion']::text[] $$;
+drop policy "storage: evidencias select" on storage.objects;
+create policy "storage: evidencias select" on storage.objects for select to authenticated
+  using (bucket_id = 'evidencias'
+         and ((private.seg(name, 1) = 'asignacion' and private.puedo_ver_archivo_asignacion(name))
+              or (private.seg(name, 1) = 'disputa'
+                  and ((select private.tiene_permiso('disputas.ver'))
+                       or (private.soy_parte_disputa(private.seg_uuid(name, 2), false)
+                           and private.seg(name, 3) is distinct from 'interno')))));
+
 -- El anunciante ve solo las métricas aprobadas (las pendientes traen alertas antifraude del medio) y no ve qué medios
 -- rechazaron sus ofertas sin aceptarlas.
 drop policy "metricas: select" on public.metricas;
@@ -1085,8 +1299,8 @@ begin
     if x.mult <> x.multiplicador_calidad and x.multiplicador_proximo is distinct from x.mult then
       perform private.notificar(private.usuarios_medio(x.medio_id), 'multiplicador.cambio_programado',
         jsonb_build_object('handle', x.handle,
-                           'actual', replace(to_char(x.multiplicador_calidad, 'FM0.00'), '.', ','),
-                           'proximo', replace(to_char(x.mult, 'FM0.00'), '.', ','),
+                           'actual', replace(regexp_replace(to_char(x.multiplicador_calidad, 'FM0.000'), '0$', ''), '.', ','),
+                           'proximo', replace(regexp_replace(to_char(x.mult, 'FM0.000'), '0$', ''), '.', ','),
                            'fecha', to_char(v_desde at time zone 'America/Bogota', 'DD/MM/YYYY'),
                            'indice', replace(to_char(round(x.indice::numeric, 4), 'FM0.0000'), '.', ','),
                            'indice_franja', replace(to_char(round(x.im::numeric, 4), 'FM0.0000'), '.', ','),

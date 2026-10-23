@@ -253,8 +253,10 @@ begin
   insert into storage.objects (bucket_id, name) values ('evidencias', 'disputa/' || d1 || '/interno/owner.pdf');
   perform set_config('request.jwt.claims', c_ana, true);
   execute 'set local role authenticated';
+  -- Desde e2_integridad_ejecucion solo lee la captura de una publicación registrada (humo_e2_ejecucion lo prueba); esta
+  -- no lo está.
   r := r || jsonb_build_object('d1_anunciante_lee_evidencia',
-    exists (select 1 from storage.objects where bucket_id = 'evidencias' and name = 'asignacion/' || a1 || '/publicacion/1-x.webp')
+    not exists (select 1 from storage.objects where bucket_id = 'evidencias' and name = 'asignacion/' || a1 || '/publicacion/1-x.webp')
     and exists (select 1 from storage.objects where bucket_id = 'evidencias' and name = 'disputa/' || d1 || '/prueba.pdf')
     and not exists (select 1 from storage.objects where bucket_id = 'evidencias' and name like 'disputa/' || d1 || '/interno/%'));
   execute 'reset role';

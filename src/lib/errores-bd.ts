@@ -84,6 +84,8 @@ export const MENSAJES_NEGOCIO: Readonly<Record<string, string>> = {
     "Descarga la versión vigente del contenido antes de publicar.",
   AMO_ETIQUETA_REQUERIDA:
     "Confirma que la publicación lleva la etiqueta de publicidad.",
+  AMO_URL_OTRA_CUENTA:
+    "El enlace es de otra cuenta. Pega el enlace de la publicación en la cuenta de esta campaña.",
   AMO_FUERA_DE_VENTANA:
     "La fecha está fuera del plazo permitido para esta acción.",
   AMO_PERMANENCIA_PENDIENTE:
@@ -124,6 +126,8 @@ const RESTRICCIONES_COMUNES: Restricciones = {
   perfiles_email_key: "Ya existe una cuenta con ese correo.",
   perfiles_celular_chk: "El celular no tiene un formato válido.",
   anunciantes_nit_key: "Ya hay un anunciante registrado con ese NIT.",
+  publicaciones_url_post_key:
+    "Ese enlace ya se registró como evidencia de otra publicación.",
   medios_privado_numero_documento_hash_key:
     "Ya hay un medio registrado con ese número de documento.",
   cuentas_sociales_plataforma_handle_key:

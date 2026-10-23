@@ -666,7 +666,8 @@ begin
                               'perfil/' || u_anb || '/%', 'asignacion/' || x_a || '/%', 'asignacion/' || x_b || '/%',
                               'oferta/' || o_a || '/%', 'oferta/' || o_b || '/%', 'medio/' || me_a || '/%', 'liquidacion/' || l_a || '/%']);
   r := r || jsonb_build_object('st01_anunciante_solo_sus_carpetas',
-    pg_temp.ok(v_t = 'avatares:' || u_ana || ',creativos:' || o_a || ',documentos:' || an_a || ',evidencias:' || x_a, v_t));
+    -- Desde e2_integridad_ejecucion el anunciante solo lee capturas de publicaciones registradas: la de x_a no lo está.
+    pg_temp.ok(v_t = 'avatares:' || u_ana || ',creativos:' || o_a || ',documentos:' || an_a, v_t));
   begin
     insert into storage.objects (bucket_id, name) values ('documentos', 'anunciante/' || an_b || '/RUT/x.pdf');
     v_e := 'NO FALLÓ';

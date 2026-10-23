@@ -136,7 +136,7 @@ begin
      now() - interval '17 days', now() - interval '16 days', now() - interval '9 days', null,
      now() + interval '15 days', 1, 300000, v_tarifa, fr1, 45000),
     (a3, o2, c2, an_b, me_a, cu_a, 'INSTAGRAM', 1, 'EVIDENCIA_VALIDADA', now() - interval '19 days', now() - interval '18 days',
-     now() - interval '4 days', now() - interval '3 days', null, null,
+     now() - interval '9 days', now() - interval '8 days', null, null,
      now() + interval '15 days', 1, 300000, v_tarifa, fr1, 45000),
     (a4, o2, c2, an_b, me_b, cu_b, 'INSTAGRAM', 1, 'VERIFICADA', now() - interval '19 days', now() - interval '18 days',
      now() - interval '17 days', now() - interval '16 days', now() - interval '9 days', now() - interval '8 days',
@@ -154,8 +154,10 @@ begin
           true, true, now() - interval '10 days', now() - interval '8 days', 'APROBADA'),
          (p2, a2, 1, 'https://www.instagram.com/p/aud2/', now() - interval '17 days', 'asignacion/' || a2 || '/publicacion/1-c.webp',
           true, true, now() - interval '10 days', null, 'APROBADA'),
-         (p3, a3, 1, 'https://www.instagram.com/p/aud3/', now() - interval '3 days', 'asignacion/' || a3 || '/publicacion/1-c.webp',
-          true, true, now() + interval '4 days', null, 'APROBADA'),
+         -- Publicada hace 9 días: su corte D7 (m3, hace 1 día) ya se cumplió y el medio puede corregirlo (b7) sin que
+         -- la coherencia de cortes (e2_integridad_ejecucion) lo rechace por fecha.
+         (p3, a3, 1, 'https://www.instagram.com/p/aud3/', now() - interval '9 days', 'asignacion/' || a3 || '/publicacion/1-c.webp',
+          true, true, now() - interval '2 days', null, 'APROBADA'),
          (p4, a4, 1, 'https://www.instagram.com/p/aud4/', now() - interval '17 days', 'asignacion/' || a4 || '/publicacion/1-c.webp',
           true, true, now() - interval '10 days', now() - interval '8 days', 'APROBADA'),
          (p5, a5, 1, 'https://www.instagram.com/p/aud5/', now() - interval '2 days', 'asignacion/' || a5 || '/publicacion/1-c.webp',

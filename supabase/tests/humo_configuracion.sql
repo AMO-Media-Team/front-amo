@@ -101,10 +101,11 @@ begin
   select count(*) into v_n from public.niveles_verificacion;          r := r || jsonb_build_object('a2_admin_niveles_3', v_n = 3);
   select count(*) into v_n from public.parametros_tributarios;        r := r || jsonb_build_object('a2_admin_parametros_2', v_n = 2);
   -- 20 de configuracion_semillas + seguridad.alerta_pais_inusual (notificaciones, M8) + 34 de
-  -- e2_notificaciones_negocio + 2 de e2_anunciantes_ofertas; configuración: 53 + vinculacion.max_solicitudes_ip_dia
-  -- (e2_onboarding_medio) + ofertas.estimador_n_minimo y archivos.tolerancia_aspecto (e2_anunciantes_ofertas).
-  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_57', v_n = 57);
-  select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_56', v_n = 56);
+  -- e2_notificaciones_negocio + 2 de e2_anunciantes_ofertas + oferta.cupo_liberado (e2_integridad_ejecucion);
+  -- configuración: 53 + vinculacion.max_solicitudes_ip_dia (e2_onboarding_medio) + ofertas.estimador_n_minimo y
+  -- archivos.tolerancia_aspecto (e2_anunciantes_ofertas) + metricas.tolerancia_cortes (e2_integridad_ejecucion).
+  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_58', v_n = 58);
+  select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_57', v_n = 57);
   select count(*) into v_n from public.terminos_versiones where tipo = 'POLITICA_DATOS' and version like 'humo-%';
                                                                        r := r || jsonb_build_object('a2_admin_ve_borradores', v_n = 2);
   execute 'reset role';
@@ -389,7 +390,7 @@ begin
   r := r || jsonb_build_object('h3_tarifa_ig_reel_f3',
     exists (select 1 from public.tarifas t join public.formatos f on f.id = t.formato_id join public.franjas fr on fr.id = t.franja_id
             where f.plataforma = 'INSTAGRAM' and f.clave = 'REEL' and fr.clave = 'F3' and t.valor_base = 1200000 and t.pendiente_validacion));
-  r := r || jsonb_build_object('h4_config_tipos_validos', (select count(*) from public.configuracion) = 56);
+  r := r || jsonb_build_object('h4_config_tipos_validos', (select count(*) from public.configuracion) = 57);
   r := r || jsonb_build_object('h5_nivel_3_sin_tope', (select tope_anual is null from public.niveles_verificacion where nivel = 3));
 
   perform set_config('humo.resultado', r::text, true);
