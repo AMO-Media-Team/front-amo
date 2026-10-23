@@ -82,6 +82,7 @@ import {
 import { entorno } from "./cuentas"
 import {
   credencialesMedio,
+  MEDIO_SUSPENSION,
   MEDIO_VERIFICADO,
   type MedioDePrueba,
 } from "./medios"
@@ -321,14 +322,20 @@ export async function cargarMetricaE2E(opciones: {
 
 // ── Lo que hace el equipo AMO ────────────────────────────────────────────────
 
-/** Aprueba las evidencias pendientes y, con todas aprobadas, valida la asignación. */
+/**
+ * Aprueba las evidencias pendientes como el equipo AMO (`validar_evidencia_srv`):
+ * con la última aprobada, la asignación queda validada.
+ */
 export async function validarEvidenciaE2E(opciones: {
   asignacionId: string
 }): Promise<void> {
   await validarEvidencia(entorno, opciones)
 }
 
-/** Rechaza la evidencia con observaciones: el medio la corrige (CORREGIR_EVIDENCIA). */
+/**
+ * Rechaza la evidencia con observaciones (`validar_evidencia_srv`): el medio la
+ * corrige (CORREGIR_EVIDENCIA) y tiene al menos 24 h para cargar otra.
+ */
 export async function rechazarEvidenciaE2E(opciones: {
   asignacionId: string
   numero?: number
@@ -337,14 +344,20 @@ export async function rechazarEvidenciaE2E(opciones: {
   await rechazarEvidencia(entorno, opciones)
 }
 
-/** Aprueba una métrica (o las pendientes de una asignación); devuelve cuántas. */
+/**
+ * Aprueba una métrica (o las pendientes de una asignación) con
+ * `validar_metrica_srv`, anotando la revisión si tiene alerta; devuelve cuántas.
+ */
 export async function aprobarMetricaE2E(
   filtro: { metricaId: string } | { asignacionId: string }
 ): Promise<number> {
   return aprobarMetrica(entorno, filtro)
 }
 
-/** Rechaza una métrica con observaciones: el medio la corrige (CORREGIR_METRICAS). */
+/**
+ * Rechaza una métrica con observaciones (`validar_metrica_srv`): el medio la
+ * corrige (CORREGIR_METRICAS).
+ */
 export async function rechazarMetricaE2E(opciones: {
   metricaId: string
   observaciones: string
@@ -423,11 +436,13 @@ export interface PautaRestablecidaE2E {
  * borra sus asignaciones en ofertas ajenas (demo), sus «No me interesa» y sus
  * vistas. Va en el `beforeAll` de cada spec `pauta-medio-*`.
  *
- * Lo que ya descargó contenido no se puede borrar (la BD guarda las descargas
- * como bitácora de solo inserción): esa asignación queda CANCELADA, sin cupo,
- * y su campaña cancelada y archivada. Ya no aparece en el marketplace ni en
- * las próximas acciones, pero sí en «Mis campañas › Vencidas o canceladas»:
- * no cuentes esas filas, ubica las tuyas por el título de su oferta.
+ * Lo que ya descargó contenido o tiene mensajes de disputa no se puede borrar
+ * (la BD los guarda como bitácora de solo inserción): sus disputas abiertas se
+ * cierran, la asignación queda CANCELADA, sin cupo, y su campaña cancelada y
+ * archivada; una vencida que aún podría reclamar se cierra con su sesión. Ya
+ * no aparece en el marketplace ni en las próximas acciones, pero sí en «Mis
+ * campañas › Vencidas o canceladas»: no cuentes esas filas, ubica las tuyas
+ * por el título de su oferta.
  */
 export async function restablecerPautaMedioE2E(
   medio: MedioDePrueba = MEDIO_VERIFICADO
@@ -449,7 +464,9 @@ export async function restablecerPautaMedioE2E(
 /**
  * Borra las campañas de la empresa que empiezan por `prefijo` con todo lo
  * suyo, también las asignaciones de los medios (p. ej. en el `afterAll` de un
- * spec del anunciante: `prefijo: PREFIJO_PAUTA_ANUNCIANTE`).
+ * spec del anunciante: `prefijo: PREFIJO_PAUTA_ANUNCIANTE`). Lo que la BD no
+ * deja borrar (descargas, mensajes de disputa) queda con sus disputas
+ * cerradas, cancelado y archivado.
  */
 export async function borrarPautaE2E({
   prefijo,
@@ -462,6 +479,18 @@ export async function borrarPautaE2E({
   return borrarPauta(entorno, servicio, {
     anuncianteId: anuncianteDe(cuenta).id,
     prefijo,
+    medios: mediosConCredenciales(),
+  })
+}
+
+/** Los medios verificados E2E cuyas credenciales están en `.env.local` (para cerrar sus reclamos). */
+function mediosConCredenciales(): MedioPauta[] {
+  return [MEDIO_VERIFICADO, MEDIO_SUSPENSION].flatMap((medio) => {
+    try {
+      return [medioPauta(medio)]
+    } catch {
+      return []
+    }
   })
 }
 

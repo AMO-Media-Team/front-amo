@@ -10,7 +10,11 @@
  */
 import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 import { type EstadoPerfil, transicionesParaRestaurar } from "./estado-perfil"
-import { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
+import {
+  MEDIO_E2E_ID,
+  MEDIO_NUEVO_E2E_ID,
+  MEDIO_SUSPENSION_E2E_ID,
+} from "./medios-e2e"
 import { enrolarTotpEnSesion } from "./mfa"
 import { conOperadorTemporal } from "./operador-temporal"
 import { organizacionDe, type RolCuentaPrueba } from "./organizacion"
@@ -36,7 +40,11 @@ export { ANUNCIANTE_E2E_ID } from "./organizacion"
 
 export { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 
-export { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
+export {
+  MEDIO_E2E_ID,
+  MEDIO_NUEVO_E2E_ID,
+  MEDIO_SUSPENSION_E2E_ID,
+} from "./medios-e2e"
 
 export interface CuentaE2E {
   clave: string
@@ -52,6 +60,11 @@ export interface CuentaE2E {
   variablePassword: string
   debeCambiarPassword: boolean
   conTotp: boolean
+  /**
+   * Variable de `.env.local` con la clave del TOTP de una cuenta `conTotp`
+   * (por omisión `E2E_ADMIN_TOTP_SECRET`: `variableTotpDe`).
+   */
+  variableTotp?: string
 }
 
 export const CUENTAS_E2E: readonly CuentaE2E[] = [
@@ -64,6 +77,19 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     variablePassword: "E2E_ADMIN_PASSWORD",
     debeCambiarPassword: false,
     conTotp: true,
+  },
+  {
+    // Equipo AMO sin configuración ni corrección de métricas (fase 4: colas de
+    // validación, disputas y suspensión con los permisos de OPERACIONES).
+    clave: "OPERACIONES",
+    rol: "OPERACIONES",
+    nombre: "Operaciones E2E",
+    emailPorDefecto: "e2e.operaciones@amo.test",
+    variableEmail: "E2E_OPERACIONES_EMAIL",
+    variablePassword: "E2E_OPERACIONES_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: true,
+    variableTotp: "E2E_OPERACIONES_TOTP_SECRET",
   },
   {
     clave: "ANUNCIANTE",
@@ -110,6 +136,19 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     conTotp: false,
   },
   {
+    // «Medio Suspensión E2E»: VERIFICADO nivel 1 como el Medio E2E, para las
+    // pruebas que lo suspenden y lo reactivan (medios-e2e.ts).
+    clave: "MEDIO_SUSPENSION",
+    rol: "MEDIO",
+    medioId: MEDIO_SUSPENSION_E2E_ID,
+    nombre: "Medio Suspensión E2E",
+    emailPorDefecto: "e2e.medio.suspension@amo.test",
+    variableEmail: "E2E_MEDIO_SUSPENSION_EMAIL",
+    variablePassword: "E2E_MEDIO_SUSPENSION_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: false,
+  },
+  {
     // «Anunciante Nuevo E2E»: PENDIENTE en Colombia, sin documentos; cada
     // corrida lo reinicia (anunciantes-e2e.ts).
     clave: "ANUNCIANTE_NUEVO",
@@ -125,6 +164,13 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
 ]
 
 export const VARIABLE_TOTP_ADMIN = "E2E_ADMIN_TOTP_SECRET"
+
+/** Variable con la clave del TOTP de la cuenta (`VARIABLE_TOTP_ADMIN` si no declara otra). */
+export function variableTotpDe(
+  cuenta: Pick<CuentaE2E, "variableTotp">
+): string {
+  return cuenta.variableTotp ?? VARIABLE_TOTP_ADMIN
+}
 
 export function cuentaE2E(clave: CuentaE2E["clave"]): CuentaE2E {
   const cuenta = CUENTAS_E2E.find((candidata) => candidata.clave === clave)
@@ -357,14 +403,15 @@ export async function asegurarTotp(
   servicio: ClienteSupabase,
   usuarioId: string,
   credenciales: { email: string; password: string },
-  secretoConocido: string | undefined
+  secretoConocido: string | undefined,
+  variable: string = VARIABLE_TOTP_ADMIN
 ): Promise<string> {
   if (secretoConocido && (await tieneTotpVerificado(servicio, usuarioId))) {
     return secretoConocido
   }
   if (secretoConocido) {
     throw new ErrorBootstrap(
-      `${VARIABLE_TOTP_ADMIN} está en .env.local pero la cuenta no tiene ese factor: borra la línea y vuelve a ejecutar.`
+      `${variable} está en .env.local pero la cuenta no tiene ese factor: borra la línea y vuelve a ejecutar.`
     )
   }
   await borrarFactores(servicio, usuarioId)

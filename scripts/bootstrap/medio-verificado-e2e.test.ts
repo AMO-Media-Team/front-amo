@@ -14,12 +14,15 @@ import {
   type CifradorPago,
   CUENTA_PAGO_E2E,
   cuentaAlDia,
+  cuentaPagoDe,
   datosPagoE2E,
   describirPaso,
   documentosExigidos,
   type EstadoMedioVerificado,
   type FilaPagoMedio,
   formatoDocumento,
+  MEDIO_SUSPENSION_VERIFICADO_E2E,
+  MEDIO_VERIFICADO_E2E,
   PAGO_MEDIO_E2E,
   pagoAlDia,
   type PasoMedio,
@@ -427,5 +430,88 @@ describe("describirPaso", () => {
       expect(texto).not.toContain(PAGO_MEDIO_E2E.numeroCuenta)
       expect(texto).not.toContain(PAGO_MEDIO_E2E.numeroDocumento)
     }
+  })
+})
+
+describe("Medio Suspensión E2E", () => {
+  const medio = MEDIO_SUSPENSION_VERIFICADO_E2E
+
+  it("es otro medio, con su cuenta y su documento (las huellas no chocan)", () => {
+    expect(medio.datos.id).not.toBe(MEDIO_VERIFICADO_E2E.datos.id)
+    expect(medio.cuenta.handle).not.toBe(MEDIO_VERIFICADO_E2E.cuenta.handle)
+    expect(medio.datos.municipioPreferido).not.toBe(
+      MEDIO_VERIFICADO_E2E.datos.municipioPreferido
+    )
+    const propia = datosPagoE2E(medio.datos.id, CIFRADOR, medio.pago)
+    const delMedioE2E = datosPagoE2E(MEDIO_E2E_ID, CIFRADOR)
+    expect(propia.numero_documento_hash).not.toBe(
+      delMedioE2E.numero_documento_hash
+    )
+    expect(
+      leerCuentaPago(
+        CIFRADOR.descifrar(
+          propia.datos_pago_cifrados,
+          contextoCifrado(medio.datos.id, "datos_pago_cifrados")
+        )
+      )
+    ).toEqual(cuentaPagoDe(medio.pago))
+  })
+
+  it("su pago al día no se confunde con el del Medio E2E", () => {
+    const fila = filaGuardada(
+      datosPagoE2E(medio.datos.id, CIFRADOR, medio.pago)
+    )
+    expect(pagoAlDia(fila, medio.datos.id, CIFRADOR, medio.pago)).toBe(true)
+    expect(pagoAlDia(fila, medio.datos.id, CIFRADOR)).toBe(false)
+  })
+
+  it("se reverifica con sus seguidores y se describe con su cuenta", () => {
+    const conSeguidoresDelOtro: EstadoMedioVerificado = {
+      ...LISTO,
+      cuenta: {
+        alDia: true,
+        seguidores: CUENTA_INSTAGRAM_E2E.seguidores,
+        verificacionPendienteId: null,
+      },
+    }
+    expect(planMedioVerificado(conSeguidoresDelOtro, medio)).toEqual<
+      PasoMedio[]
+    >([{ paso: "VERIFICAR_CUENTA" }])
+    expect(
+      planMedioVerificado(
+        {
+          ...LISTO,
+          cuenta: {
+            alDia: true,
+            seguidores: medio.cuenta.seguidores,
+            verificacionPendienteId: null,
+          },
+        },
+        medio
+      )
+    ).toEqual([])
+    expect(describirPaso({ paso: "REGISTRAR_CUENTA" }, medio.cuenta)).toBe(
+      "cuenta de Instagram @medio.suspension.e2e.amo"
+    )
+    expect(describirPaso({ paso: "VERIFICAR_CUENTA" }, medio.cuenta)).toBe(
+      "verificar la cuenta con 45000 seguidores"
+    )
+  })
+
+  it("si quedó suspendido, el plan lo reactiva", () => {
+    expect(
+      planMedioVerificado(
+        {
+          ...LISTO,
+          estado: "SUSPENDIDO",
+          cuenta: {
+            alDia: true,
+            seguidores: medio.cuenta.seguidores,
+            verificacionPendienteId: null,
+          },
+        },
+        medio
+      )
+    ).toEqual<PasoMedio[]>([{ paso: "REACTIVAR" }])
   })
 })

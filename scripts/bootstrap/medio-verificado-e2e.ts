@@ -1,7 +1,10 @@
 /**
- * Plan del «Medio E2E» verificado (módulo puro): qué le falta para ser el
+ * Plan de un medio E2E verificado (módulo puro): qué le falta para ser el
  * medio que esperan las pruebas y en qué orden se completa. Cada corrida
  * agrega solo lo que falte y no borra lo que las pruebas le hayan sumado.
+ * Sirve para el «Medio E2E» (por omisión) y para el «Medio Suspensión E2E»
+ * (`MEDIO_SUSPENSION_VERIFICADO_E2E`): cada uno con sus datos base, su cuenta
+ * de Instagram y sus datos de pago (la huella del documento es única).
  */
 import { addYears, subDays } from "date-fns"
 
@@ -10,12 +13,21 @@ import {
   contextoCifrado,
   type CuentaPago,
   leerCuentaPago,
+  type TipoCuenta,
   normalizarNumeroDocumento,
   serializarCuentaPago,
 } from "../../src/features/mi-medio/datos-pago"
 import { serializarFecha } from "../../src/lib/fechas"
 import type { Database } from "../../src/types/database.types"
-import { CUENTA_INSTAGRAM_E2E, NIVEL_MEDIO_E2E } from "./medios-e2e"
+import {
+  CUENTA_INSTAGRAM_E2E,
+  CUENTA_INSTAGRAM_SUSPENSION_E2E,
+  type CuentaSocialE2E,
+  type DatosBaseMedio,
+  MEDIO_E2E,
+  MEDIO_SUSPENSION_E2E,
+  NIVEL_MEDIO_E2E,
+} from "./medios-e2e"
 
 type Enums = Database["public"]["Enums"]
 type Tablas = Database["public"]["Tables"]
@@ -24,6 +36,20 @@ export type TipoDocumentoMedio = Enums["documento_medio_tipo"]
 export type MetodoPago = Enums["metodo_pago"]
 
 // ── Datos de pago ────────────────────────────────────────────────────────────
+
+/** Datos de pago y condición tributaria de un medio E2E (ficticios; siempre por banco). */
+export interface PagoMedioE2E {
+  titular: string
+  tipoDocumento: Enums["documento_identidad_tipo"]
+  numeroDocumento: string
+  metodo: Extract<MetodoPago, "BANCARIO">
+  banco: string
+  tipoCuenta: TipoCuenta
+  numeroCuenta: string
+  celular: string
+  email: string
+  direccion: string
+}
 
 /** Datos de pago y condición tributaria del Medio E2E (ficticios). */
 export const PAGO_MEDIO_E2E = {
@@ -37,27 +63,64 @@ export const PAGO_MEDIO_E2E = {
   celular: "+57 3000000001",
   email: "pagos.medio.e2e@amo.test",
   direccion: "Calle 10 # 20-30, Medellín",
-} as const satisfies {
-  tipoDocumento: Enums["documento_identidad_tipo"]
-  metodo: MetodoPago
-  [clave: string]: string
-}
+} as const satisfies PagoMedioE2E
+
+/** Datos de pago del Medio Suspensión E2E: otro documento (la huella es única). */
+export const PAGO_MEDIO_SUSPENSION_E2E = {
+  titular: "Titular Medio Suspensión E2E",
+  tipoDocumento: "CC",
+  numeroDocumento: "1099000002",
+  metodo: "BANCARIO",
+  banco: "Bancolombia",
+  tipoCuenta: "AHORROS",
+  numeroCuenta: "40900012346",
+  celular: "+57 3000000002",
+  email: "pagos.medio.suspension.e2e@amo.test",
+  direccion: "Carrera 50 # 70-10, Barranquilla",
+} as const satisfies PagoMedioE2E
 
 /**
  * Cuenta que va cifrada en `datos_pago_cifrados`, con el contrato del paquete
  * «Mi medio» (`serializarCuentaPago`): la revisión de AMO y la dispersión la
  * leen igual que la de un medio real.
  */
-export const CUENTA_PAGO_E2E: CuentaPago = {
-  metodo: PAGO_MEDIO_E2E.metodo,
-  banco: PAGO_MEDIO_E2E.banco,
-  tipoCuenta: PAGO_MEDIO_E2E.tipoCuenta,
-  numero: PAGO_MEDIO_E2E.numeroCuenta,
+export function cuentaPagoDe(pago: PagoMedioE2E): CuentaPago {
+  return {
+    metodo: pago.metodo,
+    banco: pago.banco,
+    tipoCuenta: pago.tipoCuenta,
+    numero: pago.numeroCuenta,
+  }
 }
 
-const NUMERO_DOCUMENTO_E2E = normalizarNumeroDocumento(
-  PAGO_MEDIO_E2E.numeroDocumento
-)
+/** La cuenta de pago del Medio E2E. */
+export const CUENTA_PAGO_E2E: CuentaPago = cuentaPagoDe(PAGO_MEDIO_E2E)
+
+// ── Medios verificados ───────────────────────────────────────────────────────
+
+/** Lo que distingue a un medio E2E verificado: sus datos, nivel, cuenta y pago. */
+export interface MedioVerificadoE2E {
+  datos: DatosBaseMedio
+  nivel: number
+  cuenta: CuentaSocialE2E
+  pago: PagoMedioE2E
+}
+
+/** «Medio E2E»: el de la pauta del medio. */
+export const MEDIO_VERIFICADO_E2E: MedioVerificadoE2E = {
+  datos: MEDIO_E2E,
+  nivel: NIVEL_MEDIO_E2E,
+  cuenta: CUENTA_INSTAGRAM_E2E,
+  pago: PAGO_MEDIO_E2E,
+}
+
+/** «Medio Suspensión E2E»: el que suspenden y reactivan las pruebas del equipo AMO. */
+export const MEDIO_SUSPENSION_VERIFICADO_E2E: MedioVerificadoE2E = {
+  datos: MEDIO_SUSPENSION_E2E,
+  nivel: NIVEL_MEDIO_E2E,
+  cuenta: CUENTA_INSTAGRAM_SUSPENSION_E2E,
+  pago: PAGO_MEDIO_SUSPENSION_E2E,
+}
 
 /** Las funciones de `src/lib/cifrado.ts` que necesita el aprovisionamiento. */
 export interface CifradorPago {
@@ -73,16 +136,17 @@ export interface CifradorPago {
  * `•••• 1234`.
  */
 function camposPlanosPago(
-  cifrador: Pick<CifradorPago, "huella" | "enmascarar">
+  cifrador: Pick<CifradorPago, "huella" | "enmascarar">,
+  pago: PagoMedioE2E
 ) {
-  const pago = PAGO_MEDIO_E2E
+  const numeroDocumento = normalizarNumeroDocumento(pago.numeroDocumento)
   return {
     titular_nombre: pago.titular,
     tipo_documento: pago.tipoDocumento,
     numero_documento_hash: cifrador.huella(
-      `${pago.tipoDocumento}:${NUMERO_DOCUMENTO_E2E}`
+      `${pago.tipoDocumento}:${numeroDocumento}`
     ),
-    numero_documento_resumen: cifrador.enmascarar(NUMERO_DOCUMENTO_E2E),
+    numero_documento_resumen: cifrador.enmascarar(numeroDocumento),
     metodo_pago: pago.metodo,
     datos_pago_resumen: cifrador.enmascarar(pago.numeroCuenta, pago.banco),
     es_declarante: false,
@@ -95,15 +159,19 @@ function camposPlanosPago(
 }
 
 /** `p_datos` de `guardar_datos_pago_medio_srv`: completos, cifrados y con huella y resúmenes. */
-export function datosPagoE2E(medioId: string, cifrador: CifradorPago) {
+export function datosPagoE2E(
+  medioId: string,
+  cifrador: CifradorPago,
+  pago: PagoMedioE2E = PAGO_MEDIO_E2E
+) {
   return {
-    ...camposPlanosPago(cifrador),
+    ...camposPlanosPago(cifrador, pago),
     numero_documento_cifrado: cifrador.cifrar(
-      NUMERO_DOCUMENTO_E2E,
+      normalizarNumeroDocumento(pago.numeroDocumento),
       contextoCifrado(medioId, "numero_documento_cifrado")
     ),
     datos_pago_cifrados: cifrador.cifrar(
-      serializarCuentaPago(CUENTA_PAGO_E2E),
+      serializarCuentaPago(cuentaPagoDe(pago)),
       contextoCifrado(medioId, "datos_pago_cifrados")
     ),
   }
@@ -142,26 +210,27 @@ function textoClaro(
   }
 }
 
-function esCuentaE2E(texto: string | null): boolean {
+function esCuentaDe(texto: string | null, pago: PagoMedioE2E): boolean {
   const cuenta = texto === null ? null : leerCuentaPago(texto)
   return (
     cuenta !== null &&
-    serializarCuentaPago(cuenta) === serializarCuentaPago(CUENTA_PAGO_E2E)
+    serializarCuentaPago(cuenta) === serializarCuentaPago(cuentaPagoDe(pago))
   )
 }
 
 /**
- * ¿La fila guardada ya es la del Medio E2E y se descifra con la llave
- * actual? Así una corrida repetida no vuelve a cifrar (ni avisa a la cola de
- * verificación de un cambio de datos de pago que no hubo).
+ * ¿La fila guardada ya es la del medio (por omisión, el Medio E2E) y se
+ * descifra con la llave actual? Así una corrida repetida no vuelve a cifrar
+ * (ni avisa a la cola de verificación de un cambio de datos de pago que no hubo).
  */
 export function pagoAlDia(
   fila: FilaPagoMedio | null,
   medioId: string,
-  cifrador: CifradorPago
+  cifrador: CifradorPago,
+  pago: PagoMedioE2E = PAGO_MEDIO_E2E
 ): boolean {
   if (!fila) return false
-  const esperado = camposPlanosPago(cifrador)
+  const esperado = camposPlanosPago(cifrador, pago)
   const planosIguales = (
     Object.keys(esperado) as (keyof typeof esperado)[]
   ).every((columna) => fila[columna] === esperado[columna])
@@ -178,7 +247,10 @@ export function pagoAlDia(
     "datos_pago_cifrados",
     cifrador
   )
-  return numero === NUMERO_DOCUMENTO_E2E && esCuentaE2E(cuenta)
+  return (
+    numero === normalizarNumeroDocumento(pago.numeroDocumento) &&
+    esCuentaDe(cuenta, pago)
+  )
 }
 
 // ── Cuenta social ────────────────────────────────────────────────────────────
@@ -293,11 +365,14 @@ export type PasoMedio =
   | { paso: "VERIFICAR_MEDIO"; nivel: number }
   | { paso: "CAMBIAR_NIVEL"; nivel: number }
 
-function pasosCuenta(cuenta: EstadoMedioVerificado["cuenta"]): PasoMedio[] {
+function pasosCuenta(
+  cuenta: EstadoMedioVerificado["cuenta"],
+  seguidores: number
+): PasoMedio[] {
   if (!cuenta) {
     return [{ paso: "REGISTRAR_CUENTA" }, { paso: "VERIFICAR_CUENTA" }]
   }
-  if (cuenta.alDia && cuenta.seguidores === CUENTA_INSTAGRAM_E2E.seguidores) {
+  if (cuenta.alDia && cuenta.seguidores === seguidores) {
     return []
   }
   // La que quedó a medias (p. ej. una prueba de reverificación) cede su lugar.
@@ -352,30 +427,34 @@ export function pasosEstadoMedio(
 }
 
 /**
- * Lo que falta para que el Medio E2E sea el que esperan las pruebas, en el
- * orden en que se aplica: cuenta, pago y documentos antes del estado (verificar
- * un medio exige los tres). Vacío = ya está listo.
+ * Lo que falta para que el medio (por omisión, el Medio E2E) sea el que
+ * esperan las pruebas, en el orden en que se aplica: cuenta, pago y documentos
+ * antes del estado (verificar un medio exige los tres). Vacío = ya está listo.
  */
 export function planMedioVerificado(
-  estado: EstadoMedioVerificado
+  estado: EstadoMedioVerificado,
+  medio: Pick<MedioVerificadoE2E, "cuenta" | "nivel"> = MEDIO_VERIFICADO_E2E
 ): PasoMedio[] {
   return [
-    ...pasosCuenta(estado.cuenta),
+    ...pasosCuenta(estado.cuenta, medio.cuenta.seguidores),
     ...(estado.pagoAlDia ? [] : [{ paso: "GUARDAR_PAGO" } as const]),
     ...pasosDocumentos(estado),
-    ...pasosEstadoMedio(estado.estado, estado.nivel, NIVEL_MEDIO_E2E),
+    ...pasosEstadoMedio(estado.estado, estado.nivel, medio.nivel),
   ]
 }
 
 /** Resumen legible de un paso para el registro del aprovisionamiento. */
-export function describirPaso(paso: PasoMedio): string {
+export function describirPaso(
+  paso: PasoMedio,
+  cuenta: Pick<CuentaSocialE2E, "handle" | "seguidores"> = CUENTA_INSTAGRAM_E2E
+): string {
   switch (paso.paso) {
     case "REGISTRAR_CUENTA":
-      return `cuenta de Instagram @${CUENTA_INSTAGRAM_E2E.handle}`
+      return `cuenta de Instagram @${cuenta.handle}`
     case "DESCARTAR_VERIFICACION":
       return "descartar una verificación de cuenta a medias"
     case "VERIFICAR_CUENTA":
-      return `verificar la cuenta con ${CUENTA_INSTAGRAM_E2E.seguidores} seguidores`
+      return `verificar la cuenta con ${cuenta.seguidores} seguidores`
     case "GUARDAR_PAGO":
       return "datos de pago cifrados"
     case "APROBAR_DOCUMENTO":

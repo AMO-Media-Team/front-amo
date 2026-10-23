@@ -1,6 +1,7 @@
 /**
  * Escrituras del aprovisionamiento de los medios E2E (qué se garantiza:
- * `medios-e2e.ts` y `medio-verificado-e2e.ts`). Todo va por la API, como el
+ * `medios-e2e.ts` y `medio-verificado-e2e.ts`): el «Medio E2E» y el «Medio
+ * Suspensión E2E» verificados, y el «Medio Nuevo E2E» recién registrado. Todo va por la API, como el
  * resto de `pnpm bootstrap:e2e`: PostgREST y Storage con el cliente de
  * servicio que actúa como el superadministrador (bitácora con actor), y los
  * cambios de estado por la máquina de estados (`transicionar_srv` y las
@@ -22,7 +23,8 @@ import {
   documentosExigidos,
   type EstadoMedioVerificado,
   formatoDocumento,
-  PAGO_MEDIO_E2E,
+  MEDIO_VERIFICADO_E2E,
+  type MedioVerificadoE2E,
   pagoAlDia,
   type PasoMedio,
   planMedioVerificado,
@@ -34,14 +36,13 @@ import {
   type AccionMedioNuevo,
   accionMedioNuevo,
   cambiosMedio,
-  CUENTA_INSTAGRAM_E2E,
   type DatosBaseMedio,
   diferencia,
   MEDIO_E2E,
   MEDIO_E2E_ID,
   MEDIO_NUEVO_E2E,
   MEDIO_NUEVO_E2E_ID,
-  NIVEL_MEDIO_E2E,
+  MEDIO_SUSPENSION_E2E,
 } from "./medios-e2e"
 import { conOperadorTemporal, type OperadorTemporal } from "./operador-temporal"
 import {
@@ -405,15 +406,16 @@ export async function restablecerMedioNuevo(
 }
 
 /**
- * Deja listos los dos medios antes de preparar sus cuentas (un perfil MEDIO
- * activo exige su medio): el Medio E2E con sus datos base y el Medio Nuevo
- * E2E reiniciado.
+ * Deja listos los medios antes de preparar sus cuentas (un perfil MEDIO
+ * activo exige su medio): el Medio E2E y el Medio Suspensión E2E con sus
+ * datos base, y el Medio Nuevo E2E reiniciado.
  */
 export async function prepararMediosBase(
   servicio: ClienteSupabase,
   emailUsuarioNuevo: string
 ): Promise<AccionMedioNuevo> {
   await asegurarFilaMedio(servicio, MEDIO_E2E)
+  await asegurarFilaMedio(servicio, MEDIO_SUSPENSION_E2E)
   return restablecerMedioNuevo(servicio, emailUsuarioNuevo)
 }
 
@@ -443,22 +445,23 @@ interface LecturaMedioVerificado {
 async function leerMedioVerificado(
   servicio: ClienteSupabase,
   cifrador: CifradorPago,
-  ahora: Date
+  ahora: Date,
+  { datos, cuenta: cuentaE2E, nivel: nivelE2E, pago }: MedioVerificadoE2E
 ): Promise<LecturaMedioVerificado> {
   const [medio, cuenta, privado, aprobados, nivel, dias] = await Promise.all([
     servicio
       .from("medios")
       .select("estado, nivel_verificacion")
-      .eq("id", MEDIO_E2E_ID)
+      .eq("id", datos.id)
       .single(),
     servicio
       .from("cuentas_sociales")
       .select(
         "id, verificada, fecha_ultima_verificacion, seguidores_verificados, verificaciones:verificaciones_cuenta(id, estado_validacion)"
       )
-      .eq("medio_id", MEDIO_E2E_ID)
-      .eq("plataforma", CUENTA_INSTAGRAM_E2E.plataforma)
-      .eq("handle", CUENTA_INSTAGRAM_E2E.handle)
+      .eq("medio_id", datos.id)
+      .eq("plataforma", cuentaE2E.plataforma)
+      .eq("handle", cuentaE2E.handle)
       .is("deleted_at", null)
       .maybeSingle(),
     servicio
@@ -466,25 +469,25 @@ async function leerMedioVerificado(
       .select(
         "titular_nombre, tipo_documento, numero_documento_cifrado, numero_documento_hash, numero_documento_resumen, metodo_pago, datos_pago_cifrados, datos_pago_resumen, es_declarante, obligado_facturar, responsable_iva, celular, email_contacto, direccion"
       )
-      .eq("medio_id", MEDIO_E2E_ID)
+      .eq("medio_id", datos.id)
       .maybeSingle(),
     servicio
       .from("documentos_medio")
       .select("tipo, fecha_vencimiento")
-      .eq("medio_id", MEDIO_E2E_ID)
+      .eq("medio_id", datos.id)
       .eq("estado_validacion", "APROBADO"),
     servicio
       .from("niveles_verificacion")
       .select("documentos_requeridos")
-      .eq("nivel", NIVEL_MEDIO_E2E)
+      .eq("nivel", nivelE2E)
       .single(),
     diasReverificacion(servicio),
   ])
   for (const { error } of [medio, cuenta, privado, aprobados, nivel]) {
-    if (error) fallo("No se pudo leer el Medio E2E", error)
+    if (error) fallo(`No se pudo leer «${datos.nombre}»`, error)
   }
   if (!medio.data || !nivel.data || !aprobados.data) {
-    throw new ErrorBootstrap("El Medio E2E no existe: vuelve a ejecutar.")
+    throw new ErrorBootstrap(`«${datos.nombre}» no existe: vuelve a ejecutar.`)
   }
 
   const filaCuenta = cuenta.data
@@ -503,11 +506,11 @@ async function leerMedioVerificado(
               )?.id ?? null,
           }
         : null,
-      pagoAlDia: pagoAlDia(privado.data, MEDIO_E2E_ID, cifrador),
+      pagoAlDia: pagoAlDia(privado.data, datos.id, cifrador, pago),
       documentosVigentes: tiposVigentes(aprobados.data, serializarFecha(ahora)),
       documentosExigidos: documentosExigidos(
         nivel.data.documentos_requeridos,
-        PAGO_MEDIO_E2E.metodo
+        pago.metodo
       ),
     },
   }
@@ -515,6 +518,8 @@ async function leerMedioVerificado(
 
 interface ContextoPasos {
   entorno: EntornoBootstrap
+  /** El medio que se completa (datos, cuenta, nivel y pago). */
+  medio: MedioVerificadoE2E
   servicio: ClienteSupabase
   operador: OperadorTemporal
   cifrador: CifradorPago
@@ -584,19 +589,22 @@ async function conArchivoSubido<T>(
 
 function exigirCuenta(contexto: ContextoPasos): string {
   if (!contexto.cuentaId) {
-    throw new ErrorBootstrap("Falta la cuenta de Instagram del Medio E2E.")
+    throw new ErrorBootstrap(
+      `Falta la cuenta de Instagram de «${contexto.medio.datos.nombre}».`
+    )
   }
   return contexto.cuentaId
 }
 
 async function registrarCuenta(contexto: ContextoPasos): Promise<void> {
+  const { datos, cuenta } = contexto.medio
   const { data, error } = await contexto.servicio
     .from("cuentas_sociales")
     .insert({
-      medio_id: MEDIO_E2E_ID,
-      plataforma: CUENTA_INSTAGRAM_E2E.plataforma,
-      handle: CUENTA_INSTAGRAM_E2E.handle,
-      url: CUENTA_INSTAGRAM_E2E.url,
+      medio_id: datos.id,
+      plataforma: cuenta.plataforma,
+      handle: cuenta.handle,
+      url: cuenta.url,
     })
     .select("id")
     .single()
@@ -604,11 +612,12 @@ async function registrarCuenta(contexto: ContextoPasos): Promise<void> {
   contexto.cuentaId = data.id
 }
 
-/** Captura de muestra + verificación MANUAL aprobada con 40.000 seguidores. */
+/** Captura de muestra + verificación MANUAL aprobada con los seguidores de la cuenta. */
 async function verificarCuenta(contexto: ContextoPasos): Promise<void> {
   const cuentaId = exigirCuenta(contexto)
+  const { datos, cuenta } = contexto.medio
   const destino = contexto.rutas.nuevaRuta(
-    contexto.rutas.carpetaCapturaCuentaSocial(MEDIO_E2E_ID, cuentaId),
+    contexto.rutas.carpetaCapturaCuentaSocial(datos.id, cuentaId),
     "image/png"
   )
   const verificacionId = await conArchivoSubido(
@@ -621,9 +630,9 @@ async function verificarCuenta(contexto: ContextoPasos): Promise<void> {
         .from("verificaciones_cuenta")
         .insert({
           cuenta_social_id: cuentaId,
-          medio_id: MEDIO_E2E_ID,
+          medio_id: datos.id,
           metodo: "MANUAL",
-          seguidores_reportados: CUENTA_INSTAGRAM_E2E.seguidores,
+          seguidores_reportados: cuenta.seguidores,
           captura_path: destino.ruta,
         })
         .select("id")
@@ -640,7 +649,7 @@ async function verificarCuenta(contexto: ContextoPasos): Promise<void> {
     "APROBADA",
     {
       datos: {
-        seguidores_verificados: CUENTA_INSTAGRAM_E2E.seguidores,
+        seguidores_verificados: cuenta.seguidores,
         observaciones: OBSERVACION_MUESTRA,
       },
     }
@@ -651,21 +660,28 @@ async function guardarPago(contexto: ContextoPasos): Promise<void> {
   const { error } = await contexto.servicio.rpc(
     "guardar_datos_pago_medio_srv",
     {
-      p_medio_id: MEDIO_E2E_ID,
+      p_medio_id: contexto.medio.datos.id,
       p_actor_id: contexto.operador.usuarioId,
       p_session_id: contexto.operador.sesionId,
-      p_datos: datosPagoE2E(MEDIO_E2E_ID, contexto.cifrador),
+      p_datos: datosPagoE2E(
+        contexto.medio.datos.id,
+        contexto.cifrador,
+        contexto.medio.pago
+      ),
     }
   )
   if (error) fallo("No se pudieron guardar los datos de pago", error)
 }
 
-function contenidoDocumento(tipo: TipoDocumentoMedio): Buffer {
+function contenidoDocumento(
+  tipo: TipoDocumentoMedio,
+  nombreMedio: string
+): Buffer {
   return formatoDocumento(tipo) === "image/png"
     ? pngDeMuestra(640, 400, FONDO_MUESTRA, FRANJA_MUESTRA)
     : pdfDeMuestra([
         "AMO · Documento de muestra (pruebas E2E)",
-        `${TIPOS_DOCUMENTO_MEDIO[tipo]} de «${MEDIO_E2E.nombre}»`,
+        `${TIPOS_DOCUMENTO_MEDIO[tipo]} de «${nombreMedio}»`,
         "Generado por pnpm bootstrap:e2e. No es un documento real.",
       ])
 }
@@ -676,20 +692,21 @@ async function aprobarDocumento(
   tipo: TipoDocumentoMedio
 ): Promise<void> {
   const mime = formatoDocumento(tipo)
+  const { datos } = contexto.medio
   const destino = contexto.rutas.nuevaRuta(
-    contexto.rutas.carpetaDocumentoMedio(MEDIO_E2E_ID, tipo),
+    contexto.rutas.carpetaDocumentoMedio(datos.id, tipo),
     mime
   )
   const documentoId = await conArchivoSubido(
     contexto,
     destino,
-    contenidoDocumento(tipo),
+    contenidoDocumento(tipo, datos.nombre),
     mime,
     async () => {
       const { data, error } = await contexto.servicio
         .from("documentos_medio")
         .insert({
-          medio_id: MEDIO_E2E_ID,
+          medio_id: datos.id,
           tipo,
           archivo_path: destino.ruta,
           subido_por: contexto.usuario.id,
@@ -713,7 +730,7 @@ async function registrarVideollamada(contexto: ContextoPasos): Promise<void> {
   const { error } = await contexto.servicio.rpc(
     "registrar_verificacion_videollamada_srv",
     {
-      p_medio_id: MEDIO_E2E_ID,
+      p_medio_id: contexto.medio.datos.id,
       p_actor_id: contexto.operador.usuarioId,
       p_session_id: contexto.operador.sesionId,
       p_observaciones:
@@ -731,17 +748,18 @@ async function reenviarComoMedio(contexto: ContextoPasos): Promise<void> {
   const cliente = crearClientePublico(contexto.entorno)
   const { email, password, id } = contexto.usuario
   const ingreso = await cliente.auth.signInWithPassword({ email, password })
+  const { nombre, id: medioId } = contexto.medio.datos
   if (ingreso.error)
-    fallo("El usuario del Medio E2E no pudo ingresar", ingreso.error)
+    fallo(`El usuario de «${nombre}» no pudo ingresar`, ingreso.error)
   try {
     const { data, error } = await cliente.auth.getClaims()
     if (error || !data) {
-      throw new ErrorBootstrap("No se pudo leer la sesión del Medio E2E.")
+      throw new ErrorBootstrap(`No se pudo leer la sesión de «${nombre}».`)
     }
     const { error: errorEnvio } = await contexto.servicio.rpc(
       "enviar_medio_a_verificacion_srv",
       {
-        p_medio_id: MEDIO_E2E_ID,
+        p_medio_id: medioId,
         p_actor_id: id,
         p_session_id: data.claims.session_id,
       }
@@ -779,44 +797,60 @@ async function ejecutarPaso(
     case "REENVIAR_A_VERIFICACION":
       return reenviarComoMedio(contexto)
     case "REACTIVAR":
-      return transicionar(contexto, "medios", MEDIO_E2E_ID, "VERIFICADO", {
-        motivo: MOTIVO_RESTAURACION,
-      })
+      return transicionar(
+        contexto,
+        "medios",
+        contexto.medio.datos.id,
+        "VERIFICADO",
+        { motivo: MOTIVO_RESTAURACION }
+      )
     case "VERIFICAR_MEDIO":
-      return transicionar(contexto, "medios", MEDIO_E2E_ID, "VERIFICADO", {
-        datos: { nivel: paso.nivel },
-      })
+      return transicionar(
+        contexto,
+        "medios",
+        contexto.medio.datos.id,
+        "VERIFICADO",
+        { datos: { nivel: paso.nivel } }
+      )
     case "CAMBIAR_NIVEL":
-      return transicionar(contexto, "medios", MEDIO_E2E_ID, "VERIFICADO", {
-        motivo: MOTIVO_RESTAURACION,
-        datos: { nivel: paso.nivel },
-      })
+      return transicionar(
+        contexto,
+        "medios",
+        contexto.medio.datos.id,
+        "VERIFICADO",
+        { motivo: MOTIVO_RESTAURACION, datos: { nivel: paso.nivel } }
+      )
   }
 }
 
 /**
- * Completa lo que le falte al Medio E2E (cuenta verificada, pago, documentos
- * y estado VERIFICADO nivel 1). Solo crea el operador temporal si hay algo
- * que hacer. Devuelve lo hecho, en palabras, para el registro de la corrida.
+ * Completa lo que le falte al medio (por omisión, el Medio E2E; también el
+ * Medio Suspensión E2E): cuenta verificada, pago, documentos y estado
+ * VERIFICADO en su nivel (si quedó suspendido, lo reactiva). Solo crea el
+ * operador temporal si hay algo que hacer. Devuelve lo hecho, en palabras,
+ * para el registro de la corrida.
  */
 export async function completarMedioVerificado(
   entorno: EntornoBootstrap,
   servicio: ClienteSupabase,
-  usuario: CredencialesMedio
+  usuario: CredencialesMedio,
+  medio: MedioVerificadoE2E = MEDIO_VERIFICADO_E2E
 ): Promise<string[]> {
   const ahora = new Date()
   const cifrador = cifradorDelEntorno()
   const { estado, cuentaId } = await leerMedioVerificado(
     servicio,
     cifrador,
-    ahora
+    ahora,
+    medio
   )
-  const pasos = planMedioVerificado(estado)
+  const pasos = planMedioVerificado(estado, medio)
   if (pasos.length === 0) return []
 
   await conOperadorTemporal(entorno, servicio, async (operador) => {
     const contexto: ContextoPasos = {
       entorno,
+      medio,
       servicio,
       operador,
       cifrador,
@@ -827,5 +861,5 @@ export async function completarMedioVerificado(
     }
     for (const paso of pasos) await ejecutarPaso(contexto, paso)
   })
-  return pasos.map(describirPaso)
+  return pasos.map((paso) => describirPaso(paso, medio.cuenta))
 }

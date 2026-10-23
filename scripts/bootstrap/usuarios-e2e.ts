@@ -2,6 +2,8 @@
  * `pnpm bootstrap:e2e` (`scripts/bootstrap/usuarios-e2e.ts`) — cuentas para las pruebas E2E:
  *
  * - ADMIN con TOTP verificado (clave en `E2E_ADMIN_TOTP_SECRET`).
+ * - OPERACIONES con TOTP verificado (clave en `E2E_OPERACIONES_TOTP_SECRET`):
+ *   el equipo AMO de las colas de validación, disputas y suspensión.
  * - ANUNCIANTE sin MFA.
  * - ANUNCIANTE con cambio de contraseña obligatorio.
  * - MEDIO del «Medio E2E»: VERIFICADO nivel 1, con una cuenta de Instagram
@@ -10,6 +12,11 @@
  *   de corridas anteriores (`fabricas-pauta.ts`).
  * - MEDIO del «Medio Nuevo E2E»: PENDIENTE recién registrado, sin cuentas,
  *   documentos ni pago. Cada corrida lo reinicia a ese estado.
+ * - MEDIO del «Medio Suspensión E2E»: VERIFICADO nivel 1 como el Medio E2E
+ *   (otro municipio, su cuenta de Instagram de 45.000 seguidores); si una
+ *   prueba lo dejó suspendido, lo reactiva.
+ * - Sin las pruebas de validación anteriores: las campañas «Validación E2E…»
+ *   se limpian (`fabricas-validacion.ts`).
  * - ANUNCIANTE (y la del cambio obligatorio) del «Anunciante E2E»: VERIFICADO
  *   con el RUT y la Cámara de Comercio aprobados y vigentes
  *   (`aprovisionar-anunciantes.ts`).
@@ -37,8 +44,14 @@ import {
 } from "./aprovisionar-medios"
 import { agregarVariables } from "./archivo-env"
 import { generarContrasena } from "./contrasena"
-import { restablecerPautaMedio } from "./fabricas-pauta"
-import { describirAccionMedioNuevo, MEDIO_E2E_ID } from "./medios-e2e"
+import { type MedioPauta, restablecerPautaMedio } from "./fabricas-pauta"
+import { restablecerValidacion } from "./fabricas-validacion"
+import { MEDIO_SUSPENSION_VERIFICADO_E2E } from "./medio-verificado-e2e"
+import {
+  describirAccionMedioNuevo,
+  MEDIO_E2E_ID,
+  MEDIO_SUSPENSION_E2E_ID,
+} from "./medios-e2e"
 import { describirLimpieza } from "./pauta-e2e"
 import {
   asegurarTotp,
@@ -48,7 +61,7 @@ import {
   CUENTAS_E2E,
   emailDe,
   prepararCuenta,
-  VARIABLE_TOTP_ADMIN,
+  variableTotpDe,
 } from "./provision-e2e"
 import {
   buscarUsuarioPorEmail,
@@ -58,6 +71,7 @@ import {
   type EntornoBootstrap,
 } from "./supabase"
 import { aceptarTerminosVigentes, tipoRolExterno } from "./terminos-e2e"
+import { describirRestablecimiento } from "./validacion-e2e"
 
 const ARCHIVO_ENV = ".env.local"
 
@@ -113,12 +127,38 @@ async function completarCuenta(
       )
     }
   }
+  if (cuenta.clave === "MEDIO_SUSPENSION") {
+    hechos.push(
+      ...(await completarMedioVerificado(
+        entorno,
+        servicio,
+        lista,
+        MEDIO_SUSPENSION_VERIFICADO_E2E
+      ))
+    )
+  }
   if (cuenta.clave === "ANUNCIANTE") {
     hechos.push(
       ...(await completarAnuncianteVerificado(entorno, servicio, lista))
     )
   }
   return hechos
+}
+
+/** Los medios verificados cuyas credenciales ya están listas (para cerrar sus reclamos). */
+function mediosVerificados(
+  variables: Readonly<Record<string, string>>
+): MedioPauta[] {
+  const medios: [string, string][] = [
+    ["MEDIO", MEDIO_E2E_ID],
+    ["MEDIO_SUSPENSION", MEDIO_SUSPENSION_E2E_ID],
+  ]
+  return medios.flatMap(([clave, id]) => {
+    const cuenta = cuentaE2E(clave)
+    const email = variables[cuenta.variableEmail]
+    const password = variables[cuenta.variablePassword]
+    return email && password ? [{ id, credenciales: { email, password } }] : []
+  })
 }
 
 const CUENTAS_DEMO_EXTERNAS = [
@@ -155,12 +195,14 @@ async function main(): Promise<void> {
     variables[cuenta.variablePassword] = password
 
     if (cuenta.conTotp) {
-      variables[VARIABLE_TOTP_ADMIN] = await asegurarTotp(
+      const variableTotp = variableTotpDe(cuenta)
+      variables[variableTotp] = await asegurarTotp(
         entorno,
         servicio,
         usuarioId,
         { email, password },
-        process.env[VARIABLE_TOTP_ADMIN]
+        process.env[variableTotp],
+        variableTotp
       )
     }
     const hechos = await completarCuenta(entorno, servicio, cuenta, {
@@ -172,6 +214,14 @@ async function main(): Promise<void> {
       `✓ ${cuenta.clave}: ${email}${hechos.length > 0 ? ` (${hechos.join("; ")})` : ""}`
     )
   }
+
+  // Sin las pruebas de validación anteriores (campañas «Validación E2E…») y
+  // con el Medio Suspensión E2E verificado.
+  const validacion = await restablecerValidacion(entorno, servicio, {
+    medios: mediosVerificados(variables),
+    medioSuspension: MEDIO_SUSPENSION_E2E_ID,
+  })
+  informar(`✓ Validación E2E: ${describirRestablecimiento(validacion)}`)
 
   // Sesiones compartidas de la suite (e2e/preparacion.setup.ts): las cuentas
   // demo externas tampoco deben quedar retenidas en la compuerta de términos.

@@ -624,38 +624,77 @@ export function planLimpiezaPauta(
   return plan
 }
 
+/** Una asignación de una campaña de prueba, con lo que decide cómo limpiarla. */
+export interface AsignacionDeCampana extends Pick<
+  AsignacionALimpiar,
+  "id" | "estado" | "estadoPrevioDisputa" | "conDescarga"
+> {
+  /**
+   * Sus disputas tienen mensajes: `disputa_mensajes` es de solo inserción, así
+   * que la BD no deja borrar la disputa ni, por ella, la asignación.
+   */
+  conMensajes?: boolean
+  /** Disputa ABIERTA o EN_REVISION (`null` o ausente: ninguna). */
+  disputaAbiertaId?: string | null
+  /** VENCIDA_SIN_PUBLICAR que el medio aún puede reclamar y que no tiene disputa. */
+  reclamable?: boolean
+}
+
 /** Una campaña de la pauta con sus asignaciones (de cualquier medio). */
 export interface CampanaALimpiar {
   id: string
   estado: Enums["campana_estado"]
-  asignaciones: readonly Pick<
-    AsignacionALimpiar,
-    "id" | "estado" | "estadoPrevioDisputa" | "conDescarga"
-  >[]
+  asignaciones: readonly AsignacionDeCampana[]
 }
 
 export interface PlanCampanasPauta {
-  /** Sin descargas: se borran enteras (asignaciones, ofertas, creativos, archivos). */
+  /** Nada que la BD impida borrar: se borran enteras (asignaciones, ofertas, creativos, archivos). */
   borrar: string[]
   /**
-   * Con descargas (la BD no las deja borrar): sus asignaciones con cupo se
-   * cancelan, la campaña se cancela (si sigue activa) y se archiva.
+   * Con descargas o mensajes de disputa (la BD no los deja borrar): sus
+   * disputas abiertas se cierran, sus asignaciones con cupo se cancelan, la
+   * campaña se cancela (si sigue activa) y se archiva.
    */
   retener: string[]
+  /**
+   * Disputas abiertas de las campañas retenidas: el equipo AMO las resuelve
+   * cancelando la asignación (si no, la campaña no se puede cancelar).
+   */
+  cerrarDisputas: { disputaId: string; asignacionId: string }[]
+  /**
+   * Vencidas de las campañas retenidas que el medio aún puede reclamar: sin
+   * cerrarlas, «Reclama la publicación» le seguiría apareciendo en Inicio. El
+   * medio reclama y el equipo AMO resuelve cancelando.
+   */
+  cerrarReclamos: string[]
   /** Asignaciones de las campañas retenidas que ocupan cupo: el equipo AMO las cancela. */
   cancelar: string[]
-  /** Asignaciones sin descargas de las campañas retenidas: se borran tras cancelar. */
+  /** Asignaciones de las campañas retenidas que sí se pueden borrar: se borran tras cancelar. */
   borrarAsignaciones: string[]
   /** Campañas retenidas que siguen activas: se cancelan antes de archivarlas. */
   cancelarCampanas: string[]
   conservar: { id: string; motivo: string }[]
 }
 
+/** Estados que la limpieza de una campaña de prueba no toca: ya entraron a liquidación. */
+const LIQUIDADAS: ReadonlySet<EstadoAsignacion> = new Set([
+  "LIQUIDADA",
+  "PAGADA",
+])
+
+/** ¿La BD deja borrar la asignación (sin descargas ni mensajes de disputa)? */
+export function esBorrable(
+  asignacion: Pick<AsignacionDeCampana, "conDescarga" | "conMensajes">
+): boolean {
+  return !asignacion.conDescarga && !asignacion.conMensajes
+}
+
 /**
- * Cómo limpiar las campañas de la pauta: borrarlas enteras si ninguna
- * asignación tiene descargas; si alguna tiene, cancelar (liberando cupos),
+ * Cómo limpiar las campañas de la pauta (o de la validación): borrarlas
+ * enteras si la BD deja borrar todas sus asignaciones; si no, cerrar sus
+ * disputas abiertas y sus reclamos pendientes, cancelar lo que ocupa cupo,
  * cancelar la campaña y archivarla, para que ni sus ofertas ni sus campañas
- * vuelvan a aparecer.
+ * vuelvan a aparecer. Lo liquidado o pagado no se toca.
  */
 export function planCampanasPauta(
   campanas: readonly CampanaALimpiar[]
@@ -663,30 +702,49 @@ export function planCampanasPauta(
   const plan: PlanCampanasPauta = {
     borrar: [],
     retener: [],
+    cerrarDisputas: [],
+    cerrarReclamos: [],
     cancelar: [],
     borrarAsignaciones: [],
     cancelarCampanas: [],
     conservar: [],
   }
   for (const campana of campanas) {
-    if (!campana.asignaciones.some((asignacion) => asignacion.conDescarga)) {
+    if (campana.asignaciones.every(esBorrable)) {
       plan.borrar.push(campana.id)
       continue
     }
     plan.retener.push(campana.id)
     if (campana.estado === "ACTIVA") plan.cancelarCampanas.push(campana.id)
     for (const asignacion of campana.asignaciones) {
-      if (NO_SE_LIBERAN.has(asignacion.estado)) {
+      if (LIQUIDADAS.has(asignacion.estado)) {
         plan.conservar.push({
           id: asignacion.id,
-          motivo: `${asignacion.estado}: no se libera sin afectar pagos o disputas`,
+          motivo: `${asignacion.estado}: no se libera sin afectar pagos`,
         })
         continue
       }
-      if (consumeCupo(asignacion.estado, asignacion.estadoPrevioDisputa)) {
+      if (asignacion.estado === "EN_DISPUTA") {
+        if (asignacion.disputaAbiertaId) {
+          plan.cerrarDisputas.push({
+            disputaId: asignacion.disputaAbiertaId,
+            asignacionId: asignacion.id,
+          })
+        } else {
+          plan.conservar.push({
+            id: asignacion.id,
+            motivo: "EN_DISPUTA sin una disputa abierta que resolver",
+          })
+          continue
+        }
+      } else if (
+        consumeCupo(asignacion.estado, asignacion.estadoPrevioDisputa)
+      ) {
         plan.cancelar.push(asignacion.id)
+      } else if (asignacion.reclamable && !esBorrable(asignacion)) {
+        plan.cerrarReclamos.push(asignacion.id)
       }
-      if (!asignacion.conDescarga) plan.borrarAsignaciones.push(asignacion.id)
+      if (esBorrable(asignacion)) plan.borrarAsignaciones.push(asignacion.id)
     }
   }
   return plan
