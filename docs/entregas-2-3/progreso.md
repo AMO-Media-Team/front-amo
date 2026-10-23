@@ -7,7 +7,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ---- | --------------------------------------------------------------------------------------- | ------ |
 | P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
-| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | 🧪     |
+| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ⬜     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
@@ -30,19 +30,19 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ADM-001          | Cola de verificación de medios                             | P1    | ✅     |
 | ADM-006          | Clasificación de pertinencia geográfica                    | P1    | ✅     |
 | NOT-003          | Notificaciones por eventos del negocio                     | P1    | 🔧     |
-| ANU-001          | Registro y datos de la empresa                             | P0/P2 | 🧪     |
-| ANU-002          | Varios usuarios por anunciante                             | P2    | 🧪     |
-| ANU-003          | Creación de campañas                                       | P2    | 🧪     |
-| ANU-004          | Asistente de oferta · Qué se publica                       | P2    | 🧪     |
-| ANU-005          | Asistente de oferta · A quién le llega                     | P2    | 🧪     |
-| ANU-006          | Asistente de oferta · Cuándo                               | P2    | 🧪     |
-| ANU-007          | Asistente de oferta · Cuánto y estimador                   | P2    | 🧪     |
-| ANU-008          | Asistente de oferta · Paquete creativo                     | P2    | 🧪     |
-| ANU-009          | Asistente de oferta · Condiciones, revisión y envío        | P2    | 🧪     |
-| ANU-010          | Versionado de creativos                                    | P2    | 🧪     |
-| ANU-014          | Cancelación de ofertas y campañas                          | P2    | 🧪     |
-| ADM-003          | Verificación de anunciantes                                | P2    | 🧪     |
-| ADM-005          | Moderación de ofertas                                      | P2    | 🧪     |
+| ANU-001          | Registro y datos de la empresa                             | P0/P2 | ✅     |
+| ANU-002          | Varios usuarios por anunciante                             | P2    | ✅     |
+| ANU-003          | Creación de campañas                                       | P2    | ✅     |
+| ANU-004          | Asistente de oferta · Qué se publica                       | P2    | ✅     |
+| ANU-005          | Asistente de oferta · A quién le llega                     | P2    | ✅     |
+| ANU-006          | Asistente de oferta · Cuándo                               | P2    | ✅     |
+| ANU-007          | Asistente de oferta · Cuánto y estimador                   | P2    | ✅     |
+| ANU-008          | Asistente de oferta · Paquete creativo                     | P2    | ✅     |
+| ANU-009          | Asistente de oferta · Condiciones, revisión y envío        | P2    | ✅     |
+| ANU-010          | Versionado de creativos                                    | P2    | ✅     |
+| ANU-014          | Cancelación de ofertas y campañas                          | P2    | ✅     |
+| ADM-003          | Verificación de anunciantes                                | P2    | ✅     |
+| ADM-005          | Moderación de ofertas                                      | P2    | ✅     |
 | MED-008          | Marketplace de ofertas elegibles                           | P3    | ⬜     |
 | MED-009          | Detalle de la oferta                                       | P3    | ⬜     |
 | MED-010          | Aceptar o rechazar una oferta                              | P3    | ⬜     |
@@ -150,3 +150,14 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   empresa», «Moderación», ficha interna de oferta fuera del menú), destinos `/ir` del anunciante, `transicionar` en
   `src/lib/negocio`, proyecto E2E `anunciante` en serie, stubs de contratos y brief `fase-2.md`. Workflow de
   implementación lanzado con 8 paquetes (EM, VA, CA, AO, CR, OM, E0, SQ).
+- 2026-10-22 · **Fase 2 terminada y en producción.** Workflow de implementación (8 paquetes: EM, VA, CA, AO, CR, OM, E0, SQ),
+  ronda de integración (archivar con RPC, pasos y rutas con una sola fuente, orden y descarte de versiones) y revisión
+  adversarial (4 revisores + verificación): 28 hallazgos confirmados y corregidos, entre ellos el anonimato del estimador
+  (comparar estimaciones revelaba seguidores, precio y alcance de un medio), decisiones de moderación sobre el envío
+  revisado, identificación que invalida documentos aprobados, empresa suspendida sin activar versiones, bloqueo optimista e
+  idempotencia del asistente, y foco y anuncios accesibles. Local: 19 suites SQL (133/133 en la de fase 2), 4.615 Vitest,
+  E2E 299 en verde (0 fallas). Auth local admite 500 ingresos cada 5 min para la suite. `pnpm db:respaldo` nuevo; respaldo
+  de producción `context/respaldos/produccion-2026-10-22-antes-e2d-*`. Andrés aplicó `20261022193647_e2_anunciantes_ofertas`
+  en producción; verificado por MCP: 49 migraciones, 57 plantillas, 56 claves, 145 transiciones, funciones nuevas,
+  configuración de prueba intacta, 3 superadministradores, advisors sin ERROR (WARN nuevos esperados:
+  `disponible_campana` y `medios_para_exclusion`, definer con permiso y empresa comprobados por dentro).
