@@ -26,6 +26,7 @@ import type {
   Plataforma,
   TipoMedio,
 } from "./estados"
+import type { CausaCancelacion } from "./gestion-asignacion"
 import type { EventoLineaTiempo, Progreso } from "./linea-tiempo"
 import type { CorteMetrica } from "./metricas"
 
@@ -471,6 +472,8 @@ export interface AsignacionDetalle {
   plataforma: Plataforma
   formato: string | null
   slot: number
+  /** Causa de la cancelación (clave) y su etiqueta. */
+  causa: CausaCancelacion | null
   causaCancelacion: string | null
   motivo: string | null
   creadaAt: string
@@ -479,7 +482,8 @@ export interface AsignacionDetalle {
   fechaLimite: string | null
   ventanaInicio: string | null
   ventanaFin: string | null
-  medio: { id: string; nombre: string | null }
+  /** `estado`: para ofrecer la suspensión al cancelar (solo un medio verificado). */
+  medio: { id: string; nombre: string | null; estado: EstadoMedio | null }
   cuenta: { plataforma: Plataforma; handle: string; url: string } | null
   oferta: { id: string; titulo: string | null }
   campana: { id: string; nombre: string | null; marca: string | null }

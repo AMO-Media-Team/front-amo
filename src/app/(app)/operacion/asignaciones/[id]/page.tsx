@@ -1,14 +1,22 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import type { ReactNode } from "react"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import {
+  AccionesAsignacion,
+  type AsignacionGestionable,
+} from "@/features/operacion/components/acciones-asignacion"
 import { UUID } from "@/features/operacion/components/ficha"
 import {
   CabeceraAsignacion,
   CuerpoAsignacion,
+  type ValidacionFicha,
 } from "@/features/operacion/components/ficha-asignacion"
 import { ProgresoAsignacion } from "@/features/operacion/components/linea-tiempo-asignacion"
+import { opcionesGestion } from "@/features/operacion/gestion-asignacion"
 import { obtenerAsignacion } from "@/features/operacion/queries/asignaciones"
+import { VerificarAsignacion } from "@/features/validacion/components/verificar-asignacion"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -27,9 +35,14 @@ export async function generateMetadata({
 }
 
 /**
- * Ficha de una asignación (consulta): avance por la máquina de estados,
- * evidencia y métricas por corte, línea de tiempo (con actor y motivo si el
- * rol ve la bitácora), precio congelado, ejecución, disputas y liquidación.
+ * Ficha de una asignación: avance por la máquina de estados, evidencia y
+ * métricas por corte (con sus alertas de integridad), línea de tiempo (con
+ * actor y motivo si el rol ve la bitácora), precio congelado, ejecución,
+ * disputas y liquidación. Con los permisos de validación, aprueba o rechaza
+ * la evidencia y los cortes desde la ficha (ADM-007/008); con los de gestión,
+ * el equipo AMO la cancela con causa (y, por fraude o incumplimiento,
+ * suspende al medio) o abre una disputa (ADM-010, ADM-011): arriba desde
+ * `sm`, en el pie fijo en el celular. La BD vuelve a comprobarlo todo.
  */
 export default async function PaginaAsignacion({
   params,
@@ -44,18 +57,86 @@ export default async function PaginaAsignacion({
   )
   if (!asignacion) notFound()
 
+  const enlaces = {
+    medio: tieneAlgunPermiso(usuario, ["medios.ver"]),
+    campana: tieneAlgunPermiso(usuario, ["campanas.ver"]),
+    anunciante: tieneAlgunPermiso(usuario, ["anunciantes.ver"]),
+    disputas: tieneAlgunPermiso(usuario, ["disputas.ver"]),
+  }
+  const gestion = opcionesGestion(
+    {
+      estado: asignacion.estado,
+      medioEstado: asignacion.medio.estado,
+      disputas: asignacion.disputas,
+    },
+    usuario.permisos
+  )
+  const gestionable: AsignacionGestionable = {
+    id: asignacion.id,
+    titulo: asignacion.oferta.titulo ?? "Asignación",
+    estado: asignacion.estado,
+    medio: {
+      id: asignacion.medio.id,
+      nombre: asignacion.medio.nombre ?? "el medio",
+    },
+  }
+  // «Verificar» (ADM-009): en la cabecera y, en el celular, en el pie fijo.
+  const verificar: ReactNode = (
+    <VerificarAsignacion
+      asignacionId={asignacion.id}
+      estado={asignacion.estado}
+      publicaciones={asignacion.publicaciones}
+      cortesRequeridos={asignacion.cortesRequeridos}
+      puedeVerificar={tieneAlgunPermiso(usuario, ["metricas.validar"])}
+      puedeConstanciaManual={tieneAlgunPermiso(usuario, [
+        "metricas.editar_validadas",
+      ])}
+    />
+  )
+  // Las decisiones de la validación sobre cada publicación y cada corte
+  // (`evidencias-asignacion.tsx`); sin permiso de validar, solo se consulta.
+  const validacion: ValidacionFicha = tieneAlgunPermiso(usuario, [
+    "evidencias.validar",
+    "metricas.validar",
+  ])
+    ? {
+        estadoAsignacion: asignacion.estado,
+        evidencias: tieneAlgunPermiso(usuario, ["evidencias.validar"]),
+        metricas: tieneAlgunPermiso(usuario, ["metricas.validar"]),
+        corregir: tieneAlgunPermiso(usuario, ["metricas.editar_validadas"]),
+      }
+    : undefined
+
   return (
     <ContenedorPagina>
       <CabeceraAsignacion
         asignacion={asignacion}
-        enlaces={{
-          medio: tieneAlgunPermiso(usuario, ["medios.ver"]),
-          campana: tieneAlgunPermiso(usuario, ["campanas.ver"]),
-          anunciante: tieneAlgunPermiso(usuario, ["anunciantes.ver"]),
-        }}
+        enlaces={enlaces}
+        verificar={verificar}
+        acciones={
+          <AccionesAsignacion
+            key={asignacion.id}
+            asignacion={gestionable}
+            gestion={gestion}
+            disposicion="cabecera"
+            enlaces={enlaces}
+          />
+        }
       />
       <ProgresoAsignacion progreso={asignacion.progreso} />
-      <CuerpoAsignacion asignacion={asignacion} />
+      <CuerpoAsignacion
+        asignacion={asignacion}
+        verDisputas={enlaces.disputas}
+        validacion={validacion}
+      />
+      <AccionesAsignacion
+        key={asignacion.id}
+        asignacion={gestionable}
+        gestion={gestion}
+        disposicion="pie"
+        verificar={verificar}
+        enlaces={enlaces}
+      />
     </ContenedorPagina>
   )
 }

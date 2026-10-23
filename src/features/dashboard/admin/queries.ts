@@ -237,19 +237,17 @@ export const cumplimientoMedios = cache(
 const LIMITE_ATIPICAS = 1_000
 
 /**
- * Métricas PENDIENTE con alerta de integridad (regla 5 y alertas). La RLS de
- * `metricas` exige `asignaciones.ver` a los internos.
+ * Métricas PENDIENTE con alerta de integridad (regla 5 y alertas). Las
+ * columnas de alertas de `metricas` ya no se leen por PostgREST: sin
+ * argumentos, `alertas_metricas()` devuelve justo las pendientes con alerta,
+ * la más antigua primero, y exige `asignaciones.ver`.
  */
 export const metricasAtipicasPendientes = cache(
   async (): Promise<MetricasAtipicas> => {
     const supabase = await clientePanel()
     const { data, error, count } = await supabase
-      .from("metricas")
-      .select("created_at, alerta_desviacion, alerta_multiplo", {
-        count: "exact",
-      })
-      .eq("estado_validacion", "PENDIENTE")
-      .or("alerta_desviacion.eq.true,alerta_multiplo.eq.true")
+      .rpc("alertas_metricas", {}, { count: "exact" })
+      .select("created_at, alerta_desviacion, alerta_multiplo")
       .order("created_at", { ascending: true })
       .limit(LIMITE_ATIPICAS)
     if (error) fallar("consultar las métricas atípicas", error)

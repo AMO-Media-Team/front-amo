@@ -8,21 +8,36 @@
  */
 import "server-only"
 
+import { refresh } from "next/cache"
+
 import { mensajeErrorBd } from "@/features/usuarios/errores"
 import { contextoDelActor } from "@/lib/auth/contexto-actor"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { ClavePermiso } from "@/lib/auth/permisos"
 import { registrarEvento } from "@/lib/auth/registro"
-import { desdeErrorZod, exito, fallo, type ResultadoAccion } from "@/lib/result"
+import { type ErrorBd, interpretarErrorBd } from "@/lib/errores-bd"
+import {
+  desdeErrorZod,
+  exito,
+  fallo,
+  type ResultadoAccion,
+  type ResultadoFallo,
+} from "@/lib/result"
 import { crearClienteServidor } from "@/lib/supabase/server"
 
+import { ESTADOS_ASIGNACION } from "./estados"
+import { MENSAJES_HINT_CANCELACION } from "./gestion-asignacion"
 import { type DatoRevelado, grupoPrivado, presentarRevelados } from "./privados"
 import { configuracionOperacion } from "./queries/comun"
 import {
   type EntidadExportable,
+  type EntradaAbrirDisputa,
+  type EntradaCancelarAsignacion,
   type EntradaEvidencias,
   type EntradaExportacion,
   type EntradaRevelar,
+  esquemaAbrirDisputa,
+  esquemaCancelarAsignacion,
   esquemaEvidencias,
   esquemaExportacion,
   esquemaRevelar,
@@ -301,6 +316,140 @@ export async function registrarExportacionOperacion(
       : fallo("No se pudo registrar la exportación en la bitácora.")
   } catch (error) {
     informar("registrarExportacionOperacion", error)
+    return fallo(MENSAJE_INESPERADO)
+  }
+}
+
+// ── Gestión de la asignación (ADM-010, ADM-011) ──────────────────────────────
+
+/** Errores de la BD con texto propio para los `hint` que la interfaz explica. */
+function falloGestion(
+  operacion: string,
+  error: ErrorBd,
+  mensajesHint: Readonly<Record<string, string>> = {}
+): ResultadoFallo {
+  const porHint = error.hint ? mensajesHint[error.hint] : undefined
+  if (porHint) return fallo(porHint)
+  const { mensaje, esperado } = interpretarErrorBd(error)
+  if (!esperado) informar(operacion, error)
+  return fallo(mensaje)
+}
+
+const NO_ENCONTRADA =
+  "No encontramos la asignación o ya no tienes acceso a ella. Actualiza la página."
+
+export interface ResultadoCancelacion {
+  /** El medio quedó suspendido en la misma transacción. */
+  medioSuspendido: boolean
+}
+
+function medioSuspendidoDe(datos: unknown): boolean {
+  return (
+    typeof datos === "object" &&
+    datos !== null &&
+    "medio_suspendido" in datos &&
+    datos.medio_suspendido === true
+  )
+}
+
+/**
+ * Cancela la asignación con una causa del catálogo y un motivo (ADM-010).
+ * Con fraude o incumplimiento del medio puede suspenderlo en la misma
+ * transacción (INT-006), lo que exige además `medios.suspender`. Antes de
+ * cancelar comprueba (con la sesión: la RLS prueba el acceso) que siga en el
+ * estado que mostraba la ficha; si cambió, la refresca y no cancela.
+ * `cancelar_asignacion_srv` libera cupo y presupuesto, deja la bitácora y los
+ * avisos; una liquidada o en disputa se rechaza con su `hint`.
+ */
+export async function cancelarAsignacion(
+  entrada: EntradaCancelarAsignacion
+): Promise<ResultadoAccion<ResultadoCancelacion>> {
+  const actor = await requerirPermiso("asignaciones.gestionar")
+  const validacion = esquemaCancelarAsignacion.safeParse(entrada)
+  if (!validacion.success) return desdeErrorZod(validacion.error)
+  const { asignacionId, estadoVisto, causa, motivo, suspenderMedio } =
+    validacion.data
+  if (suspenderMedio && !tieneAlgunPermiso(actor, ["medios.suspender"])) {
+    const mensaje =
+      "No tienes permiso para suspender medios: cancela sin suspenderlo o pídeselo a quien lo tenga."
+    return fallo(mensaje, { suspenderMedio: [mensaje] })
+  }
+
+  try {
+    const supabase = await crearClienteServidor()
+    const { data: actual, error: errorLectura } = await supabase
+      .from("asignaciones")
+      .select("estado")
+      .eq("id", asignacionId)
+      .maybeSingle()
+    if (errorLectura) throw errorLectura
+    if (!actual) return fallo(NO_ENCONTRADA)
+    if (actual.estado !== estadoVisto) {
+      refresh()
+      return fallo(
+        `La asignación cambió mientras la revisabas: ahora está «${ESTADOS_ASIGNACION[actual.estado].etiqueta.toLocaleLowerCase("es-CO")}». La ficha ya muestra su estado actual; revísala antes de cancelar.`
+      )
+    }
+
+    const contexto = await contextoDelActor(actor)
+    const { data, error } = await contexto.admin.rpc(
+      "cancelar_asignacion_srv",
+      {
+        p_asignacion_id: asignacionId,
+        p_causa: causa,
+        p_motivo: motivo,
+        p_suspender_medio: suspenderMedio,
+        p_actor_id: contexto.actorId,
+        p_session_id: contexto.sessionId,
+      }
+    )
+    if (error) {
+      return falloGestion(
+        "cancelarAsignacion",
+        error,
+        MENSAJES_HINT_CANCELACION
+      )
+    }
+    refresh()
+    return exito({ medioSuspendido: medioSuspendidoDe(data) })
+  } catch (error) {
+    informar("cancelarAsignacion", error)
+    return fallo(MENSAJE_INESPERADO)
+  }
+}
+
+/**
+ * El equipo AMO abre una disputa sobre la asignación (ADM-011) con motivo y
+ * descripción, que es lo primero que leen el medio y el anunciante.
+ * `abrir_disputa_srv` revalida el permiso, el estado (disputable y sin otra
+ * abierta) y deja la asignación EN_DISPUTA. Exige además ver las
+ * asignaciones: es la acción del equipo, no la de las partes.
+ */
+export async function abrirDisputaAsignacion(
+  entrada: EntradaAbrirDisputa
+): Promise<ResultadoAccion<{ disputaId: string }>> {
+  const actor = await requerirPermiso("disputas.abrir")
+  if (!tieneAlgunPermiso(actor, ["asignaciones.ver"])) {
+    return fallo("No tienes permiso para gestionar esta asignación.")
+  }
+  const validacion = esquemaAbrirDisputa.safeParse(entrada)
+  if (!validacion.success) return desdeErrorZod(validacion.error)
+  const { asignacionId, motivo, descripcion } = validacion.data
+
+  try {
+    const contexto = await contextoDelActor(actor)
+    const { data, error } = await contexto.admin.rpc("abrir_disputa_srv", {
+      p_asignacion_id: asignacionId,
+      p_motivo: motivo,
+      p_descripcion: descripcion,
+      p_actor_id: contexto.actorId,
+      p_session_id: contexto.sessionId,
+    })
+    if (error) return falloGestion("abrirDisputaAsignacion", error)
+    refresh()
+    return exito({ disputaId: data })
+  } catch (error) {
+    informar("abrirDisputaAsignacion", error)
     return fallo(MENSAJE_INESPERADO)
   }
 }

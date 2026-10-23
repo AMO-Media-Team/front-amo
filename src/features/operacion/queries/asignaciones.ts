@@ -26,8 +26,9 @@ import {
 } from "../linea-tiempo"
 import {
   type CorteMetrica,
-  leerDetalleAlertas,
+  indexarAlertas,
   ordenarCortes,
+  tieneAlerta,
 } from "../metricas"
 import { ventanaOpcional } from "../periodo"
 import type {
@@ -78,10 +79,29 @@ const SELECCION_LISTADO = `
   anunciante:anunciantes ( nombre_comercial )
 `
 
-/** Métricas con alerta de integridad que siguen sin validar (cola de revisión). */
-const ALIAS_ALERTA = "con_alerta"
-const SELECCION_ALERTA = `${ALIAS_ALERTA}:metricas!inner ( id )`
-const FILTRO_ALERTA = "alerta_desviacion.eq.true,alerta_multiplo.eq.true"
+/**
+ * Asignaciones con métricas pendientes de validar que tienen alerta de
+ * integridad (filtro `?alerta=metricas`). Las columnas de alertas de
+ * `metricas` ya no se leen por PostgREST: la lista sale de
+ * `alertas_metricas()`, lo más antiguo primero. El tope mantiene la URL del
+ * filtro `in (...)` corta; la cola de validación es la vista completa.
+ */
+export const LIMITE_ASIGNACIONES_CON_ALERTA = 150
+
+export const asignacionesConAlertaPendiente = cache(
+  async (): Promise<string[]> => {
+    const supabase = await clienteSolicitud()
+    const { data, error } = await supabase
+      .rpc("alertas_metricas")
+      .select("asignacion_id")
+      .limit(1_000)
+    if (error) fallar("leer las alertas de métricas", error)
+    return [...new Set(data.map((fila) => fila.asignacion_id))].slice(
+      0,
+      LIMITE_ASIGNACIONES_CON_ALERTA
+    )
+  }
+)
 
 const COLUMNAS_ORDEN: Readonly<
   Record<EstadoTablaAsignaciones["orden"]["campo"], string>
@@ -100,6 +120,8 @@ interface ContextoFiltros {
   rango: RangoFechas | null
   /** Ids de medios y campañas cuyo nombre coincide con la búsqueda. */
   coincidencias: { medios: string[]; campanas: string[] } | null
+  /** Con `?alerta=metricas`: las asignaciones con métricas por validar con alerta. */
+  conAlerta: string[] | null
 }
 
 /** La búsqueda de texto se resuelve contra nombres de medios y campañas. */
@@ -130,8 +152,17 @@ async function resolverBusqueda(
   }
 }
 
-function seleccionDe(estado: EstadoTablaAsignaciones, base: string): string {
-  return estado.alerta.length > 0 ? `${base}, ${SELECCION_ALERTA}` : base
+/** Contexto común del listado y de los conteos por grupo. */
+async function contextoFiltros(
+  supabase: ClienteServidor,
+  estado: EstadoTablaAsignaciones,
+  rango: RangoFechas | null
+): Promise<ContextoFiltros> {
+  const [coincidencias, conAlerta] = await Promise.all([
+    resolverBusqueda(supabase, estado.q),
+    estado.alerta.length > 0 ? asignacionesConAlertaPendiente() : null,
+  ])
+  return { estado, rango, coincidencias, conAlerta }
 }
 
 /**
@@ -141,7 +172,7 @@ function seleccionDe(estado: EstadoTablaAsignaciones, base: string): string {
 function consultaFiltrada(
   supabase: ClienteServidor,
   seleccion: string,
-  { estado, rango, coincidencias }: ContextoFiltros,
+  { estado, rango, coincidencias, conAlerta }: ContextoFiltros,
   opciones: { head?: boolean; estados?: readonly EstadoAsignacion[] } = {}
 ) {
   let consulta = supabase
@@ -175,10 +206,11 @@ function consultaFiltrada(
       `medio_id.in.(${medios.join(",")}),campana_id.in.(${campanas.join(",")})`
     )
   }
-  if (estado.alerta.length > 0) {
-    consulta = consulta
-      .eq(`${ALIAS_ALERTA}.estado_validacion`, "PENDIENTE")
-      .or(FILTRO_ALERTA, { referencedTable: ALIAS_ALERTA })
+  if (conAlerta) {
+    consulta = consulta.in(
+      "id",
+      conAlerta.length > 0 ? conAlerta : SIN_COINCIDENCIAS
+    )
   }
   return consulta
 }
@@ -188,19 +220,17 @@ export async function listarAsignaciones(
   rango: RangoFechas | null
 ): Promise<PaginaFilas<AsignacionFila>> {
   const supabase = await clienteSolicitud()
-  const [coincidencias, { formatos }] = await Promise.all([
-    resolverBusqueda(supabase, estado.q),
+  const [contexto, { formatos }] = await Promise.all([
+    contextoFiltros(supabase, estado, rango),
     catalogos(),
   ])
-  const contexto: ContextoFiltros = { estado, rango, coincidencias }
-  const seleccion = seleccionDe(estado, SELECCION_LISTADO)
 
   const pagina = await leerPagina(
     "listar las asignaciones",
     estado.pagina,
     estado.tamano,
     (desde, hasta) =>
-      consultaFiltrada(supabase, seleccion, contexto)
+      consultaFiltrada(supabase, SELECCION_LISTADO, contexto)
         .order(COLUMNAS_ORDEN[estado.orden.campo], {
           ascending: !estado.orden.descendente,
           nullsFirst: false,
@@ -242,15 +272,13 @@ export async function resumenAsignaciones(
   rango: RangoFechas | null
 ): Promise<ResumenAsignaciones> {
   const supabase = await clienteSolicitud()
-  const coincidencias = await resolverBusqueda(supabase, estado.q)
-  const contexto: ContextoFiltros = { estado, rango, coincidencias }
-  const seleccion = seleccionDe(estado, "id")
+  const contexto = await contextoFiltros(supabase, estado, rango)
 
   const conteos = await Promise.all(
     GRUPOS_ASIGNACION.map(async (grupo) => {
       const { count, error } = await consultaFiltrada(
         supabase,
-        seleccion,
+        "id",
         contexto,
         { head: true, estados: ESTADOS_POR_GRUPO[grupo] }
       )
@@ -291,7 +319,7 @@ const SELECCION_FICHA = `
   franja_clave, seguidores_al_aceptar, tarifa_base_aplicada, publicaciones, multiplicador_calidad_aplicado,
   multiplicador_geografico_aplicado, multiplicador_exclusividad_aplicado, monto_bruto, medio_id, oferta_id,
   campana_id, anunciante_id,
-  medio:medios ( nombre ),
+  medio:medios ( nombre, estado ),
   cuenta:cuentas_sociales ( plataforma, handle, url ),
   oferta:ofertas ( titulo, formato_id, ventana_inicio, ventana_fin, cortes_requeridos ),
   campana:campanas ( nombre, marca ),
@@ -379,6 +407,7 @@ export const obtenerAsignacion = cache(
       asignacion,
       publicaciones,
       metricas,
+      alertas,
       disputas,
       descargas,
       transiciones,
@@ -402,11 +431,13 @@ export const obtenerAsignacion = cache(
         .from("metricas")
         .select(
           `id, publicacion_id, corte, fecha_corte, alcance_norm, impresiones_norm, interacciones,
-             clics_enlace, estado_validacion, alerta_desviacion, alerta_multiplo, detalle_alertas,
-             observaciones, validada_at, created_at, captura_path`
+             clics_enlace, estado_validacion, observaciones, validada_at, created_at, captura_path`
         )
         .eq("asignacion_id", id)
         .order("fecha_corte"),
+      // Las alertas ya no se leen de `metricas` (INT-003/004): solo el equipo AMO,
+      // con `asignaciones.ver`, por la RPC.
+      supabase.rpc("alertas_metricas", { p_asignacion_id: id }),
       supabase
         .from("disputas")
         .select(
@@ -427,6 +458,7 @@ export const obtenerAsignacion = cache(
     if (publicaciones.error)
       fallar("leer las publicaciones", publicaciones.error)
     if (metricas.error) fallar("leer las métricas", metricas.error)
+    if (alertas.error) fallar("leer las alertas de las métricas", alertas.error)
     if (disputas.error) fallar("leer las disputas", disputas.error)
     if (descargas.error) fallar("leer las descargas", descargas.error)
     const fila = asignacion.data
@@ -438,6 +470,7 @@ export const obtenerAsignacion = cache(
     const cargaDeMetrica = new Map(
       metricas.data.map((m) => [m.id, m.created_at])
     )
+    const alertasDe = indexarAlertas(alertas.data)
     const cortes: (CorteMetrica & { numero: number })[] = metricas.data.map(
       (metrica) => ({
         id: metrica.id,
@@ -450,9 +483,7 @@ export const obtenerAsignacion = cache(
         interacciones: metrica.interacciones,
         clics: metrica.clics_enlace,
         estado: metrica.estado_validacion,
-        alertaDesviacion: metrica.alerta_desviacion,
-        alertaMultiplo: metrica.alerta_multiplo,
-        detalleAlertas: leerDetalleAlertas(metrica.detalle_alertas),
+        ...alertasDe(metrica.id),
         observaciones: metrica.observaciones,
         validadaAt: metrica.validada_at,
         conImagen: Boolean(metrica.captura_path),
@@ -487,6 +518,7 @@ export const obtenerAsignacion = cache(
         ? (formatos.get(fila.oferta.formato_id)?.nombre ?? null)
         : null,
       slot: fila.slot,
+      causa: fila.causa_cancelacion,
       causaCancelacion: fila.causa_cancelacion
         ? CAUSAS_CANCELACION[fila.causa_cancelacion]
         : null,
@@ -496,7 +528,11 @@ export const obtenerAsignacion = cache(
       fechaLimite: fila.fecha_limite_publicacion,
       ventanaInicio: fila.oferta?.ventana_inicio ?? null,
       ventanaFin: fila.oferta?.ventana_fin ?? null,
-      medio: { id: fila.medio_id, nombre: fila.medio?.nombre ?? null },
+      medio: {
+        id: fila.medio_id,
+        nombre: fila.medio?.nombre ?? null,
+        estado: fila.medio?.estado ?? null,
+      },
       cuenta: fila.cuenta
         ? {
             plataforma: fila.cuenta.plataforma,
@@ -558,7 +594,7 @@ export const obtenerAsignacion = cache(
           validadaAt: c.validadaAt,
           observaciones: c.observaciones,
           corte: c.corte,
-          conAlerta: c.alertaDesviacion || c.alertaMultiplo,
+          conAlerta: tieneAlerta(c),
         })),
         disputas: disputas.data.map((d) => ({
           id: d.id,
