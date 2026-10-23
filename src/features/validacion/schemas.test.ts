@@ -1,0 +1,158 @@
+import { describe, expect, it } from "vitest"
+
+import { MENSAJES_VALIDACION } from "./errores"
+import {
+  esquemaAprobarEvidencia,
+  esquemaAprobarMetrica,
+  esquemaCorreccion,
+  esquemaValidarEvidencia,
+  esquemaValidarMetrica,
+  esquemaVerificar,
+} from "./schemas"
+
+const ID = "0192f3a4-5b6c-7d8e-9f01-0000000000a1"
+
+function mensajes(resultado: {
+  success: boolean
+  error?: { issues: { path: PropertyKey[]; message: string }[] }
+}): Record<string, string> {
+  return Object.fromEntries(
+    (resultado.error?.issues ?? []).map((issue) => [
+      issue.path.join("."),
+      issue.message,
+    ])
+  )
+}
+
+describe("evidencias (ADM-007)", () => {
+  it("aprobar exige marcar la etiqueta de publicidad visible", () => {
+    const resultado = esquemaAprobarEvidencia.safeParse({
+      publicacionId: ID,
+      etiquetaVerificada: false,
+      observaciones: "",
+    })
+    expect(mensajes(resultado)).toEqual({
+      etiquetaVerificada: MENSAJES_VALIDACION.etiquetaRequerida,
+    })
+    expect(
+      esquemaValidarEvidencia.safeParse({
+        aprobar: true,
+        publicacionId: ID,
+        etiquetaVerificada: true,
+        observaciones: "  Todo en orden  ",
+      }).data
+    ).toEqual({
+      aprobar: true,
+      publicacionId: ID,
+      etiquetaVerificada: true,
+      observaciones: "Todo en orden",
+    })
+  })
+
+  it("rechazar exige observaciones para el medio", () => {
+    const resultado = esquemaValidarEvidencia.safeParse({
+      aprobar: false,
+      publicacionId: ID,
+      observaciones: "  ",
+    })
+    expect(Object.keys(mensajes(resultado))).toEqual(["observaciones"])
+    expect(
+      esquemaValidarEvidencia.safeParse({
+        aprobar: false,
+        publicacionId: ID,
+        observaciones: "Falta la etiqueta de publicidad.",
+      }).success
+    ).toBe(true)
+  })
+})
+
+describe("métricas (ADM-008)", () => {
+  it("aprobar una con alerta exige anotar qué se revisó", () => {
+    expect(
+      mensajes(
+        esquemaAprobarMetrica.safeParse({
+          metricaId: ID,
+          conAlerta: true,
+          observaciones: "",
+        })
+      )
+    ).toEqual({ observaciones: MENSAJES_VALIDACION.alertaSinRevision })
+    expect(
+      esquemaValidarMetrica.safeParse({
+        aprobar: true,
+        metricaId: ID,
+        conAlerta: false,
+        observaciones: "",
+      }).success
+    ).toBe(true)
+  })
+
+  it("rechazar exige observaciones", () => {
+    expect(
+      esquemaValidarMetrica.safeParse({
+        aprobar: false,
+        metricaId: ID,
+        observaciones: "",
+      }).success
+    ).toBe(false)
+  })
+
+  it("la corrección exige un motivo de al menos 10 caracteres", () => {
+    const base = {
+      asignacionId: ID,
+      numero: 1,
+      corte: "H24",
+      metricaId: ID,
+      dia: "2026-10-22",
+      hora: "10:00",
+      periodoDesde: "",
+      periodoHasta: "",
+      alcance: "1.250",
+      impresiones: "2.000",
+      reproducciones: "",
+      espectadoresUnicos: "",
+      meGusta: "10",
+      comentarios: "1",
+      compartidos: "0",
+      guardados: "0",
+      clicsEnlace: "",
+      visitasPerfil: "",
+      tiempoPromedioS: "",
+      porcentajeCompleto: "",
+    }
+    expect(
+      Object.keys(
+        mensajes(esquemaCorreccion.safeParse({ ...base, motivo: "Error" }))
+      )
+    ).toEqual(["motivo"])
+    expect(
+      esquemaCorreccion.safeParse({
+        ...base,
+        motivo: "El medio digitó un cero de más.",
+      }).success
+    ).toBe(true)
+  })
+})
+
+describe("verificación (ADM-009)", () => {
+  it("sin constancia no pide motivo; con constancia, sí", () => {
+    expect(
+      esquemaVerificar.safeParse({
+        asignacionId: ID,
+        constancia: false,
+        motivo: "",
+      }).success
+    ).toBe(true)
+    expect(
+      Object.keys(
+        mensajes(
+          esquemaVerificar.safeParse({
+            asignacionId: ID,
+            constancia: true,
+            motivo: "ok",
+          })
+        )
+      )
+    ).toEqual(["motivo"])
+  })
+})
