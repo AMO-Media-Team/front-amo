@@ -51,6 +51,12 @@ const PAGINAS: Readonly<Record<NombreSesion | "publico", readonly Pagina[]>> = {
     { ruta: "/reportes/finanzas", lista: paginacion },
     { ruta: "/operacion/medios", lista: paginacion },
     { ruta: "/operacion/asignaciones", lista: paginacion },
+    {
+      ruta: "/operacion/validacion",
+      lista: (page) =>
+        page.getByRole("navigation", { name: "Colas de validación" }),
+    },
+    { ruta: "/operacion/disputas", lista: region("Disputas por estado") },
     { ruta: "/administracion/usuarios", lista: paginacion },
     { ruta: "/administracion/roles", lista: region("Resumen de roles") },
     { ruta: "/administracion/auditoria", lista: paginacion },
