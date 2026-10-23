@@ -10,6 +10,7 @@ import {
   Building2,
   ChartColumn,
   ClipboardCheck,
+  ClipboardList,
   Fingerprint,
   Handshake,
   House,
@@ -23,6 +24,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Tags,
   UserRound,
   Users,
 } from "lucide-react"
@@ -149,6 +151,27 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     enMigas: true,
     enBarraLateral: true,
     items: [
+      {
+        id: "ofertas-medio",
+        titulo: "Ofertas",
+        href: ruta("/ofertas"),
+        icono: Tags,
+        permisos: ["ofertas.marketplace"],
+        tiposRol: SOLO_MEDIOS,
+        descripcion: "Ofertas de pauta que tu medio puede aceptar hoy",
+        palabrasClave: ["marketplace", "pauta", "aceptar", "cupos", "pago"],
+      },
+      {
+        id: "campanas-medio",
+        titulo: "Mis campañas",
+        href: ruta("/mis-campanas"),
+        icono: ClipboardList,
+        permisos: ["asignaciones.ver_propias"],
+        tiposRol: SOLO_MEDIOS,
+        descripcion:
+          "Lo que aceptaste: contenido, evidencia de publicación y métricas",
+        palabrasClave: ["asignaciones", "publicar", "evidencia", "métricas"],
+      },
       {
         id: "mi-medio",
         titulo: "Mi medio",

@@ -42,22 +42,43 @@ export async function relacionadosDe(
         .maybeSingle()
       return data ? { campanaId: data.campana_id } : null
     }
+    case "asignaciones": {
+      const { data } = await supabase
+        .from("asignaciones")
+        .select("campana_id")
+        .eq("id", id)
+        .maybeSingle()
+      return data ? { asignacionId: id, campanaId: data.campana_id } : null
+    }
+    // La campaña sale de la asignación, que el medio no lee (queda en null).
     case "publicaciones":
     case "disputas": {
       const { data } = await supabase
         .from(entidad)
-        .select("asignacion_id")
+        .select("asignacion_id, asignacion:asignaciones(campana_id)")
         .eq("id", id)
         .maybeSingle()
-      return data ? { asignacionId: data.asignacion_id } : null
+      return data
+        ? {
+            asignacionId: data.asignacion_id,
+            campanaId: data.asignacion?.campana_id ?? null,
+          }
+        : null
     }
     case "metricas": {
       const { data } = await supabase
         .from("metricas")
-        .select("publicacion:publicaciones!inner(asignacion_id)")
+        .select(
+          "publicacion:publicaciones!inner(asignacion_id, asignacion:asignaciones(campana_id))"
+        )
         .eq("id", id)
         .maybeSingle()
-      return data ? { asignacionId: data.publicacion.asignacion_id } : null
+      return data
+        ? {
+            asignacionId: data.publicacion.asignacion_id,
+            campanaId: data.publicacion.asignacion?.campana_id ?? null,
+          }
+        : null
     }
     default:
       return {}

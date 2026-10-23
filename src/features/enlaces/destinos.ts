@@ -54,6 +54,7 @@ export const ENTIDADES_CON_RELACIONADOS: readonly EntidadEnlace[] = [
   "cuentas_sociales",
   "verificaciones_cuenta",
   "ofertas",
+  "asignaciones",
   "publicaciones",
   "metricas",
   "disputas",
@@ -133,7 +134,11 @@ function destinoInterno(
   }
 }
 
-function destinoMedio(entidad: EntidadEnlace): Route {
+function destinoMedio(
+  entidad: EntidadEnlace,
+  id: string,
+  relacionados: Relacionados
+): Route {
   switch (entidad) {
     case "accesos":
     case "perfiles":
@@ -145,6 +150,17 @@ function destinoMedio(entidad: EntidadEnlace): Route {
     case "cuentas_sociales":
     case "verificaciones_cuenta":
       return r("/mi-medio/cuentas")
+    case "ofertas":
+      // El detalle del marketplace lleva a «Mis campañas» si ya la tomó.
+      return r(`/ofertas/${id}`)
+    case "asignaciones":
+      return r(`/mis-campanas/${id}`)
+    case "publicaciones":
+    case "metricas":
+    case "disputas":
+      return relacionados.asignacionId
+        ? r(`/mis-campanas/${relacionados.asignacionId}`)
+        : r("/mis-campanas")
     default:
       return INICIO
   }
@@ -169,6 +185,18 @@ function destinoAnunciante(
       return relacionados.campanaId
         ? r(`/campanas/${relacionados.campanaId}/ofertas/${id}`)
         : r("/campanas")
+    case "asignaciones":
+    case "publicaciones":
+    case "metricas":
+    case "disputas": {
+      const asignacion =
+        entidad === "asignaciones" ? id : relacionados.asignacionId
+      return relacionados.campanaId && asignacion
+        ? r(
+            `/campanas/${relacionados.campanaId}?pestana=seguimiento&asignacion=${asignacion}`
+          )
+        : r("/campanas")
+    }
     default:
       return INICIO
   }
@@ -185,7 +213,7 @@ export function destinoDe(
     case "ADMIN":
       return destinoInterno(entidad, id, relacionados, quien.permisos)
     case "MEDIO":
-      return destinoMedio(entidad)
+      return destinoMedio(entidad, id, relacionados)
     case "ANUNCIANTE":
       return destinoAnunciante(entidad, id, relacionados)
   }

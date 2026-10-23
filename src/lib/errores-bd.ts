@@ -98,6 +98,12 @@ export const MENSAJES_NEGOCIO: Readonly<Record<string, string>> = {
     "No hay una resolución de numeración DIAN vigente con consecutivos disponibles.",
   AMO_LIMITE_SOLICITUDES:
     "Recibimos varias solicitudes seguidas. Intenta de nuevo más tarde.",
+  AMO_IDEMPOTENCIA_INVALIDA:
+    "Esta solicitud ya se usó. Actualiza la página y vuelve a intentarlo.",
+  AMO_METRICA_INCOHERENTE:
+    "Las cifras no cuadran con la publicación o con los otros cortes. Revísalas.",
+  AMO_CAPTURA_REQUERIDA:
+    "Carga la captura del panel de estadísticas (una imagen) antes de enviar.",
 }
 
 /**

@@ -29,10 +29,12 @@ export default async function PaginaIr({
   const id = decodeURIComponent(crudo)
   if (!esEntidadEnlace(entidad) || !ID.test(id)) redirect(RUTA_NOTIFICACIONES)
 
-  const relacionados =
-    usuario.rol.tipo === "ADMIN" && ENTIDADES_CON_RELACIONADOS.includes(entidad)
-      ? await relacionadosDe(entidad, id)
-      : {}
+  const leidos = ENTIDADES_CON_RELACIONADOS.includes(entidad)
+    ? await relacionadosDe(entidad, id)
+    : {}
+  // Interno: si no ve la fila, no hay destino. Externo: la RLS puede ocultarle
+  // la fila (al medio, la oferta) y su destino no la necesita.
+  const relacionados = leidos ?? (usuario.rol.tipo === "ADMIN" ? null : {})
   const destino = relacionados
     ? destinoDe(
         entidad,

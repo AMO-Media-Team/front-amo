@@ -91,7 +91,25 @@ describe("destinoDe · portales externos", () => {
     expect(destinoDe("verificaciones_cuenta", ID, medio)).toBe(
       "/mi-medio/cuentas"
     )
-    expect(destinoDe("asignaciones", ID, medio)).toBe("/inicio")
+    expect(destinoDe("asignaciones", ID, medio)).toBe(`/mis-campanas/${ID}`)
+    expect(destinoDe("metricas", ID, medio, { asignacionId: PADRE })).toBe(
+      `/mis-campanas/${PADRE}`
+    )
+    expect(destinoDe("ofertas", ID, medio)).toBe(`/ofertas/${ID}`)
+    expect(destinoDe("liquidaciones", ID, medio)).toBe("/inicio")
+  })
+
+  it("el seguimiento del anunciante abre la asignación en su campaña", () => {
+    expect(
+      destinoDe("asignaciones", ID, anunciante, { campanaId: PADRE })
+    ).toBe(`/campanas/${PADRE}?pestana=seguimiento&asignacion=${ID}`)
+    expect(
+      destinoDe("publicaciones", ID, anunciante, {
+        campanaId: PADRE,
+        asignacionId: "a1",
+      })
+    ).toBe(`/campanas/${PADRE}?pestana=seguimiento&asignacion=a1`)
+    expect(destinoDe("disputas", ID, anunciante)).toBe("/campanas")
   })
 
   it("el anunciante va a su empresa, sus campañas y sus ofertas", () => {

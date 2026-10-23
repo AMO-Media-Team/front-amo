@@ -26,8 +26,15 @@ describe("registro de navegación", () => {
     const items = NAVEGACION.flatMap((grupo) => grupo.items)
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
     expect(new Set(items.map((item) => item.href)).size).toBe(items.length)
-    // El menú de comandos usa el título como valor único.
-    expect(new Set(items.map((item) => item.titulo)).size).toBe(items.length)
+    // El menú de comandos usa el título como valor único: único entre lo que
+    // ve cada tipo de rol (el medio y el anunciante tienen «Mis campañas»).
+    for (const tipo of ["ADMIN", "ANUNCIANTE", "MEDIO"] as const) {
+      const titulos = items
+        .filter((item) => item.enMenu !== false)
+        .filter((item) => !item.tiposRol || item.tiposRol.includes(tipo))
+        .map((item) => item.titulo)
+      expect(new Set(titulos).size).toBe(titulos.length)
+    }
   })
 
   it("todas las entradas tienen descripción y palabras clave para ⌘K", () => {

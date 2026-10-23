@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
 // Origen: Supabase local (supabase start), esquema public,
-// última migración aplicada: 20261022193647_e2_anunciantes_ofertas.
+// última migración aplicada: 20261023022211_e2_integridad_ejecucion.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -1042,6 +1042,7 @@ export type Database = {
           handle: string
           id: string
           indice_calidad: number | null
+          indice_franja: number | null
           medio_id: string
           metodo_verificacion:
             | Database["public"]["Enums"]["metodo_verificacion"]
@@ -1067,6 +1068,7 @@ export type Database = {
           handle: string
           id?: string
           indice_calidad?: number | null
+          indice_franja?: number | null
           medio_id: string
           metodo_verificacion?:
             | Database["public"]["Enums"]["metodo_verificacion"]
@@ -1092,6 +1094,7 @@ export type Database = {
           handle?: string
           id?: string
           indice_calidad?: number | null
+          indice_franja?: number | null
           medio_id?: string
           metodo_verificacion?:
             | Database["public"]["Enums"]["metodo_verificacion"]
@@ -3819,6 +3822,15 @@ export type Database = {
           reproducciones: number
         }[]
       }
+      desistir_asignacion_srv: {
+        Args: {
+          p_actor_id: string
+          p_asignacion_id: string
+          p_motivo: string
+          p_session_id: string
+        }
+        Returns: string
+      }
       detalle_zona_geo: {
         Args: {
           p_codigo: string
@@ -4054,6 +4066,39 @@ export type Database = {
         Args: { p_ids?: number[]; p_leida?: boolean }
         Returns: number
       }
+      marketplace_medio: {
+        Args: {
+          p_desplazamiento?: number
+          p_incluir_rechazadas?: boolean
+          p_limite?: number
+          p_orden?: string
+          p_plataforma?: Database["public"]["Enums"]["plataforma"]
+        }
+        Returns: {
+          anunciante_nombre: string
+          categorias_objetivo: string[]
+          cortes_requeridos: Database["public"]["Enums"]["corte_metrica"][]
+          cuentas: Json
+          exclusividad_dias: number
+          fecha_limite_aceptacion: string
+          formato_id: string
+          formato_nombre: string
+          id: string
+          marca: string
+          pago_maximo: number
+          permanencia_minima_dias: number
+          permite_multiples_cupos: boolean
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicaciones_por_medio: number
+          rechazada_por_mi: boolean
+          sector_id: string
+          titulo: string
+          total: number
+          ventana_fin: string
+          ventana_inicio: string
+          vista: boolean
+        }[]
+      }
       medios_en_riesgo: {
         Args: { p_limite?: number }
         Returns: {
@@ -4131,6 +4176,13 @@ export type Database = {
           user_agent: string
         }[]
       }
+      mi_elegibilidad_marketplace: {
+        Args: never
+        Returns: {
+          detalle: string
+          motivo: string
+        }[]
+      }
       miembros_organizacion: {
         Args: never
         Returns: {
@@ -4147,15 +4199,18 @@ export type Database = {
         Args: {
           p_antes_id?: string
           p_estados?: Database["public"]["Enums"]["asignacion_estado"][]
+          p_id?: string
           p_limite?: number
         }
         Returns: {
           aceptada_at: string
           anunciante_id: string
+          anunciante_nombre: string
           campana_id: string
           cancelada_at: string
           causa_cancelacion: Database["public"]["Enums"]["cancelacion_causa"]
           contenido_descargado_at: string
+          cortes_requeridos: Database["public"]["Enums"]["corte_metrica"][]
           created_at: string
           creativo_descargado_id: string
           cuenta_social_id: string
@@ -4163,12 +4218,17 @@ export type Database = {
           estado: Database["public"]["Enums"]["asignacion_estado"]
           estado_previo_disputa: Database["public"]["Enums"]["asignacion_estado"]
           evidencia_validada_at: string
+          fecha_limite_aceptacion: string
           fecha_limite_publicacion: string
+          formato_id: string
+          formato_nombre: string
           franja_clave: string
           franja_id: string
+          handle: string
           id: string
           liquidacion_id: string
           liquidada_at: string
+          marca: string
           metricas_atrasadas_at: string
           metricas_cargadas_at: string
           monto_bruto: number
@@ -4181,18 +4241,23 @@ export type Database = {
           multiplicador_exclusividad_aplicado: number
           multiplicador_geografico_aplicado: number
           oferta_id: string
+          oferta_titulo: string
           pagada_at: string
+          permanencia_minima_dias: number
           plataforma: Database["public"]["Enums"]["plataforma"]
           porcentaje_comision: number
           publicaciones: number
           publicada_at: string
           rechazada_at: string
+          reclamo_hasta: string
           retenciones_aplicadas: Json
           seguidores_al_aceptar: number
           slot: number
           tarifa_base_aplicada: number
           updated_at: string
           vencida_at: string
+          ventana_fin: string
+          ventana_inicio: string
           verificada_at: string
         }[]
       }
@@ -4287,6 +4352,8 @@ export type Database = {
         Returns: {
           accion: string
           asignacion_id: string
+          corte: Database["public"]["Enums"]["corte_metrica"]
+          numero: number
           oferta_titulo: string
           vence_at: string
         }[]
@@ -4594,6 +4661,37 @@ export type Database = {
           gmv_en_juego: number
           porcentaje: number
           segmento: string
+        }[]
+      }
+      seguimiento_campana: {
+        Args: { p_campana_id: string }
+        Returns: {
+          aceptada_at: string
+          asignacion_id: string
+          cancelada_at: string
+          causa_cancelacion: Database["public"]["Enums"]["cancelacion_causa"]
+          contenido_descargado_at: string
+          cuenta: Json
+          departamento_codigo: string
+          en_disputa_at: string
+          estado: Database["public"]["Enums"]["asignacion_estado"]
+          estado_previo_disputa: Database["public"]["Enums"]["asignacion_estado"]
+          evidencia_validada_at: string
+          fecha_limite_publicacion: string
+          medio_id: string
+          medio_nombre: string
+          metricas_cargadas_at: string
+          monto_bruto: number
+          municipio_codigo: string
+          nivel_verificacion: number
+          oferta_id: string
+          oferta_titulo: string
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicaciones: Json
+          publicada_at: string
+          slot: number
+          vencida_at: string
+          verificada_at: string
         }[]
       }
       seguridad_usuario: {

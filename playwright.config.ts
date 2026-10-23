@@ -9,10 +9,12 @@ import {
   PROYECTO_ANUNCIANTE,
   PROYECTO_ESCRITORIO,
   PROYECTO_MOVIL,
+  PROYECTO_PAUTA_MEDIO,
   PROYECTO_PREPARACION,
   PROYECTO_TABLET,
   SPECS_ALTA_MEDIO,
   SPECS_ANUNCIANTE,
+  SPECS_PAUTA_MEDIO,
 } from "./e2e/utilidades/proyectos"
 
 /**
@@ -110,6 +112,20 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // La pauta del medio (aceptar, publicar, métricas), en serie: comparte
+      // «Medio E2E» y las ofertas de las fábricas. A 390 px, como se usa.
+      name: PROYECTO_PAUTA_MEDIO,
+      dependencies: [PROYECTO_PREPARACION],
+      testMatch: SPECS_PAUTA_MEDIO,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
         launchOptions: OPCIONES_LANZAMIENTO,
       },
     },
