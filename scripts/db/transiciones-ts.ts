@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url"
 import postgres from "postgres"
 import { format, resolveConfig } from "prettier"
 
-import { entornoDeArgumentos, redactar, urlDb } from "./entorno-db"
+import { entornoDeArgumentos, redactar, sslDe, urlDb } from "./entorno-db"
 
 export const RUTA_TRANSICIONES = "src/lib/negocio/transiciones.generated.ts"
 
@@ -110,9 +110,12 @@ async function formatear(fuente: string): Promise<string> {
   return format(fuente, { ...opciones, filepath: RUTA_TRANSICIONES })
 }
 
-async function leerTransiciones(url: string): Promise<unknown[]> {
+async function leerTransiciones(
+  url: string,
+  ssl: "require" | false
+): Promise<unknown[]> {
   const sql = postgres(url, {
-    ssl: "require",
+    ssl,
     max: 1,
     prepare: false,
     idle_timeout: 5,
@@ -139,7 +142,7 @@ async function main(): Promise<void> {
     `→ leyendo private.transiciones_estado de ${entorno} (solo lectura)…`
   )
   try {
-    const filas = await leerTransiciones(url)
+    const filas = await leerTransiciones(url, sslDe(entorno))
     writeFileSync(
       RUTA_TRANSICIONES,
       await formatear(generarModuloTransiciones(filas))

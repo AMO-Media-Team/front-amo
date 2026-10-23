@@ -1,7 +1,7 @@
 /**
  * Máquina de estados de la BD (`private.transiciones_estado`) para la interfaz.
  * GENERADO por `pnpm db:transiciones <entorno>` (scripts/db/transiciones-ts.ts): no editar a mano.
- * 141 transiciones, ordenadas por entidad, origen, destino y actor.
+ * 145 transiciones, ordenadas por entidad, origen, destino y actor.
  */
 import type { TransicionEstado } from "./tipos"
 
@@ -1018,10 +1018,28 @@ export const TRANSICIONES: readonly TransicionEstado[] = [
     entidad: "ofertas",
     desde: "DEVUELTA",
     hacia: "EN_REVISION",
+    actor: "ADMIN",
+    permiso: "ofertas.gestionar",
+    requiereMotivo: false,
+    descripcion: "Reenvío a revisión por cuenta del anunciante (modo asistido)",
+  },
+  {
+    entidad: "ofertas",
+    desde: "DEVUELTA",
+    hacia: "EN_REVISION",
     actor: "ANUNCIANTE",
     permiso: "ofertas.gestionar_propias",
     requiereMotivo: false,
     descripcion: "Reenviar a revisión",
+  },
+  {
+    entidad: "ofertas",
+    desde: "EN_EJECUCION",
+    hacia: "CANCELADA",
+    actor: "SISTEMA",
+    permiso: null,
+    requiereMotivo: false,
+    descripcion: "Cancelación de la campaña sin asignaciones vivas",
   },
   {
     entidad: "ofertas",
@@ -1031,6 +1049,15 @@ export const TRANSICIONES: readonly TransicionEstado[] = [
     permiso: null,
     requiereMotivo: false,
     descripcion: "Cierre tras la ventana (cron)",
+  },
+  {
+    entidad: "ofertas",
+    desde: "EN_REVISION",
+    hacia: "BORRADOR",
+    actor: "ADMIN",
+    permiso: "ofertas.gestionar",
+    requiereMotivo: false,
+    descripcion: "Retiro de revisión por cuenta del anunciante (modo asistido)",
   },
   {
     entidad: "ofertas",
@@ -1067,6 +1094,16 @@ export const TRANSICIONES: readonly TransicionEstado[] = [
     permiso: "ofertas.moderar",
     requiereMotivo: true,
     descripcion: "Devolver con comentarios",
+  },
+  {
+    entidad: "ofertas",
+    desde: "EN_REVISION",
+    hacia: "DEVUELTA",
+    actor: "SISTEMA",
+    permiso: null,
+    requiereMotivo: false,
+    descripcion:
+      "La fecha límite de aceptación venció mientras estaba en revisión",
   },
   {
     entidad: "ofertas",

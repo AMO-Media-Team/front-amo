@@ -17,6 +17,7 @@
     "brand:build": "tsx scripts/brand/build-brand.ts",
     "db:types": "tsx scripts/db/generar-tipos.ts",
     "db:push": "tsx scripts/db/push.ts",
+    "db:respaldo": "tsx scripts/db/respaldo.ts",
     "db:suites": "tsx scripts/db/suites.ts",
     "db:vault": "tsx scripts/db/vault.ts",
     "db:local": "tsx scripts/db/local.ts",
@@ -26,7 +27,10 @@
     "bootstrap:restablecer-mfa": "tsx scripts/bootstrap/restablecer-mfa.ts",
     "bootstrap:e2e": "tsx scripts/bootstrap/usuarios-e2e.ts",
     "demo:generar": "tsx scripts/demo/generar.ts",
-    "demo:purgar": "tsx scripts/demo/purgar.ts"
+    "demo:purgar": "tsx scripts/demo/purgar.ts",
+    "pruebas:carrera": "tsx --env-file=.env.local scripts/pruebas/carrera-cupos.ts",
+    "pruebas:pauta-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-pauta-e2e.ts",
+    "prod:config-pruebas": "tsx scripts/produccion/configuracion-pruebas.ts"
   },
   "engines": {
     "node": ">=22.12"

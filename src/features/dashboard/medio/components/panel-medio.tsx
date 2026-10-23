@@ -7,6 +7,17 @@ import { EsqueletoTarjetaGrafico } from "@/components/charts/esqueleto-grafico"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import {
+  calidadDeCuentas,
+  resumenMultiplicador,
+} from "@/features/calidad-medio/calidad"
+import { CalidadCuentas } from "@/features/calidad-medio/components/calidad-cuentas"
+import { EsqueletoCalidadCuentas } from "@/features/calidad-medio/components/esqueleto-calidad"
+import {
+  cuentasCalidad,
+  parametrosCalidad,
+} from "@/features/calidad-medio/queries"
+import { RUTA_OFERTAS_MEDIO } from "@/features/marketplace/rutas"
+import {
   enAlta,
   RUTAS_MI_MEDIO,
   situacionMedio,
@@ -15,6 +26,7 @@ import { AltaMedio } from "@/features/mi-medio/components/alta-medio"
 import { LimiteErrorMiMedio } from "@/features/mi-medio/components/limite-error-mi-medio"
 import { TarjetaSituacion } from "@/features/mi-medio/components/tarjeta-situacion"
 import { medioPropio, resumenMiMedio } from "@/features/mi-medio/queries"
+import { RUTA_MIS_CAMPANAS } from "@/features/mis-campanas/rutas"
 import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { cn } from "@/lib/utils"
@@ -24,12 +36,13 @@ import { EsqueletoLista } from "../../components/esqueletos-panel"
 import { indicePorKpi, valorKpi } from "../../kpi"
 import { etiquetaComparacionAmplia, type PeriodoPanel } from "../../periodo"
 import {
+  accionesDelInicio,
   anioDelTope,
   etiquetaNivel,
   granularidadGananciasPorDefecto,
-  negociosEnCurso,
-  ofertasDistintas,
   progresoTope,
+  publicacionesPorAsignacion,
+  RUTA_SUBIR_DE_NIVEL,
   serieGanancias,
   tituloGanado,
   UMBRALES_TOPE_POR_DEFECTO,
@@ -40,7 +53,7 @@ import {
   fichaMedio,
   kpisMedio,
   nMinimoCumplimiento,
-  ofertasDeNegocios,
+  plazoCargaHoras,
   proximasAcciones,
   serieGananciasMedio,
 } from "../queries"
@@ -51,7 +64,7 @@ import {
   EsqueletoTopeAnual,
 } from "./esqueletos-medio"
 import { GraficoGanancias } from "./grafico-ganancias"
-import { ProximasAcciones } from "./proximas-acciones"
+import { type DestinoAcciones, ProximasAcciones } from "./proximas-acciones"
 import {
   HeroGanancias,
   NegociosEnCurso,
@@ -59,13 +72,50 @@ import {
   Reputacion,
 } from "./tarjetas-medio"
 
-/** Pendientes visibles en el panel (la RPC ordena del plazo más próximo). */
+/** Pendientes visibles en el panel. */
 const LIMITE_ACCIONES = 6
+/**
+ * Pendientes que se consultan para ordenarlos (lo que ya se puede hacer
+ * antes que los cortes aún bloqueados) y contar los que no caben.
+ */
+const CONSULTA_ACCIONES = 30
 /** Negocios en curso visibles en el panel. */
 const LIMITE_NEGOCIOS = 5
+/**
+ * Asignaciones en curso que se leen (una sola vez por solicitud): los
+ * negocios del panel y cuántas publicaciones pide cada una para nombrar las
+ * acciones.
+ */
+const CONSULTA_EN_CURSO = 50
 
 interface PropsPeriodo {
   periodo: PeriodoPanel
+}
+
+/** Lo que el rol puede abrir desde el panel (cada página vuelve a exigirlo). */
+interface Enlaces {
+  /** Pantalla de cada acción, la ficha de la asignación o ninguna. */
+  acciones: DestinoAcciones
+  /** «Mis campañas» (`asignaciones.ver_propias`). */
+  misCampanas: boolean
+  /** «Ofertas» (`ofertas.marketplace`). */
+  ofertas: boolean
+  /** «Mi medio»: nivel y cuentas (`medios.editar_propio`). */
+  miMedio: boolean
+}
+
+function enlacesDe(usuario: UsuarioSesion): Enlaces {
+  const misCampanas = tieneAlgunPermiso(usuario, ["asignaciones.ver_propias"])
+  return {
+    acciones: tieneAlgunPermiso(usuario, ["asignaciones.ejecutar"])
+      ? "accion"
+      : misCampanas
+        ? "ficha"
+        : null,
+    misCampanas,
+    ofertas: tieneAlgunPermiso(usuario, ["ofertas.marketplace"]),
+    miMedio: tieneAlgunPermiso(usuario, ["medios.editar_propio"]),
+  }
 }
 
 /** Una sola llamada a `kpis_medio` por solicitud (memorizada): la comparten los bloques. */
@@ -76,6 +126,13 @@ function kpisDelPeriodo(periodo: PeriodoPanel) {
     periodo.desdeAnterior,
     periodo.hastaAnterior
   )
+}
+
+/** Asignaciones en curso (sin `asignaciones.ver_propias`, ninguna: no hay qué leer). */
+function enCurso(enlaces: Enlaces) {
+  return enlaces.misCampanas
+    ? asignacionesEnCurso(CONSULTA_EN_CURSO)
+    : Promise.resolve([])
 }
 
 async function BloqueGanancias({ periodo }: PropsPeriodo) {
@@ -94,7 +151,8 @@ async function BloqueGanancias({ periodo }: PropsPeriodo) {
 async function BloqueTope({
   periodo,
   medioId,
-}: PropsPeriodo & { medioId: string }) {
+  enlaces,
+}: PropsPeriodo & { medioId: string; enlaces: Enlaces }) {
   const [filas, ficha] = await Promise.all([
     kpisDelPeriodo(periodo),
     fichaMedio(medioId),
@@ -115,27 +173,73 @@ async function BloqueTope({
       nivel={`${nivel} · año ${anioDelTope(periodo.hasta)}`}
       alerta={alerta}
       bloqueo={bloqueo}
+      enlaceNivel={enlaces.miMedio ? RUTA_SUBIR_DE_NIVEL : null}
     />
   )
+}
+
+/**
+ * El multiplicador de «Tu reputación» es el vigente más bajo de sus cuentas
+ * (el mismo cálculo que «Calidad de tus cuentas»). Es un dato de apoyo: si
+ * esa lectura falla, se usa el que trae `kpis_medio`.
+ */
+async function resumenCalidad(medioId: string, ahora: Date) {
+  try {
+    const [cuentas, parametros] = await Promise.all([
+      cuentasCalidad(medioId),
+      parametrosCalidad(),
+    ])
+    return resumenMultiplicador(calidadDeCuentas(cuentas, parametros), ahora)
+  } catch {
+    return null
+  }
 }
 
 async function BloqueReputacion({
   periodo,
   medioId,
-}: PropsPeriodo & { medioId: string }) {
-  const [filas, ficha, nMinimo] = await Promise.all([
+  ahora,
+}: PropsPeriodo & { medioId: string; ahora: Date }) {
+  const [filas, ficha, nMinimo, resumen] = await Promise.all([
     kpisDelPeriodo(periodo),
     fichaMedio(medioId),
     nMinimoCumplimiento(),
+    resumenCalidad(medioId, ahora),
   ])
   const indice = indicePorKpi(filas)
   return (
     <Reputacion
       cumplimiento={indice.get("tasa_cumplimiento")}
       calificacion={ficha?.calificacion ?? null}
-      multiplicador={valorKpi(indice, "multiplicador_calidad")}
+      multiplicador={
+        resumen?.valor ?? valorKpi(indice, "multiplicador_calidad")
+      }
+      notaMultiplicador={resumen?.nota}
       publicaciones={valorKpi(indice, "publicaciones_realizadas")}
       nMinimoCumplimiento={nMinimo}
+    />
+  )
+}
+
+async function BloqueCalidad({
+  medioId,
+  ahora,
+  enlaces,
+}: {
+  medioId: string
+  ahora: Date
+  enlaces: Enlaces
+}) {
+  const [cuentas, parametros] = await Promise.all([
+    cuentasCalidad(medioId),
+    parametrosCalidad(),
+  ])
+  return (
+    <CalidadCuentas
+      calidades={calidadDeCuentas(cuentas, parametros)}
+      parametros={parametros}
+      ahora={ahora}
+      enlaceCuentas={enlaces.miMedio ? RUTAS_MI_MEDIO.cuentas : null}
     />
   )
 }
@@ -158,53 +262,77 @@ async function BloqueSerieGanancias({ periodo }: PropsPeriodo) {
   )
 }
 
-async function BloqueAcciones({ ahora }: { ahora: Date }) {
-  const acciones = await proximasAcciones(LIMITE_ACCIONES)
+async function BloqueAcciones({
+  ahora,
+  enlaces,
+}: {
+  ahora: Date
+  enlaces: Enlaces
+}) {
+  const [filas, plazo, asignaciones] = await Promise.all([
+    proximasAcciones(CONSULTA_ACCIONES),
+    plazoCargaHoras(),
+    enCurso(enlaces),
+  ])
+  const acciones = accionesDelInicio(filas, {
+    ahora,
+    plazoCargaHoras: plazo,
+    publicacionesPorAsignacion: publicacionesPorAsignacion(asignaciones),
+  })
+  const visibles = acciones.slice(0, LIMITE_ACCIONES)
   return (
-    <ProximasAcciones acciones={acciones} ahoraServidor={ahora.getTime()} />
+    <ProximasAcciones
+      acciones={visibles}
+      ahoraServidor={ahora.getTime()}
+      destino={enlaces.acciones}
+      restantes={
+        filas.length >= CONSULTA_ACCIONES
+          ? null
+          : acciones.length - visibles.length
+      }
+      enlaceTodas={enlaces.misCampanas ? RUTA_MIS_CAMPANAS : null}
+      enlaceOfertas={enlaces.ofertas ? RUTA_OFERTAS_MEDIO : null}
+      enCurso={asignaciones.length}
+    />
   )
 }
 
 async function BloqueNegocios({
   periodo,
-  conOfertas,
-}: PropsPeriodo & {
-  /** Con `ofertas.marketplace`: cada negocio lleva el nombre de su oferta. */
-  conOfertas: boolean
-}) {
+  enlaces,
+}: PropsPeriodo & { enlaces: Enlaces }) {
   const [asignaciones, filas] = await Promise.all([
-    asignacionesEnCurso(LIMITE_NEGOCIOS),
+    enCurso(enlaces),
     kpisDelPeriodo(periodo),
   ])
-  const ofertas = conOfertas
-    ? await ofertasDeNegocios(ofertasDistintas(asignaciones))
-    : []
   return (
     <NegociosEnCurso
-      negocios={negociosEnCurso(asignaciones, ofertas)}
+      negocios={asignaciones.slice(0, LIMITE_NEGOCIOS)}
       activas={valorKpi(indicePorKpi(filas), "asignaciones_activas")}
+      enlaceTodas={enlaces.misCampanas ? RUTA_MIS_CAMPANAS : null}
     />
   )
 }
 
 /**
- * Una columna en móvil, en orden de prioridad: cuánto gané → qué tengo
- * pendiente → cuánto me queda del tope → historial → negocios en curso →
- * reputación. Con el panel desde 42 rem (tableta, 2 columnas) las acciones
- * ocupan dos filas junto al tope y la reputación (alturas parecidas, sin
- * tarjetas estiradas), y el gráfico y los negocios van a lo ancho. Desde
- * 56 rem (escritorio), dos columnas reales: lo principal a la izquierda y lo
- * de consulta rápida a la derecha. Los cortes miden el panel
- * (`@container/panel`), no la ventana: la barra lateral abierta le quita
- * 256 px. Las columnas usan `display: contents` por debajo de 56 rem, así sus
- * bloques se reordenan con `order` en la misma rejilla. Ningún bloque tiene
- * controles enfocables salvo el gráfico, por eso el orden visual no altera
- * el del teclado.
+ * Una columna en móvil, en el orden en que el medio lo necesita: cuánto gané
+ * → qué tengo pendiente → historial → negocios en curso, y luego su tope, su
+ * reputación y la calidad de sus cuentas. Ese es también el orden del
+ * documento, así que el teclado y el lector de pantalla recorren lo mismo que
+ * se ve (sin `order`: ahora casi todos los bloques tienen enlaces). Con el
+ * panel desde 42 rem (tableta, 2 columnas) lo principal va a lo ancho y el
+ * tope y la reputación en pareja (alturas parecidas); desde 56 rem
+ * (escritorio), dos columnas reales: lo principal a la izquierda y lo de
+ * consulta a la derecha. Los cortes miden el panel (`@container/panel`), no la
+ * ventana: la barra lateral abierta le quita 256 px. Las columnas usan
+ * `display: contents` por debajo de 56 rem, así sus bloques entran en la
+ * misma rejilla.
  */
 const RAIZ =
   "flex flex-col gap-4 sm:gap-5 @2xl/panel:grid @2xl/panel:grid-cols-2 @4xl/panel:grid-cols-3"
 const COLUMNA =
   "contents @4xl/panel:flex @4xl/panel:min-w-0 @4xl/panel:flex-col @4xl/panel:gap-5"
+const A_LO_ANCHO = "@2xl/panel:col-span-2"
 
 interface PropsPanel {
   usuario: UsuarioSesion
@@ -213,10 +341,11 @@ interface PropsPanel {
 }
 
 /**
- * Indicadores del medio verificado, mobile-first: lo ganado (cifra héroe), el
- * avance del tope anual de su nivel, sus próximas acciones con cuenta
- * regresiva, la serie de ganancias, los negocios en curso y su reputación.
- * Las RPC son definer y filtran por su medio (`mi_medio_id()`).
+ * Indicadores del medio verificado, mobile-first: lo ganado (cifra héroe),
+ * sus próximas acciones con cuenta regresiva y botón directo, la serie de
+ * ganancias, los negocios en curso, el avance del tope anual de su nivel, su
+ * reputación y la calidad de sus cuentas. Las RPC son definer y filtran por
+ * su medio (`mi_medio_id()`).
  */
 function IndicadoresMedio({
   usuario,
@@ -224,7 +353,7 @@ function IndicadoresMedio({
   ahora,
   medioId,
 }: PropsPanel & { medioId: string }) {
-  const conNegocios = tieneAlgunPermiso(usuario, ["asignaciones.ver_propias"])
+  const enlaces = enlacesDe(usuario)
 
   return (
     <div className={RAIZ}>
@@ -232,58 +361,61 @@ function IndicadoresMedio({
         <BloquePanel
           titulo="Tus ganancias del periodo"
           orden={1}
-          className="order-1 @2xl/panel:col-span-2"
+          className={A_LO_ANCHO}
           esqueleto={<EsqueletoHeroGanancias />}
         >
           <BloqueGanancias periodo={periodo} />
         </BloquePanel>
         <BloquePanel
+          titulo="Próximas acciones"
+          orden={2}
+          className={A_LO_ANCHO}
+          esqueleto={<EsqueletoLista filas={3} />}
+        >
+          <BloqueAcciones ahora={ahora} enlaces={enlaces} />
+        </BloquePanel>
+        <BloquePanel
           titulo="Tus ganancias"
-          orden={4}
-          className="order-4 @2xl/panel:order-5 @2xl/panel:col-span-2"
+          orden={3}
+          className={A_LO_ANCHO}
           esqueleto={<EsqueletoTarjetaGrafico alto="min-h-64" />}
         >
           <BloqueSerieGanancias periodo={periodo} />
         </BloquePanel>
-        {conNegocios ? (
+        {enlaces.misCampanas ? (
           <BloquePanel
             titulo="Negocios en curso"
-            orden={5}
-            className="order-5 @2xl/panel:order-6 @2xl/panel:col-span-2 @4xl/panel:flex-1"
+            orden={4}
+            className={cn(A_LO_ANCHO, "@4xl/panel:flex-1")}
             esqueleto={<EsqueletoLista filas={4} />}
           >
-            <BloqueNegocios
-              periodo={periodo}
-              conOfertas={tieneAlgunPermiso(usuario, ["ofertas.marketplace"])}
-            />
+            <BloqueNegocios periodo={periodo} enlaces={enlaces} />
           </BloquePanel>
         ) : null}
       </div>
 
       <div className={COLUMNA}>
         <BloquePanel
-          titulo="Próximas acciones"
-          orden={2}
-          className="order-2 @2xl/panel:row-span-2"
-          esqueleto={<EsqueletoLista filas={3} />}
-        >
-          <BloqueAcciones ahora={ahora} />
-        </BloquePanel>
-        <BloquePanel
           titulo="Tope anual de tu nivel"
-          orden={3}
-          className="order-3"
+          orden={5}
           esqueleto={<EsqueletoTopeAnual />}
         >
-          <BloqueTope periodo={periodo} medioId={medioId} />
+          <BloqueTope periodo={periodo} medioId={medioId} enlaces={enlaces} />
         </BloquePanel>
         <BloquePanel
           titulo="Tu reputación"
           orden={6}
-          className="order-6 @2xl/panel:order-4 @4xl/panel:flex-1"
           esqueleto={<EsqueletoReputacion />}
         >
-          <BloqueReputacion periodo={periodo} medioId={medioId} />
+          <BloqueReputacion periodo={periodo} medioId={medioId} ahora={ahora} />
+        </BloquePanel>
+        <BloquePanel
+          titulo="Calidad de tus cuentas"
+          orden={7}
+          className={cn(A_LO_ANCHO, "@4xl/panel:flex-1")}
+          esqueleto={<EsqueletoCalidadCuentas />}
+        >
+          <BloqueCalidad medioId={medioId} ahora={ahora} enlaces={enlaces} />
         </BloquePanel>
       </div>
     </div>

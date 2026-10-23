@@ -244,18 +244,19 @@ test.describe("panel del medio", () => {
       await expect(barraInferior).toBeHidden()
       return
     }
-    // El medio trabaja desde el celular: barra inferior fija con sus accesos.
-    await expect(
-      barraInferior.getByRole("link", { name: "Inicio" })
-    ).toBeVisible()
-    await expect(
-      barraInferior.getByRole("link", { name: "Perfil" })
-    ).toBeVisible()
+    // El medio trabaja desde el celular: barra inferior fija con lo del día a
+    // día (Inicio, Ofertas, Campañas y Mi medio, en ese orden).
+    await expect(barraInferior.getByRole("link")).toHaveText([
+      "Inicio",
+      "Ofertas",
+      "Campañas",
+      "Mi medio",
+    ])
     await esperarSinDesbordeHorizontal(page)
-    await barraInferior.getByRole("link", { name: /^Avisos/ }).click()
-    await expect(page).toHaveURL(/\/notificaciones$/)
+    await barraInferior.getByRole("link", { name: "Ofertas" }).click()
+    await expect(page).toHaveURL(/\/ofertas$/)
     await expect(
-      page.getByRole("heading", { level: 1, name: "Notificaciones" })
+      page.getByRole("heading", { level: 1, name: "Ofertas" })
     ).toBeVisible()
   })
 })

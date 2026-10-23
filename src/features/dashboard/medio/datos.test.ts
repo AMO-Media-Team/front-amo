@@ -1,25 +1,32 @@
 import { describe, expect, it } from "vitest"
 
+import { etiquetaAccion } from "@/features/mis-campanas/siguiente-accion"
 import { rangoDesdePreset } from "@/lib/fechas"
 
 import {
+  accionesDelInicio,
   anioDelTope,
-  type AsignacionEnCurso,
-  cuentaRegresiva,
-  etiquetaAccion,
+  claveAccion,
+  enlazaSubirNivel,
   etiquetaEstado,
   etiquetaNivel,
   formatoMonto,
   granularidadGananciasPorDefecto,
-  negociosEnCurso,
-  ofertasDistintas,
   pasoEstado,
   progresoTope,
+  publicacionesPorAsignacion,
+  RUTA_SUBIR_DE_NIVEL,
   serieGanancias,
   textoVentana,
   tituloGanado,
   ventanaGanancias,
 } from "./datos"
+import {
+  AHORA_MEDIO,
+  enMinutos,
+  filasAcciones,
+  NEGOCIOS_MEDIO,
+} from "./fixtures"
 
 const AHORA = new Date("2026-10-01T15:00:00Z")
 const plano = (texto: string) => texto.replace(/[  ]/g, " ")
@@ -74,46 +81,155 @@ describe("progresoTope (§7.1.1)", () => {
   })
 })
 
-describe("cuentaRegresiva", () => {
-  const en = (minutos: number) =>
-    new Date(AHORA.getTime() + minutos * 60_000).toISOString()
+describe("enlace para subir de nivel (DSH-006)", () => {
+  const umbrales = { tope: 30_000_000, alerta: 0.8, bloqueo: 0.95 }
 
-  it.each([
-    [-180, "vencida", "Venció hace 3 h"],
-    [0, "vencida", "Venció hace 1 min"],
-    [135, "critica", "Vence en 2 h 15 min"],
-    [6 * 60, "pronto", "Vence en 6 h"],
-    [23 * 60 + 59, "pronto", "Vence en 23 h 59 min"],
-    [24 * 60, "holgada", "Vence en 1 día"],
-    [26 * 60, "holgada", "Vence en 1 día 2 h"],
-    [4 * 24 * 60 + 30, "holgada", "Vence en 4 días"],
-  ] as const)("%i min → %s (%s)", (minutos, urgencia, texto) => {
-    const cuenta = cuentaRegresiva(en(minutos), AHORA)
-    expect(cuenta.urgencia).toBe(urgencia)
-    expect(cuenta.texto).toBe(texto)
-    expect(cuenta.minutosRestantes).toBe(minutos)
+  it("solo cerca del tope o en el bloqueo", () => {
+    const estado = (consumido: number, tope: number | null = umbrales.tope) =>
+      enlazaSubirNivel(progresoTope({ ...umbrales, tope, consumido }))
+    expect(estado(10_000_000)).toBe(false)
+    // Un medio al 82 % de su tope.
+    expect(estado(24_600_000)).toBe(true)
+    expect(estado(29_000_000)).toBe(true)
+    expect(estado(4_000_000, null)).toBe(false)
   })
 
-  it("sin fecha límite (o ilegible) no inventa urgencia", () => {
-    for (const vence of [null, "no-es-fecha"]) {
-      expect(cuentaRegresiva(vence, AHORA)).toEqual({
-        urgencia: "holgada",
-        texto: "Sin fecha límite",
-        minutosRestantes: null,
-      })
-    }
+  it("lleva a la guía del camino al siguiente nivel en «Mi medio»", () => {
+    expect(RUTA_SUBIR_DE_NIVEL).toBe("/mi-medio/nivel#subir-de-nivel")
   })
 })
 
-describe("etiquetas de acciones y estados", () => {
-  it("traduce las acciones de la RPC y humaniza las desconocidas", () => {
-    expect(etiquetaAccion("CARGAR_METRICA_H72")).toBe("Cargar métricas de 72 h")
-    expect(etiquetaAccion("REVISAR_BRIEF")).toBe("Revisar brief")
+describe("accionesDelInicio (DSH-006)", () => {
+  const acciones = accionesDelInicio(filasAcciones(AHORA_MEDIO), {
+    ahora: AHORA_MEDIO,
+    plazoCargaHoras: 48,
+    publicacionesPorAsignacion: publicacionesPorAsignacion(NEGOCIOS_MEDIO),
   })
 
-  it("ubica cada estado en curso en su paso del recorrido", () => {
+  it("primero lo que ya se puede hacer, por plazo; al final lo que aún no se habilita", () => {
+    expect(acciones.map((accion) => accion.codigo)).toEqual([
+      "PUBLICAR",
+      "CARGAR_METRICA_H24",
+      "DESCARGAR_NUEVA_VERSION",
+      "CORREGIR_EVIDENCIA",
+      "CARGAR_METRICA_D7",
+    ])
+    // El corte de 7 días se habilita 48 h antes de vencer: dentro de 10 h.
+    expect(acciones.at(-1)?.disponibleDesde).toBe(
+      enMinutos(AHORA_MEDIO, 10 * 60)
+    )
+  })
+
+  it("cada acción lleva directo a su pantalla, con su publicación y su corte", () => {
+    expect(acciones.map((accion) => accion.ruta)).toEqual([
+      "/mis-campanas/a1/evidencia",
+      "/mis-campanas/a2/metricas?numero=1&corte=H24",
+      "/mis-campanas/a3/contenido",
+      "/mis-campanas/a4/evidencia?numero=2",
+      "/mis-campanas/a5/metricas?numero=2&corte=D7",
+    ])
+  })
+
+  it("con varias publicaciones en la oferta, la etiqueta dice a cuál va", () => {
+    const metrica = acciones.find((accion) => accion.asignacionId === "a5")
+    expect(metrica?.etiqueta).toBe(
+      etiquetaAccion("CARGAR_METRICA", {
+        numero: 2,
+        corte: "D7",
+        variasPublicaciones: true,
+      })
+    )
+    expect(metrica?.etiqueta).toMatch(/publicación 2/)
+  })
+
+  it("una publicación que vence en 5 horas va primero si es lo más urgente", () => {
+    const [primera] = accionesDelInicio(
+      filasAcciones(AHORA_MEDIO).filter((fila) => fila.asignacionId !== "a1"),
+      { ahora: AHORA_MEDIO }
+    )
+    expect(primera?.venceAt).toBe(enMinutos(AHORA_MEDIO, 5 * 60))
+  })
+
+  it("omite lo que esta versión no conoce y acepta filas sin número ni corte", () => {
+    expect(acciones.some((accion) => accion.asignacionId === "a6")).toBe(false)
+    const [descarga] = accionesDelInicio(
+      [
+        {
+          asignacionId: "a9",
+          ofertaTitulo: "Oferta",
+          accion: "DESCARGAR",
+          venceAt: null,
+        },
+      ],
+      { ahora: AHORA_MEDIO }
+    )
+    expect(descarga).toMatchObject({
+      tipo: "DESCARGAR",
+      numero: null,
+      corte: null,
+      ruta: "/mis-campanas/a9/contenido",
+    })
+  })
+
+  it("una clave distinta por acción, aunque compartan asignación", () => {
+    const claves = accionesDelInicio(
+      [
+        {
+          asignacionId: "a1",
+          ofertaTitulo: "O",
+          accion: "CARGAR_METRICA_H24",
+          venceAt: null,
+          numero: 1,
+          corte: "H24",
+        },
+        {
+          asignacionId: "a1",
+          ofertaTitulo: "O",
+          accion: "CARGAR_METRICA_H24",
+          venceAt: null,
+          numero: 2,
+          corte: "H24",
+        },
+        {
+          asignacionId: "a1",
+          ofertaTitulo: "O",
+          accion: "CORREGIR_METRICAS",
+          venceAt: null,
+          numero: 1,
+          corte: "H24",
+        },
+      ],
+      { ahora: AHORA_MEDIO }
+    ).map(claveAccion)
+    expect(new Set(claves).size).toBe(3)
+  })
+
+  it("cada personalizado rechazado es su propia acción y lleva a corregir el suyo", () => {
+    const fila = (metricaId: string) => ({
+      asignacionId: "a1",
+      ofertaTitulo: "O",
+      accion: "CORREGIR_METRICAS",
+      venceAt: null,
+      numero: 1,
+      corte: "PERSONALIZADO" as const,
+      metricaId,
+    })
+    const acciones = accionesDelInicio([fila("m1"), fila("m2")], {
+      ahora: AHORA_MEDIO,
+    })
+    expect(new Set(acciones.map(claveAccion)).size).toBe(2)
+    expect(acciones.map((accion) => accion.ruta)).toEqual([
+      "/mis-campanas/a1/metricas?numero=1&corte=PERSONALIZADO&metrica=m1",
+      "/mis-campanas/a1/metricas?numero=1&corte=PERSONALIZADO&metrica=m2",
+    ])
+    expect(acciones[0]?.etiqueta).toBe("Corrige el corte personalizado")
+  })
+})
+
+describe("estados de los negocios en curso", () => {
+  it("en la voz del medio y en su paso del recorrido", () => {
     expect(etiquetaEstado("CONTENIDO_ENTREGADO")).toBe("Por publicar")
-    expect(etiquetaEstado("PAGADA")).toBe("PAGADA")
+    expect(etiquetaEstado("NO_EXISTE")).toBe("NO_EXISTE")
     expect(pasoEstado("ACEPTADA")).toBe(1)
     expect(pasoEstado("METRICAS_CARGADAS")).toBe(5)
     expect(pasoEstado("PAGADA")).toBe(0)
@@ -125,6 +241,18 @@ describe("etiquetas de acciones y estados", () => {
     )
     expect(etiquetaNivel(1, null)).toBe("Nivel 1")
     expect(anioDelTope("2027-01-15")).toBe(2027)
+  })
+
+  it("publicaciones por asignación (solo las que se conocen)", () => {
+    expect(publicacionesPorAsignacion(NEGOCIOS_MEDIO)).toEqual(
+      new Map([
+        ["a3", 1],
+        ["a5", 2],
+      ])
+    )
+    expect(
+      publicacionesPorAsignacion([{ id: "x", publicaciones: undefined }]).size
+    ).toBe(0)
   })
 })
 
@@ -176,41 +304,6 @@ describe("ganancias", () => {
     )
     expect(plano(textoVentana(mensual))).toBe("1 mes desde nov 2025")
     expect(textoVentana(serieGanancias([], "mes"))).toBe("")
-  })
-})
-
-describe("negocios en curso", () => {
-  const asignacion = (id: string, ofertaId: string): AsignacionEnCurso => ({
-    id,
-    ofertaId,
-    estado: "ACEPTADA",
-    plataforma: "INSTAGRAM",
-    montoMedio: 100_000,
-  })
-  const asignaciones = [
-    asignacion("a1", "o1"),
-    asignacion("a2", "o2"),
-    asignacion("a3", "o1"),
-  ]
-
-  it("consulta cada oferta una sola vez, en el orden de las asignaciones", () => {
-    expect(ofertasDistintas(asignaciones)).toEqual(["o1", "o2"])
-    expect(ofertasDistintas([])).toEqual([])
-  })
-
-  it("nombra cada negocio con su oferta y deja sin nombre al que no la trae", () => {
-    const negocios = negociosEnCurso(asignaciones, [
-      { id: "o1", titulo: "  Feria del Libro  ", marca: "  " },
-    ])
-    expect(negocios.map((n) => [n.id, n.titulo, n.marca])).toEqual([
-      ["a1", "Feria del Libro", null],
-      ["a2", null, null],
-      ["a3", "Feria del Libro", null],
-    ])
-    expect(negocios[0]).toMatchObject({
-      estado: "ACEPTADA",
-      montoMedio: 100_000,
-    })
   })
 })
 

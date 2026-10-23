@@ -1,11 +1,12 @@
 import "server-only"
 
 /**
- * Consultas de la verificación (ADM-001, ADM-006). Todo se lee con el cliente
- * del USUARIO (JWT + RLS): la BD decide qué ve cada rol (`medios.verificar`;
- * los documentos, además `datos_sensibles.ver`). Las rutas de Storage se
- * leen aquí solo para deducir el MIME y nunca salen hacia el navegador. Un
- * error de lectura se lanza y lo recoge el límite de error de la sección.
+ * Consultas de la verificación (ADM-001, ADM-006; la cola de anunciantes,
+ * ADM-003, vive en `verificacion-anunciantes`). Todo se lee con el cliente del
+ * USUARIO (JWT + RLS): la BD decide qué ve cada rol (`medios.verificar`; los
+ * documentos, además `datos_sensibles.ver`). Las rutas de Storage se leen aquí
+ * solo para deducir el MIME y nunca salen hacia el navegador. Un error de
+ * lectura se lanza y lo recoge el límite de error de la sección.
  */
 import { cache } from "react"
 
@@ -19,6 +20,7 @@ import {
 } from "@/features/operacion/queries/comun"
 import { cuentasDelMedio } from "@/features/operacion/queries/medios"
 import type { MedioDetalle } from "@/features/operacion/tipos"
+import { contarColaAnunciantes } from "@/features/verificacion-anunciantes/queries"
 import { mimeDeArchivo } from "@/lib/archivos/mime"
 import { serializarFecha } from "@/lib/fechas"
 import type { Database } from "@/types/database.types"
@@ -127,16 +129,22 @@ async function contarSolicitudesPendientes(): Promise<number> {
 export const contadoresColas = cache(
   async (acceso: AccesoColas): Promise<ContadoresColas> => {
     const sinAcceso = Promise.resolve(null)
-    const [medios, cuentas, documentos, solicitudes] = await Promise.all([
-      acceso.verificarMedios ? contarMediosEnviados() : sinAcceso,
-      acceso.verificarMedios ? contarVerificacionesConCaptura() : sinAcceso,
-      acceso.verDocumentos ? contarDocumentosPorRevisar() : sinAcceso,
-      acceso.verificarMedios ? contarSolicitudesPendientes() : sinAcceso,
-    ])
-    return { medios, cuentas, documentos, solicitudes } satisfies Record<
-      Cola,
-      number | null
-    >
+    const [medios, cuentas, documentos, solicitudes, anunciantes] =
+      await Promise.all([
+        acceso.verificarMedios ? contarMediosEnviados() : sinAcceso,
+        acceso.verificarMedios ? contarVerificacionesConCaptura() : sinAcceso,
+        acceso.verDocumentos ? contarDocumentosPorRevisar() : sinAcceso,
+        acceso.verificarMedios ? contarSolicitudesPendientes() : sinAcceso,
+        // ADM-003: empresas enviadas y documentos de anunciantes por revisar.
+        acceso.verificarAnunciantes ? contarColaAnunciantes() : sinAcceso,
+      ])
+    return {
+      medios,
+      cuentas,
+      documentos,
+      solicitudes,
+      anunciantes,
+    } satisfies Record<Cola, number | null>
   }
 )
 

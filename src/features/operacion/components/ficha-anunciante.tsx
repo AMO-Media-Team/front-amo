@@ -17,6 +17,7 @@ import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { banderaEmoji } from "@/features/accesos/catalogo"
+import { ETIQUETAS_REGIMEN, type Regimen } from "@/features/empresa/schemas"
 import {
   formatearCOP,
   formatearFecha,
@@ -416,7 +417,11 @@ export function SeccionResumenAnunciante({
               },
               {
                 etiqueta: "Régimen",
-                valor: anunciante.facturacion.regimen ?? (
+                valor: anunciante.facturacion.regimen ? (
+                  (ETIQUETAS_REGIMEN[
+                    anunciante.facturacion.regimen as Regimen
+                  ] ?? anunciante.facturacion.regimen)
+                ) : (
                   <SinDato>No informado</SinDato>
                 ),
               },

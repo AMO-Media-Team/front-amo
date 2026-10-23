@@ -48,8 +48,12 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
 - **Alcance construido (Entrega 1)**: base de plataforma (autenticación con MFA, invitaciones,
   usuarios, roles y permisos, auditoría, accesos, cuenta, notificaciones, configuración), modelo de
   datos completo del negocio, analítica (paneles por rol, explorador geográfico en 3 niveles, 7
-  reportes con exportación) y consulta de operación. Los flujos operativos por rol (crear oferta,
-  aceptar cupo, subir evidencia, liquidar) son las entregas siguientes; la BD ya los soporta.
+  reportes con exportación) y consulta de operación.
+- **Entregas 2 y 3 (en curso, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
+  organizaciones, alta y verificación del medio, términos, vinculación pública (fases 0 y 1); empresa
+  del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2); marketplace, Mis
+  campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3). Siguen la validación,
+  las disputas y las finanzas.
 
 ## Stack
 
@@ -70,12 +74,17 @@ pnpm geo:build              # regenera GeoJSON optimizados, diccionarios y semil
 pnpm brand:build            # regenera logos e iconos
 pnpm db:types               # regenera src/types/database.types.ts (requiere `supabase login`)
 pnpm db:permisos            # genera supabase/seed/permisos.sql desde src/lib/auth/permisos.ts
+pnpm db:push <entorno> [--dry-run] [--confirmar-produccion]   # aplica migraciones (develop, luego producción)
+pnpm db:respaldo <entorno> [--etiqueta …]  # esquema y datos a context/respaldos/ antes de migrar producción
 pnpm bootstrap:superadmin   # crea/recupera el superadministrador (imprime un enlace de un solo uso)
                             # contra producción: AMO_ARCHIVO_ENTORNO=.env.produccion pnpm bootstrap:superadmin
 pnpm bootstrap:restablecer-mfa   # emergencia: borra los factores MFA de una cuenta y da un enlace nuevo
                             # contra producción: AMO_ARCHIVO_ENTORNO=.env.produccion pnpm bootstrap:restablecer-mfa
 pnpm bootstrap:e2e          # cuentas de prueba E2E (variables E2E_* en .env.local)
 pnpm demo:generar | pnpm demo:purgar   # datos demo (ver supabase/seed/demo/README.md)
+pnpm prod:config-pruebas    # configuración rotulada para las pruebas del cliente (tiempos cortos, textos legales
+                            # «VERSIÓN DE PRUEBA»): simula por defecto; --aplicar | --revertir; contra producción
+                            # AMO_ARCHIVO_ENTORNO=.env.produccion … --confirmar-produccion
 ```
 
 Antes de entregar cualquier cambio: `pnpm typecheck && pnpm lint && pnpm test`. En integraciones,
@@ -86,11 +95,19 @@ además `pnpm build && pnpm test:e2e`.
 ```
 src/proxy.ts                     Refresco de sesión Supabase, CSP con nonce, redirecciones optimistas
 src/app/(auth)/                  ingresar · recuperar · restablecer · cambiar-contrasena · mfa/* · auth/{confirm,callback,salir}
+                                 vincular (solicitud pública del medio) · aceptar-terminos (compuerta)
 src/app/(app)/                   Secciones privadas dentro del AppShell
   inicio/                        Panel según tipo de rol (interno · anunciante · medio)
   analitica/mapa/                Explorador geográfico: mundo → Colombia → departamento
   reportes/[reporte]/            7 reportes con exportación a Excel y PDF
-  operacion/{medios,anunciantes,campanas,asignaciones}/   Consulta (listado y ficha)
+  operacion/{medios,anunciantes,campanas,asignaciones}/   Consulta (listado y ficha) y decisiones del equipo AMO
+  operacion/verificacion/        Colas de medios, anunciantes, cuentas, documentos y solicitudes (?cola=)
+  operacion/{moderacion,ofertas/[id]}/   Cola de ofertas en revisión y ficha completa de la oferta
+  mi-medio/                      Portal del medio: perfil, documentos, pago, cuentas y nivel
+  ofertas/  mis-campanas/          Marketplace y ficha de la oferta; tablero, ficha, contenido, evidencia y métricas del medio
+  empresa/  campanas/            Portal del anunciante: empresa (datos, documentos, equipo), campañas,
+                                 asistente de oferta (campanas/[id]/ofertas/nueva) y ficha de la oferta
+  ir/[entidad]/[id]/             Resuelve el destino de una notificación según el rol
   administracion/{usuarios,roles,auditoria,accesos,configuracion}/
   notificaciones/  cuenta/{perfil,seguridad,preferencias}/
 src/app/api/                     geo/metricas (datos del mapa) · csp-report

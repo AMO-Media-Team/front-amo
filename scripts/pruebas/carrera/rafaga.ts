@@ -23,7 +23,7 @@ export interface Reserva {
 }
 
 export interface Desistimiento {
-  ofertaId: string
+  asignacionId: string
   actor: Actor
 }
 
@@ -49,13 +49,16 @@ export async function reservar(
   return { asignacionId: data[0]?.asignacion_id ?? null, error: null }
 }
 
-/** El medio desiste de su aceptación (ACEPTADA → RECHAZADA y libera el cupo). */
+/**
+ * El medio desiste de una asignación concreta (`desistir_asignacion_srv`,
+ * como «Desistir» en Mis campañas): ACEPTADA → RECHAZADA y libera el cupo.
+ */
 export async function desistir(
   servicio: ClienteSupabase,
   desistimiento: Desistimiento
 ): Promise<IntentoReserva> {
-  const { data, error } = await servicio.rpc("rechazar_oferta_srv", {
-    p_oferta_id: desistimiento.ofertaId,
+  const { data, error } = await servicio.rpc("desistir_asignacion_srv", {
+    p_asignacion_id: desistimiento.asignacionId,
     p_actor_id: desistimiento.actor.usuarioId,
     p_session_id: desistimiento.actor.sesionId,
     p_motivo: "Prueba de carrera: el medio desiste",

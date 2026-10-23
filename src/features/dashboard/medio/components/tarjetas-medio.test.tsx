@@ -1,11 +1,12 @@
 import { render, screen, within } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { Route } from "next"
+import { describe, expect, it } from "vitest"
 
 import { filaKpi } from "@/features/dashboard/insights/fixtures"
 
-import { acciones, AHORA, NEGOCIOS } from "../../fixtures"
-import { progresoTope } from "../datos"
-import { ProximasAcciones } from "./proximas-acciones"
+import { NEGOCIOS } from "../../fixtures"
+import { progresoTope, RUTA_SUBIR_DE_NIVEL } from "../datos"
+import { NEGOCIOS_MEDIO } from "../fixtures"
 import {
   HeroGanancias,
   NegociosEnCurso,
@@ -80,7 +81,11 @@ describe("HeroGanancias", () => {
 
 describe("ProgresoTopeAnual", () => {
   const umbrales = { tope: 30_000_000, alerta: 0.8, bloqueo: 0.95 }
-  const dibujar = (consumido: number, tope: number | null = umbrales.tope) =>
+  const dibujar = (
+    consumido: number,
+    tope: number | null = umbrales.tope,
+    enlaceNivel: Route | null = null
+  ) =>
     render(
       <ProgresoTopeAnual
         progreso={progresoTope({ ...umbrales, tope, consumido })}
@@ -89,6 +94,7 @@ describe("ProgresoTopeAnual", () => {
         nivel="Nivel 1 · año 2026"
         alerta={umbrales.alerta}
         bloqueo={umbrales.bloqueo}
+        enlaceNivel={enlaceNivel}
       />
     )
 
@@ -108,6 +114,25 @@ describe("ProgresoTopeAnual", () => {
     expect(
       screen.getByText(/no podrás aceptar nuevas ofertas/)
     ).toBeInTheDocument()
+  })
+
+  it("cerca del tope dice cuánto le queda y enlaza a «Cómo subir de nivel»", () => {
+    // Un medio al 82 % de su tope anual (DSH-006).
+    dibujar(24_600_000, umbrales.tope, RUTA_SUBIR_DE_NIVEL)
+    expect(
+      screen.getByText(/te quedan .* antes del bloqueo al 95%/)
+    ).toBeVisible()
+    expect(
+      screen.getByRole("link", { name: "Cómo subir de nivel" })
+    ).toHaveAttribute("href", "/mi-medio/nivel#subir-de-nivel")
+  })
+
+  it("lejos del tope, o sin enlace (en «Mi medio › Nivel»), no lo muestra", () => {
+    const { unmount } = dibujar(5_000_000, umbrales.tope, RUTA_SUBIR_DE_NIVEL)
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
+    unmount()
+    dibujar(29_000_000)
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
   })
 
   it("un nivel sin tope no dibuja la barra", () => {
@@ -138,7 +163,27 @@ describe("Reputacion", () => {
     expect(screen.getByText("4,7 / 5")).toBeInTheDocument()
     expect(screen.getByText("1,15 ×")).toBeInTheDocument()
     expect(
+      screen.getByText("Ajusta tu pago según el alcance de tus cuentas")
+    ).toBeInTheDocument()
+    expect(
       screen.getByText("1 publicación aprobada en el periodo.")
+    ).toBeInTheDocument()
+  })
+
+  it("el multiplicador es el vigente, con su nota y tres decimales si los tiene", () => {
+    render(
+      <Reputacion
+        cumplimiento={undefined}
+        calificacion={null}
+        multiplicador={0.784}
+        notaMultiplicador="Pasará a 0,92 el 30 de octubre"
+        publicaciones={null}
+        nMinimoCumplimiento={3}
+      />
+    )
+    expect(screen.getByText("0,784 ×")).toBeInTheDocument()
+    expect(
+      screen.getByText("Pasará a 0,92 el 30 de octubre")
     ).toBeInTheDocument()
   })
 
@@ -183,44 +228,34 @@ describe("NegociosEnCurso", () => {
     ).toBeInTheDocument()
   })
 
+  it("con «Mis campañas», cada negocio lleva a su ficha", () => {
+    render(
+      <NegociosEnCurso
+        negocios={NEGOCIOS_MEDIO}
+        activas={2}
+        enlaceTodas={"/mis-campanas" as Route}
+      />
+    )
+    const [cafe, vacaciones] = screen.getAllByRole("listitem")
+    expect(
+      within(cafe).getByRole("link", {
+        name: "Café de Colombia · historia patrocinada",
+      })
+    ).toHaveAttribute("href", "/mis-campanas/a3")
+    expect(cafe).toHaveTextContent(
+      "Por publicar · Café de Colombia · Instagram @noticias.pereira"
+    )
+    expect(
+      within(vacaciones).getByRole("link", { name: "Temporada de vacaciones" })
+    ).toHaveAttribute("href", "/mis-campanas/a5")
+    expect(
+      screen.getByRole("link", { name: "Ver mis campañas" })
+    ).toHaveAttribute("href", "/mis-campanas")
+  })
+
   it("sin negocios en curso explica qué aparecerá", () => {
     render(<NegociosEnCurso negocios={[]} activas={0} />)
     expect(screen.getByText(/No tienes negocios en curso/)).toBeInTheDocument()
     expect(screen.queryByRole("list")).not.toBeInTheDocument()
-  })
-})
-
-describe("ProximasAcciones", () => {
-  // Tras hidratar, la cuenta regresiva sigue el reloj del dispositivo: se fija
-  // en `AHORA` para que los plazos del fixture no dependan del día de ejecución.
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"] })
-    vi.setSystemTime(AHORA)
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it("cada acción con su plazo; la urgencia se lee además de verse", () => {
-    render(
-      <ProximasAcciones
-        acciones={acciones(AHORA)}
-        ahoraServidor={AHORA.getTime()}
-      />
-    )
-    const filas = within(
-      screen.getByRole("list", { name: "Acciones pendientes" })
-    ).getAllByRole("listitem")
-    expect(filas).toHaveLength(4)
-    expect(filas[0]).toHaveTextContent("Publicar la pauta")
-    expect(filas[0]).toHaveTextContent(/Venció hace/)
-    expect(filas[2]).toHaveTextContent("Descargar el contenido")
-    expect(filas[2]).toHaveTextContent(/Vence en/)
-    expect(filas[3]).toHaveTextContent("Sin fecha límite")
-  })
-
-  it("sin pendientes lo dice en positivo", () => {
-    render(<ProximasAcciones acciones={[]} ahoraServidor={AHORA.getTime()} />)
-    expect(screen.getByText("Nada pendiente")).toBeInTheDocument()
   })
 })

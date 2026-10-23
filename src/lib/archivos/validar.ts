@@ -18,8 +18,20 @@ export interface ReglaAspecto {
 export interface ReglasArchivo {
   mimes: readonly string[]
   maxBytes: number
-  aspecto?: ReglaAspecto
+  /** Una proporción exigida o varias admitidas (basta con cumplir una). */
+  aspecto?: ReglaAspecto | readonly ReglaAspecto[]
   duracionMaxSeg?: number
+  /**
+   * Lee siempre ancho y alto (imagen o video) y duración (video) aunque no
+   * haya regla que los use, y rechaza el archivo si no se pueden leer: para
+   * quien debe declararlos al guardar (los creativos, docs/modelo-datos.md §3.10).
+   */
+  medidasObligatorias?: boolean
+  /**
+   * Cómo se nombra la pieza en el rechazo por proporción («Un reel»): «Un reel
+   * necesita video vertical 9:16 (…); el tuyo es horizontal 16:9 (…)».
+   */
+  pieza?: string
 }
 
 /** Lo que se sabe del archivo; dimensiones y duración solo si se leyeron. */
@@ -76,9 +88,40 @@ export function describirRelacion(relacion: number): string {
     : `1:${formatoRelacion.format(1 / relacion)}`
 }
 
-function orientacion(relacion: number): string {
-  if (Math.abs(relacion - 1) <= TOLERANCIA_ETIQUETA) return "cuadrado"
+/** Género del sustantivo al que acompaña la orientación («video cuadrado», «imagen cuadrada»). */
+type Genero = "masculino" | "femenino"
+
+function orientacion(relacion: number, genero: Genero = "masculino"): string {
+  if (Math.abs(relacion - 1) <= TOLERANCIA_ETIQUETA) {
+    return genero === "femenino" ? "cuadrada" : "cuadrado"
+  }
   return relacion < 1 ? "vertical" : "horizontal"
+}
+
+/** Las reglas de proporción como lista (una sola o varias admitidas). */
+export function reglasDeAspecto(
+  aspecto: ReglasArchivo["aspecto"]
+): readonly ReglaAspecto[] {
+  if (!aspecto) return []
+  return "relacion" in aspecto ? [aspecto] : aspecto
+}
+
+const listaDisyuntiva = new Intl.ListFormat("es-CO", {
+  style: "long",
+  type: "disjunction",
+})
+
+/** «cuadrado 1:1, vertical 4:5 u horizontal 1,91:1». */
+export function describirAspectos(
+  reglas: readonly ReglaAspecto[],
+  genero: Genero = "masculino"
+): string {
+  return listaDisyuntiva.format(
+    reglas.map(
+      ({ relacion }) =>
+        `${orientacion(relacion, genero)} ${describirRelacion(relacion)}`
+    )
+  )
 }
 
 /** Medidas de ejemplo con 1080 px en el lado corto: 9:16 → 1080 × 1920 px. */
@@ -101,15 +144,78 @@ export function cumpleAspecto(
   return Math.abs(real / regla.relacion - 1) <= regla.tolerancia
 }
 
+/** Cumple alguna de las proporciones admitidas (sin reglas, cualquiera vale). */
+export function cumpleAlgunAspecto(
+  dimensiones: Dimensiones,
+  reglas: readonly ReglaAspecto[]
+): boolean {
+  return (
+    reglas.length === 0 ||
+    reglas.some((regla) => cumpleAspecto(dimensiones, regla))
+  )
+}
+
+/**
+ * Duración con dos decimales, como la guarda la BD (`numeric(8,2)`): un video
+ * de 60,004 s cumple un máximo de 60 s también aquí.
+ */
+function centesimas(segundos: number): number {
+  return Math.round(segundos * 100) / 100
+}
+
+const formatoSegundos = new Intl.NumberFormat("es-CO", {
+  maximumFractionDigits: 1,
+})
+
+/**
+ * «1 min 32 s»; si redondeado al segundo se vería igual que el máximo («dura 1
+ * min y el máximo es 1 min»), con un decimal: «60,4 s».
+ */
+function describirDuracionExcedida(segundos: number, maximo: number): string {
+  const texto = formatearDuracion(segundos)
+  return texto === formatearDuracion(maximo)
+    ? `${formatoSegundos.format(Math.ceil(segundos * 10) / 10)}\u00a0s`
+    : texto
+}
+
 function rechazo(motivo: MotivoRechazo, mensaje: string): ResultadoValidacion {
   return { ok: false, motivo, mensaje }
 }
 
-function mensajeAspecto(dimensiones: Dimensiones, regla: ReglaAspecto): string {
-  const etiqueta = describirRelacion(regla.relacion)
+/** Ancho / alto de un archivo que se sabe visual (con lados positivos). */
+function relacionReal({ ancho, alto }: Dimensiones): number {
+  return alto > 0 ? ancho / alto : 0
+}
+
+function ejemplo(reglas: readonly ReglaAspecto[]): string {
+  return reglas.length === 1
+    ? ` (por ejemplo, ${medidas(ejemploMedidas(reglas[0].relacion))})`
+    : ""
+}
+
+/**
+ * Con `pieza`: «Un reel necesita video vertical 9:16 (por ejemplo, 1080 × 1920
+ * px); el tuyo es horizontal 16:9 (1920 × 1080 px).» Sin ella, el mensaje
+ * genérico con la medida del archivo.
+ */
+function mensajeAspecto(
+  dimensiones: Dimensiones,
+  reglas: readonly ReglaAspecto[],
+  categoria: "imagen" | "video",
+  pieza: string | undefined
+): string {
+  if (pieza) {
+    const genero: Genero = categoria === "imagen" ? "femenino" : "masculino"
+    const real = relacionReal(dimensiones)
+    const suyo = genero === "femenino" ? "la tuya" : "el tuyo"
+    return (
+      `${pieza} necesita ${categoria} ${describirAspectos(reglas, genero)}` +
+      `${ejemplo(reglas)}; ${suyo} es ${orientacion(real, genero)} ` +
+      `${describirRelacion(real)} (${medidas(dimensiones)}).`
+    )
+  }
   return (
-    `Debe ser ${orientacion(regla.relacion)} ${etiqueta} ` +
-    `(por ejemplo, ${medidas(ejemploMedidas(regla.relacion))}); ` +
+    `Debe ser ${describirAspectos(reglas)}${ejemplo(reglas)}; ` +
     `este archivo mide ${medidas(dimensiones)}.`
   )
 }
@@ -138,27 +244,29 @@ export function evaluarArchivo(
     )
   }
   const categoria = categoriaDe(tipo)
-  const visual = categoria === "imagen" || categoria === "video"
+  const aspectos = reglasDeAspecto(reglas.aspecto)
   const dimensiones = datos.dimensiones ?? null
   if (
-    reglas.aspecto &&
-    visual &&
+    (categoria === "imagen" || categoria === "video") &&
     dimensiones &&
-    !cumpleAspecto(dimensiones, reglas.aspecto)
+    !cumpleAlgunAspecto(dimensiones, aspectos)
   ) {
-    return rechazo("aspecto", mensajeAspecto(dimensiones, reglas.aspecto))
+    return rechazo(
+      "aspecto",
+      mensajeAspecto(dimensiones, aspectos, categoria, reglas.pieza)
+    )
   }
   const duracionSeg = datos.duracionSeg ?? null
   if (
     reglas.duracionMaxSeg !== undefined &&
     categoria === "video" &&
     duracionSeg !== null &&
-    duracionSeg > reglas.duracionMaxSeg
+    centesimas(duracionSeg) > reglas.duracionMaxSeg
   ) {
     return rechazo(
       "duracion",
-      `El video dura ${formatearDuracion(duracionSeg)} y el máximo es ` +
-        `${formatearDuracion(reglas.duracionMaxSeg)}.`
+      `El video dura ${describirDuracionExcedida(duracionSeg, reglas.duracionMaxSeg)} ` +
+        `y el máximo es ${formatearDuracion(reglas.duracionMaxSeg)}.`
     )
   }
   return { ok: true, tipo, dimensiones, duracionSeg }
@@ -179,7 +287,8 @@ const MENSAJE_ILEGIBLE =
 
 /**
  * Valida un `File` con las reglas: primero lo barato (formato y peso) y solo
- * si hace falta lee dimensiones (imagen o video) y duración (video).
+ * si hace falta (o si `medidasObligatorias`) lee dimensiones (imagen o video)
+ * y duración (video).
  */
 export async function validarArchivo(
   archivo: File,
@@ -195,11 +304,13 @@ export async function validarArchivo(
   if (!basica.ok) return basica
 
   const categoria = categoriaDe(basica.tipo)
+  const obligatorias = reglas.medidasObligatorias === true
   const necesitaDimensiones =
-    reglas.aspecto !== undefined &&
+    (obligatorias || reglasDeAspecto(reglas.aspecto).length > 0) &&
     (categoria === "imagen" || categoria === "video")
   const necesitaDuracion =
-    reglas.duracionMaxSeg !== undefined && categoria === "video"
+    (obligatorias || reglas.duracionMaxSeg !== undefined) &&
+    categoria === "video"
   if (!necesitaDimensiones && !necesitaDuracion) return basica
 
   try {

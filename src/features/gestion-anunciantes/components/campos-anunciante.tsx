@@ -1,6 +1,6 @@
 "use client"
 
-import { Building2, MapPin, Receipt } from "lucide-react"
+import { Building2, LockKeyhole, MapPin, Receipt } from "lucide-react"
 import { type ReactNode, useId } from "react"
 import {
   Controller,
@@ -20,10 +20,16 @@ import {
 import { SelectorTerritorio } from "@/components/territorio/selector-territorio"
 import { Input } from "@/components/ui/input"
 import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import {
   CampoSelect,
   CampoTexto,
   type OpcionCampo,
 } from "@/features/configuracion/components/campos"
+import { formatearNit, normalizarNit } from "@/lib/colombia/nit"
 
 import { type EntradaAnunciante, PAIS_COLOMBIA } from "../schemas"
 import type { CatalogosAnunciante, OpcionSector } from "../tipos"
@@ -187,6 +193,75 @@ function CampoCorreoFacturacion({
 }
 
 /**
+ * Dato de identificación que ya no se edita (empresa verificada): se lee y se
+ * copia, pero no se escribe. Un `readOnly` (no `disabled`) sigue siendo
+ * enfocable y conserva el contraste. Observa solo sus campos (no hace
+ * repintar el resto del formulario). Si el valor guardado no pasa la
+ * validación (dato heredado), el error se muestra aquí con la nota que dice a
+ * quién pedir la corrección.
+ */
+function CampoBloqueado({
+  etiqueta,
+  nombres,
+  mostrar = (valores) => valores.join(" "),
+  idNota,
+}: {
+  etiqueta: string
+  nombres: readonly (keyof EntradaAnunciante)[]
+  /** Texto a partir de los valores de `nombres`, en el mismo orden. */
+  mostrar?: (valores: readonly string[]) => string
+  idNota: string
+}) {
+  const { control, getFieldState } = useFormContext<EntradaAnunciante>()
+  const valores = useWatch({ control, name: [...nombres] }) as string[]
+  const estado = useFormState({ control, name: [...nombres] })
+  const error = nombres
+    .map((nombre) => getFieldState(nombre, estado).error)
+    .find(Boolean)
+  const id = useId()
+  const idError = `${id}-error`
+  return (
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={id}>{etiqueta}</FieldLabel>
+      <InputGroup className="bg-muted/40 dark:bg-muted/30">
+        <InputGroupInput
+          id={id}
+          value={mostrar(valores)}
+          readOnly
+          autoComplete="off"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${idNota} ${idError}` : idNota}
+        />
+        <InputGroupAddon align="inline-end">
+          <LockKeyhole aria-hidden />
+        </InputGroupAddon>
+      </InputGroup>
+      <FieldError id={idError} errors={[error]} />
+    </Field>
+  )
+}
+
+/** Por qué la identificación es de solo lectura y a quién pedir un cambio. */
+function NotaIdentificacionBloqueada({ id }: { id: string }) {
+  return (
+    <p
+      id={id}
+      className="flex items-start gap-2.5 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm text-pretty text-muted-foreground"
+    >
+      <LockKeyhole
+        aria-hidden
+        className="mt-0.5 size-4 shrink-0 text-primary"
+      />
+      <span>
+        La empresa ya está verificada: la razón social, el país y la
+        identificación tributaria solo los corrige el equipo de AMO. Si
+        cambiaron, escríbele.
+      </span>
+    </p>
+  )
+}
+
+/**
  * Campos del anunciante (registro y edición), dentro de un `FormProvider`:
  * empresa, identificación y ubicación según el país, y facturación.
  */
@@ -195,28 +270,49 @@ export function CamposAnunciante({
   sectorActual = null,
   deshabilitado,
   enfocarPrimero = false,
+  identificacionBloqueada = false,
 }: {
   catalogos: CatalogosAnunciante
   /** Edición: el sector vigente, aunque ya no esté activo. */
   sectorActual?: OpcionSector | null
   deshabilitado?: boolean
   enfocarPrimero?: boolean
+  /**
+   * Empresa verificada o suspendida que edita sus propios datos: razón
+   * social, país, NIT y DV o identificación extranjera quedan de solo
+   * lectura (la BD solo deja cambiarlos al equipo AMO). Sede, ciudad y lo
+   * demás siguen editables.
+   */
+  identificacionBloqueada?: boolean
 }) {
   const { control } = useFormContext<EntradaAnunciante>()
   const pais = useWatch({ control, name: "paisIso2" })
   const colombiana = pais === PAIS_COLOMBIA
+  const idNota = useId()
+  const bloqueada = identificacionBloqueada
 
   return (
     <>
       <Seccion icono={Building2} titulo="Empresa">
-        <CampoTexto
-          nombre="razonSocial"
-          etiqueta="Razón social"
-          placeholder="Comercializadora Andina S.A.S."
-          descripcion="Tal como aparece en el RUT o en el certificado de existencia."
-          deshabilitado={deshabilitado}
-          autoFocus={enfocarPrimero}
-        />
+        {bloqueada ? (
+          <>
+            <NotaIdentificacionBloqueada id={idNota} />
+            <CampoBloqueado
+              etiqueta="Razón social"
+              nombres={["razonSocial"]}
+              idNota={idNota}
+            />
+          </>
+        ) : (
+          <CampoTexto
+            nombre="razonSocial"
+            etiqueta="Razón social"
+            placeholder="Comercializadora Andina S.A.S."
+            descripcion="Tal como aparece en el RUT o en el certificado de existencia."
+            deshabilitado={deshabilitado}
+            autoFocus={enfocarPrimero}
+          />
+        )}
         <CampoTexto
           nombre="nombreComercial"
           etiqueta="Nombre comercial"
@@ -235,21 +331,52 @@ export function CamposAnunciante({
       </Seccion>
 
       <Seccion icono={MapPin} titulo="Identificación y ubicación">
-        <CampoPais catalogos={catalogos} deshabilitado={deshabilitado} />
+        {bloqueada ? (
+          <CampoBloqueado
+            etiqueta="País"
+            nombres={["paisIso2"]}
+            mostrar={([iso2]) =>
+              catalogos.paises.find((opcion) => opcion.iso2 === iso2)?.nombre ??
+              iso2
+            }
+            idNota={idNota}
+          />
+        ) : (
+          <CampoPais catalogos={catalogos} deshabilitado={deshabilitado} />
+        )}
         {colombiana ? (
           <>
-            <CamposNit deshabilitado={deshabilitado} />
+            {bloqueada ? (
+              <CampoBloqueado
+                etiqueta="NIT"
+                nombres={["nit", "digitoVerificacion"]}
+                mostrar={([nit, digito]) =>
+                  formatearNit(normalizarNit(nit), digito.trim())
+                }
+                idNota={idNota}
+              />
+            ) : (
+              <CamposNit deshabilitado={deshabilitado} />
+            )}
             <CampoMunicipio deshabilitado={deshabilitado} />
           </>
         ) : (
           <>
-            <CampoTexto
-              nombre="identificacionExtranjera"
-              etiqueta="Identificación tributaria"
-              placeholder="EIN, RUC, RFC, CUIT…"
-              descripcion="Como figura en sus facturas o en el registro de su país."
-              deshabilitado={deshabilitado}
-            />
+            {bloqueada ? (
+              <CampoBloqueado
+                etiqueta="Identificación tributaria"
+                nombres={["identificacionExtranjera"]}
+                idNota={idNota}
+              />
+            ) : (
+              <CampoTexto
+                nombre="identificacionExtranjera"
+                etiqueta="Identificación tributaria"
+                placeholder="EIN, RUC, RFC, CUIT…"
+                descripcion="Como figura en sus facturas o en el registro de su país."
+                deshabilitado={deshabilitado}
+              />
+            )}
             <CampoTexto
               nombre="ciudadExtranjera"
               etiqueta="Ciudad"

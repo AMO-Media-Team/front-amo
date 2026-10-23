@@ -54,6 +54,7 @@ export const ENTIDADES_CON_RELACIONADOS: readonly EntidadEnlace[] = [
   "cuentas_sociales",
   "verificaciones_cuenta",
   "ofertas",
+  "asignaciones",
   "publicaciones",
   "metricas",
   "disputas",
@@ -78,6 +79,7 @@ function destinoInterno(
   permisos: readonly string[]
 ): Route | null {
   const verifica = permisos.includes("medios.verificar")
+  const verificaAnunciantes = permisos.includes("anunciantes.verificar")
   const medio = relacionados.medioId
   const asignacion = entidad === "asignaciones" ? id : relacionados.asignacionId
   switch (entidad) {
@@ -90,7 +92,10 @@ function destinoInterno(
         ? r(`/operacion/medios/${id}?pestana=verificacion`)
         : r(`/operacion/medios/${id}`)
     case "anunciantes":
-      return r(`/operacion/anunciantes/${id}`)
+      // Los avisos de cola del anunciante abren su expediente a quien verifica.
+      return verificaAnunciantes
+        ? r(`/operacion/anunciantes/${id}?pestana=verificacion`)
+        : r(`/operacion/anunciantes/${id}`)
     case "solicitudes_vinculacion":
       return r("/operacion/verificacion?cola=solicitudes")
     case "documentos_medio":
@@ -101,14 +106,15 @@ function destinoInterno(
       if (verifica) return r("/operacion/verificacion?cola=cuentas")
       return medio ? r(`/operacion/medios/${medio}?pestana=cuentas`) : null
     case "documentos_anunciante":
-      return relacionados.anuncianteId
-        ? r(
-            `/operacion/anunciantes/${relacionados.anuncianteId}?pestana=documentos`
-          )
-        : null
+      if (!relacionados.anuncianteId) return null
+      return r(
+        `/operacion/anunciantes/${relacionados.anuncianteId}?pestana=${verificaAnunciantes ? "verificacion" : "documentos"}`
+      )
     case "campanas":
       return r(`/operacion/campanas/${id}`)
     case "ofertas":
+      // Ficha completa (moderación, creativos e historial) para quien ve ofertas.
+      if (permisos.includes("ofertas.ver")) return r(`/operacion/ofertas/${id}`)
       return relacionados.campanaId
         ? r(`/operacion/campanas/${relacionados.campanaId}`)
         : null
@@ -128,7 +134,11 @@ function destinoInterno(
   }
 }
 
-function destinoMedio(entidad: EntidadEnlace): Route {
+function destinoMedio(
+  entidad: EntidadEnlace,
+  id: string,
+  relacionados: Relacionados
+): Route {
   switch (entidad) {
     case "accesos":
     case "perfiles":
@@ -140,16 +150,53 @@ function destinoMedio(entidad: EntidadEnlace): Route {
     case "cuentas_sociales":
     case "verificaciones_cuenta":
       return r("/mi-medio/cuentas")
+    case "ofertas":
+      // El detalle del marketplace lleva a «Mis campañas» si ya la tomó.
+      return r(`/ofertas/${id}`)
+    case "asignaciones":
+      return r(`/mis-campanas/${id}`)
+    case "publicaciones":
+    case "metricas":
+    case "disputas":
+      return relacionados.asignacionId
+        ? r(`/mis-campanas/${relacionados.asignacionId}`)
+        : r("/mis-campanas")
     default:
       return INICIO
   }
 }
 
-function destinoAnunciante(entidad: EntidadEnlace): Route {
+function destinoAnunciante(
+  entidad: EntidadEnlace,
+  id: string,
+  relacionados: Relacionados
+): Route {
   switch (entidad) {
     case "accesos":
     case "perfiles":
       return SEGURIDAD
+    case "anunciantes":
+      return r("/empresa")
+    case "documentos_anunciante":
+      return r("/empresa/documentos")
+    case "campanas":
+      return r(`/campanas/${id}`)
+    case "ofertas":
+      return relacionados.campanaId
+        ? r(`/campanas/${relacionados.campanaId}/ofertas/${id}`)
+        : r("/campanas")
+    case "asignaciones":
+    case "publicaciones":
+    case "metricas":
+    case "disputas": {
+      const asignacion =
+        entidad === "asignaciones" ? id : relacionados.asignacionId
+      return relacionados.campanaId && asignacion
+        ? r(
+            `/campanas/${relacionados.campanaId}?pestana=seguimiento&asignacion=${asignacion}`
+          )
+        : r("/campanas")
+    }
     default:
       return INICIO
   }
@@ -166,9 +213,9 @@ export function destinoDe(
     case "ADMIN":
       return destinoInterno(entidad, id, relacionados, quien.permisos)
     case "MEDIO":
-      return destinoMedio(entidad)
+      return destinoMedio(entidad, id, relacionados)
     case "ANUNCIANTE":
-      return destinoAnunciante(entidad)
+      return destinoAnunciante(entidad, id, relacionados)
   }
 }
 

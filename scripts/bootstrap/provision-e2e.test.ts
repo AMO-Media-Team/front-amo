@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest"
 
+import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 import { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
-import { organizacionDe } from "./organizacion"
+import { ANUNCIANTE_E2E_ID, organizacionDe } from "./organizacion"
 import { CUENTAS_E2E, cuentaE2E, emailDe } from "./provision-e2e"
 
 describe("CUENTAS_E2E", () => {
@@ -53,6 +54,29 @@ describe("CUENTAS_E2E", () => {
       anunciante_id: null,
       medio_id: MEDIO_NUEVO_E2E_ID,
     })
+  })
+
+  it("incluye la cuenta del Anunciante Nuevo E2E, en su propia empresa y sin MFA", () => {
+    const nuevo = cuentaE2E("ANUNCIANTE_NUEVO")
+    expect(nuevo).toMatchObject({
+      rol: "ANUNCIANTE",
+      anuncianteId: ANUNCIANTE_NUEVO_E2E_ID,
+      nombre: "Anunciante Nuevo E2E",
+      conTotp: false,
+      debeCambiarPassword: false,
+      variableEmail: "E2E_ANUNCIANTE_NUEVO_EMAIL",
+      variablePassword: "E2E_ANUNCIANTE_NUEVO_PASSWORD",
+    })
+    expect(organizacionDe(nuevo)).toEqual({
+      anunciante_id: ANUNCIANTE_NUEVO_E2E_ID,
+      medio_id: null,
+    })
+    // Las otras cuentas de rol ANUNCIANTE siguen en el Anunciante E2E.
+    for (const clave of ["ANUNCIANTE", "CAMBIO"]) {
+      expect(organizacionDe(cuentaE2E(clave)).anunciante_id).toBe(
+        ANUNCIANTE_E2E_ID
+      )
+    }
   })
 
   it("toda cuenta de rol MEDIO declara su medio (sin él no se puede preparar)", () => {

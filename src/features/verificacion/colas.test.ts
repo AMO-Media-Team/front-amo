@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest"
 
 import {
   accesoColas,
+  cargarColaPedida,
   cargarParametrosVerificacion,
+  type Cola,
+  colaPorDefecto,
   COLAS,
+  colasVisibles,
   COLAS_VERIFICACION,
+  descripcionVerificacion,
   paginaAcotada,
   paginaTrasFueraDeRango,
   rangoPagina,
   rutaCola,
   rutaRevisionMedio,
   TAMANO_PAGINA,
+  tieneAccesoCola,
 } from "./colas"
 
 describe("parámetros de la URL", () => {
@@ -27,7 +33,12 @@ describe("parámetros de la URL", () => {
 
   it("ignora una cola desconocida (contrato de /ir)", () => {
     expect(cargarParametrosVerificacion("?cola=otra").cola).toBe("medios")
-    for (const cola of ["documentos", "cuentas", "solicitudes"]) {
+    for (const cola of [
+      "documentos",
+      "cuentas",
+      "solicitudes",
+      "anunciantes",
+    ]) {
       expect(cargarParametrosVerificacion(`?cola=${cola}`).cola).toBe(cola)
     }
   })
@@ -45,15 +56,76 @@ describe("accesoColas", () => {
     expect(accesoColas(["medios.verificar"])).toEqual({
       verificarMedios: true,
       verDocumentos: false,
+      verificarAnunciantes: false,
     })
     expect(accesoColas(["medios.verificar", "datos_sensibles.ver"])).toEqual({
       verificarMedios: true,
       verDocumentos: true,
+      verificarAnunciantes: false,
     })
     expect(accesoColas(["datos_sensibles.ver"])).toEqual({
       verificarMedios: false,
       verDocumentos: false,
+      verificarAnunciantes: false,
     })
+  })
+
+  it("la cola de anunciantes exige verificar anunciantes", () => {
+    const soloEmpresas = accesoColas(["anunciantes.verificar"])
+    expect(soloEmpresas.verificarAnunciantes).toBe(true)
+    expect(tieneAccesoCola("anunciantes", soloEmpresas)).toBe(true)
+    for (const cola of ["medios", "cuentas", "documentos", "solicitudes"]) {
+      expect(tieneAccesoCola(cola as Cola, soloEmpresas), cola).toBe(false)
+    }
+    const soloMedios = accesoColas(["medios.verificar"])
+    expect(tieneAccesoCola("anunciantes", soloMedios)).toBe(false)
+    expect(tieneAccesoCola("medios", soloMedios)).toBe(true)
+    expect(tieneAccesoCola("documentos", soloMedios)).toBe(false)
+  })
+})
+
+describe("colas visibles y cola por defecto", () => {
+  const TODO = accesoColas([
+    "medios.verificar",
+    "datos_sensibles.ver",
+    "anunciantes.verificar",
+  ])
+
+  it("quien verifica todo ve las cinco colas y abre la de medios", () => {
+    expect(colasVisibles(TODO)).toEqual([...COLAS])
+    expect(colaPorDefecto(TODO)).toBe("medios")
+  })
+
+  it("documentos se ofrece aunque falte el permiso de datos sensibles (para explicarlo)", () => {
+    expect(colasVisibles(accesoColas(["medios.verificar"]))).toEqual([
+      "medios",
+      "cuentas",
+      "documentos",
+      "solicitudes",
+    ])
+  })
+
+  it("un rol que solo verifica anunciantes ve su cola y cae en ella", () => {
+    const acceso = accesoColas(["anunciantes.verificar"])
+    expect(colasVisibles(acceso)).toEqual(["anunciantes"])
+    expect(colaPorDefecto(acceso)).toBe("anunciantes")
+  })
+
+  it("la cola pedida en la URL se respeta; sin ella, null", () => {
+    expect(cargarColaPedida("?cola=anunciantes").cola).toBe("anunciantes")
+    expect(cargarColaPedida("?cola=medios").cola).toBe("medios")
+    expect(cargarColaPedida("").cola).toBeNull()
+    expect(cargarColaPedida("?cola=otra").cola).toBeNull()
+  })
+
+  it("la descripción nombra solo lo que la persona atiende", () => {
+    expect(descripcionVerificacion(TODO)).toMatch(/empresas anunciantes\.$/)
+    expect(
+      descripcionVerificacion(accesoColas(["medios.verificar"]))
+    ).not.toMatch(/anunciantes/)
+    expect(
+      descripcionVerificacion(accesoColas(["anunciantes.verificar"]))
+    ).toMatch(/^Empresas anunciantes/)
   })
 })
 
@@ -93,6 +165,9 @@ describe("rutas", () => {
     )
     expect(rutaCola("cuentas", 3)).toBe(
       "/operacion/verificacion?cola=cuentas&pagina=3"
+    )
+    expect(rutaCola("anunciantes", 2)).toBe(
+      "/operacion/verificacion?cola=anunciantes&pagina=2"
     )
   })
 

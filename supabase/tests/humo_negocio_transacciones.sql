@@ -133,7 +133,7 @@ begin
   c_med := jsonb_build_object('sub', u_med, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_med)::text;
   perform set_config('amo.ctx_confiable', 'no', true);
 
-  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 141 from private.transiciones_estado));
+  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 145 from private.transiciones_estado));
 
   -- ── (a) Perfiles: la regla de M3 sigue en el transicionar_srv definitivo ─────────────────────────────
   perform set_config('amo.actor_id', u_adm::text, true);
@@ -247,8 +247,13 @@ begin
   exception when check_violation then
     r := r || jsonb_build_object('b10_ruta_creativo_ligada', true);
   end;
-  insert into public.creativo_archivos (creativo_id, archivo_path, mime, tamano_bytes)
-  values (cr1, 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', 'image/jpeg', 1000);
+  -- Desde e2_anunciantes_ofertas el archivo cumple su formato (POST_FEED 1:1), trae su SHA-256 y existe en Storage.
+  execute 'reset role';
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('creativos', 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', jsonb_build_object('size', 1000, 'mimetype', 'image/jpeg'));
+  execute 'set local role authenticated';
+  insert into public.creativo_archivos (creativo_id, archivo_path, mime, tamano_bytes, ancho, alto, sha256)
+  values (cr1, 'oferta/' || o1 || '/' || cr1 || '/1-pieza.jpg', 'image/jpeg', 1000, 1080, 1080, repeat('a', 64));
   execute 'reset role';
   r := r || jsonb_build_object('b9_creativo_v1', (select version = 1 and vigente and creado_por = u_ana from public.creativos where id = cr1));
   perform set_config('request.jwt.claims', c_srv, true);
@@ -364,6 +369,8 @@ begin
     r := r || jsonb_build_object('c6_no_cotiza_cuenta_ajena', sqlerrm = 'AMO_NO_AUTORIZADO');
   end;
   execute 'reset role';
+  -- La suite tiene 3 medios en F1: el estimador los muestra con un mínimo de anonimato de 3 (por defecto 5).
+  update public.configuracion set valor = '3' where clave = 'ofertas.estimador_n_minimo';
   perform set_config('request.jwt.claims', c_ana, true);
   execute 'set local role authenticated';
   select * into v_rec from public.estimar_oferta(f_post, '{}', '{}', '{}', null, jsonb_build_object(fr1::text, 3));
@@ -489,6 +496,14 @@ begin
     and (select cupos_ocupados = 2 and presupuesto_comprometido = 700000 from public.ofertas where id = o1)
     and (select cupos_ocupados = 1 from public.oferta_cupos where oferta_id = o1 and franja_id = fr1));
 
+  -- MED-009 (e2_integridad_ejecucion): la ficha sabe de antemano que el tope por medio impedirá aceptar o4 con cu_a.
+  perform set_config('request.jwt.claims', c_mea, true);
+  execute 'set local role authenticated';
+  r := r || jsonb_build_object('d17b_impedimentos_aceptar',
+    (select bool_and(tope_medio) and not bool_or(exclusividad) and bool_or(cuenta_social_id = cu_a)
+     from public.impedimentos_aceptar(o4))
+    and (select not bool_or(tope_medio) from public.impedimentos_aceptar(o2)));
+  execute 'reset role';
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
   begin
@@ -523,8 +538,12 @@ begin
   exception when others then
     r := r || jsonb_build_object('d20_presupuesto_bajo_comprometido', sqlerrm = 'AMO_PRESUPUESTO_CAMPANA');
   end;
-  update public.campanas set presupuesto_total = 800000 where id = c1;
+  -- Fixture: total por debajo de lo que reservan sus ofertas para forzar el tope en la reserva (desde
+  -- e2_anunciantes_ofertas la BD no deja hacerlo por la API; solo la carga lo salta).
   execute 'reset role';
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.campanas set presupuesto_total = 800000 where id = c1;
+  perform set_config('amo.modo_carga', '', true);
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
   begin
@@ -595,6 +614,13 @@ begin
   update public.cuentas_sociales set seguidores_verificados = 75000 where id = cu_a;
 
   -- ── (f) Ejecución: descarga, evidencia, métricas, validación y verificación ───────────────────────
+  -- Desde e2_integridad_ejecucion las capturas existen en el bucket `evidencias` como imágenes (INT-001). La de a_b
+  -- también existe: así f6 prueba solo que la ruta pertenezca a la asignación.
+  insert into storage.objects (bucket_id, name, metadata)
+  select 'evidencias', x.ruta, jsonb_build_object('size', 2048, 'mimetype', 'image/webp')
+  from (values ('asignacion/' || a_a || '/publicacion/1-captura.webp'), ('asignacion/' || a_a || '/publicacion/1-captura-min.webp'),
+               ('asignacion/' || a_b || '/publicacion/1-captura.webp'), ('asignacion/' || a_a || '/metrica/h24.webp'),
+               ('asignacion/' || a_a || '/metrica/h72.webp'), ('asignacion/' || a_a || '/metrica/d7.webp')) x (ruta);
   perform set_config('amo.reloj', (now() + interval '4 days')::text, true);        -- dentro de la ventana
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
@@ -646,15 +672,21 @@ begin
     (select estado = 'PUBLICADA' and publicada_at = now() + interval '4 days' from public.asignaciones where id = a_a)
     and (select estado_validacion = 'PENDIENTE' and medio_id = me_a and anunciante_id = an_a
                 and permanencia_hasta = now() + interval '11 days' - interval '1 hour' from public.publicaciones where id = p1));
-  -- El medio carga el corte de 24 h aunque la evidencia esté pendiente (§5 pasos 11–12).
+  -- El medio carga el corte de 24 h aunque la evidencia esté pendiente (§5 pasos 11–12). Desde e2_integridad_ejecucion
+  -- cada corte se carga cuando se cumple (publicación + 24 h, 72 h o 7 d) y sin bajar frente a los otros: el reloj
+  -- avanza hasta el corte para cargarlo y vuelve a +4 días para lo demás.
+  perform set_config('amo.reloj', (now() + interval '5 days')::text, true);
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
   insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, me_gusta, comentarios, captura_path)
-  values (p1, 'H24', now() + interval '4 days', 20000, 30000, 800, 40, 'asignacion/' || a_a || '/metrica/h24.webp')
+  values (p1, 'H24', now() + interval '5 days', 20000, 30000, 800, 40, 'asignacion/' || a_a || '/metrica/h24.webp')
   returning id into m_h24;
+  execute 'reset role';
+  perform set_config('amo.reloj', (now() + interval '7 days')::text, true);
+  execute 'set local role authenticated';
   begin
-    insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, captura_path)
-    values (p1, 'H72', now() + interval '4 days', 20000, 'asignacion/' || a_a || '/metrica/h72.webp');
+    insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, me_gusta, captura_path)
+    values (p1, 'H72', now() + interval '7 days', 20000, 900, 'asignacion/' || a_a || '/metrica/h72.webp');
     r := r || jsonb_build_object('f8_metricas_por_plataforma', 'NO FALLÓ');
   exception when check_violation then
     r := r || jsonb_build_object('f8_metricas_por_plataforma', true);
@@ -664,16 +696,18 @@ begin
     (select asignacion_id = a_a and medio_id = me_a and anunciante_id = an_a and plataforma = 'INSTAGRAM'
             and estado_validacion = 'PENDIENTE' and interacciones = 840 and alcance_norm = 20000 and not alerta_multiplo
      from public.metricas where id = m_h24));
+  -- Valores coherentes: los disparadores de captura y coherencia corren antes que la política de inserción.
   perform set_config('request.jwt.claims', c_meb, true);
   execute 'set local role authenticated';
   begin
-    insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, captura_path)
-    values (p1, 'H72', now() + interval '4 days', 1, 1, 'asignacion/' || a_a || '/metrica/h72.webp');
+    insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, me_gusta, captura_path)
+    values (p1, 'H72', now() + interval '7 days', 25000, 36000, 900, 'asignacion/' || a_a || '/metrica/h72.webp');
     r := r || jsonb_build_object('f10_metrica_ajena', 'NO FALLÓ');
   exception when insufficient_privilege then
     r := r || jsonb_build_object('f10_metrica_ajena', true);
   end;
   execute 'reset role';
+  perform set_config('amo.reloj', (now() + interval '4 days')::text, true);
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
   begin
@@ -700,13 +734,15 @@ begin
   r := r || jsonb_build_object('f13_evidencia_validada',
     (select estado_validacion = 'APROBADA' and etiqueta_verificada and validada_por = u_adm from public.publicaciones where id = p1)
     and (select estado = 'EVIDENCIA_VALIDADA' and evidencia_validada_at is not null from public.asignaciones where id = a_a));
+  perform set_config('amo.reloj', (now() + interval '11 days')::text, true);
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
-  insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, captura_path)
-  values (p1, 'H72', now() + interval '4 days', 25000, 36000, 'asignacion/' || a_a || '/metrica/h72.webp') returning id into m_h72;
-  insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, captura_path)
-  values (p1, 'D7', now() + interval '4 days', 200000, 250000, 'asignacion/' || a_a || '/metrica/d7.webp') returning id into m_d7;
+  insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, me_gusta, captura_path)
+  values (p1, 'H72', now() + interval '7 days', 25000, 36000, 900, 'asignacion/' || a_a || '/metrica/h72.webp') returning id into m_h72;
+  insert into public.metricas (publicacion_id, corte, fecha_corte, alcance, impresiones, me_gusta, captura_path)
+  values (p1, 'D7', now() + interval '11 days', 200000, 250000, 1000, 'asignacion/' || a_a || '/metrica/d7.webp') returning id into m_d7;
   execute 'reset role';
+  perform set_config('amo.reloj', (now() + interval '4 days')::text, true);
   r := r || jsonb_build_object('f14_metricas_cargadas_automatico',
     (select estado = 'METRICAS_CARGADAS' and metricas_cargadas_at is not null from public.asignaciones where id = a_a)
     and (select alerta_multiplo and (detalle_alertas ->> 'seguidores')::int = 75000 from public.metricas where id = m_d7));
@@ -715,10 +751,12 @@ begin
   perform public.transicionar_srv('metricas', m_d7, 'RECHAZADA', u_adm, s_adm, 'Alcance inconsistente');
   perform public.transicionar_srv('asignaciones', a_a, 'EVIDENCIA_VALIDADA', u_adm, s_adm, 'Métricas rechazadas');
   execute 'reset role';
+  perform set_config('amo.reloj', (now() + interval '11 days')::text, true);
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
   update public.metricas set alcance = 60000, impresiones = 90000 where id = m_d7;
   execute 'reset role';
+  perform set_config('amo.reloj', (now() + interval '4 days')::text, true);
   r := r || jsonb_build_object('f15_correccion_vuelve_a_pendiente',
     (select estado_validacion = 'PENDIENTE' and observaciones = 'Alcance inconsistente' and not alerta_multiplo
      from public.metricas where id = m_d7)
@@ -1005,15 +1043,18 @@ begin
   execute 'set local role authenticated';
   select count(*) into v_n from public.campanas;                       r := r || jsonb_build_object('l1_anunciante_sus_campanas', v_n = 2);
   select count(*) into v_n from public.ofertas;                        r := r || jsonb_build_object('l1_anunciante_sus_ofertas', v_n = 5);
+  -- 4 de 5: desde e2_integridad_ejecucion el anunciante no ve el rechazo de un medio que nunca aceptó (r_c).
   select count(*) into v_n from public.asignaciones where oferta_id = o1;
-                                                                       r := r || jsonb_build_object('l2_anunciante_sus_asignaciones', v_n = 5);
+                                                                       r := r || jsonb_build_object('l2_anunciante_sus_asignaciones',
+    v_n = 4 and not exists (select 1 from public.asignaciones where id = r_c));
   select count(*) into v_n from public.asignacion_montos;              r := r || jsonb_build_object('l3_anunciante_sin_montos_internos', v_n = 0);
   select count(*) into v_n from public.liquidaciones;                  r := r || jsonb_build_object('l3_anunciante_sin_liquidaciones', v_n = 0);
   select count(*) into v_n from public.comisiones_excepcion;           r := r || jsonb_build_object('l3_anunciante_sin_comisiones', v_n = 0);
   select count(*) into v_n from public.facturas;                       r := r || jsonb_build_object('l4_anunciante_su_factura', v_n = 1);
   select count(*) into v_n from public.pagos_anunciante;               r := r || jsonb_build_object('l4_anunciante_sus_pagos', v_n = 2);
+  -- Desde e2_integridad_ejecucion también el medio B, que aceptó y luego desistió (aparece en el seguimiento).
   select count(*) into v_n from public.medios_publico(array[me_a, me_b]);
-                                                                       r := r || jsonb_build_object('l5_anunciante_ve_medios_con_negocio', v_n = 1);
+                                                                       r := r || jsonb_build_object('l5_anunciante_ve_medios_con_negocio', v_n = 2);
   execute 'reset role';
   perform set_config('request.jwt.claims', c_anb, true);
   execute 'set local role authenticated';
@@ -1187,13 +1228,14 @@ begin
   execute 'reset role';
   perform set_config('amo.modo_carga', 'on', true);
   update public.asignaciones set estado = 'PUBLICADA', publicada_at = now(), contenido_descargado_at = now() where oferta_id = o2;
+  -- Publicada hace 8 días con sus cortes cumplidos y coherentes (e2_integridad_ejecucion valida fecha y valores al editar).
   insert into public.publicaciones (id, asignacion_id, numero, url_post, fecha_publicacion, captura_path, etiqueta_publicidad_confirmada, permanencia_hasta)
-  select p1, a.id, 1, 'https://www.instagram.com/p/pol1/', now(), 'asignacion/' || a.id || '/publicacion/1.webp', true, now() + interval '7 days'
+  select p1, a.id, 1, 'https://www.instagram.com/p/pol1/', now() - interval '8 days', 'asignacion/' || a.id || '/publicacion/1.webp', true, now() - interval '1 day'
   from public.asignaciones a where a.oferta_id = o2;
   insert into public.metricas (id, publicacion_id, corte, fecha_corte, alcance, impresiones, captura_path, estado_validacion)
-  select m1, p1, 'H24'::public.corte_metrica, now(), 100, 100, 'asignacion/' || a.id || '/metrica/h24.webp', 'PENDIENTE'::public.validacion_estado from public.asignaciones a where a.oferta_id = o2
+  select m1, p1, 'H24'::public.corte_metrica, now() - interval '7 days', 100, 200, 'asignacion/' || a.id || '/metrica/h24.webp', 'PENDIENTE'::public.validacion_estado from public.asignaciones a where a.oferta_id = o2
   union all
-  select m2, p1, 'H72'::public.corte_metrica, now(), 100, 100, 'asignacion/' || a.id || '/metrica/h72.webp', 'APROBADA'::public.validacion_estado from public.asignaciones a where a.oferta_id = o2;
+  select m2, p1, 'H72'::public.corte_metrica, now() - interval '5 days', 300, 400, 'asignacion/' || a.id || '/metrica/h72.webp', 'APROBADA'::public.validacion_estado from public.asignaciones a where a.oferta_id = o2;
   perform set_config('amo.modo_carga', '', true);
   perform set_config('request.jwt.claims', '', true);
   perform set_config('amo.ctx_confiable', 'no', true);

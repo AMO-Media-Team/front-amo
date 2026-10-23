@@ -5,10 +5,14 @@ import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
+  cuentaDelEnlace,
   EJEMPLOS_URL_POST,
+  ejemploUrlPost,
+  type FormatoPost,
   LONGITUD_MAXIMA_URL_POST,
   normalizarUrlPost,
   type PlataformaPost,
+  tipoContenidoPost,
   validarUrlPost,
 } from "./url-post"
 
@@ -335,6 +339,23 @@ describe("normalizarUrlPost", () => {
     ).toBe("https://www.facebook.com/permalink.php?story_fbid=1&id=2")
   })
 
+  it("el mismo post de Facebook sale igual con los parámetros en otro orden o repetidos", () => {
+    const canonica =
+      "https://www.facebook.com/permalink.php?story_fbid=123&id=456"
+    for (const variante of [
+      "https://www.facebook.com/permalink.php?story_fbid=123&id=456",
+      "https://www.facebook.com/permalink.php?id=456&story_fbid=123",
+      "https://m.facebook.com/permalink.php?id=456&fbclid=x&story_fbid=123&id=789",
+    ]) {
+      expect(normalizarUrlPost(variante)).toBe(canonica)
+    }
+    expect(
+      normalizarUrlPost(
+        "https://www.facebook.com/photo/?set=a.123456789&fbid=987654321"
+      )
+    ).toBe("https://www.facebook.com/photo?fbid=987654321&set=a.123456789")
+  })
+
   it("en otros dominios solo retira el rastreo conocido", () => {
     expect(
       normalizarUrlPost("https://ejemplo.co/nota/?id=5&utm_source=x&fbclid=y")
@@ -371,5 +392,387 @@ describe("normalizarUrlPost", () => {
         expect(normalizarUrlPost(una)).toBe(una)
       }
     }
+  })
+})
+
+/** ¿La BD guardaría lo que se pegó? (forma canónica que cumple el CHECK y su largo). */
+function aceptaLaBd(plataforma: PlataformaPost, entrada: string): boolean {
+  const canonica = normalizarUrlPost(entrada)
+  return (
+    canonica.length <= LONGITUD_MAXIMA_URL_POST &&
+    CHECK[plataforma].test(canonica)
+  )
+}
+
+/**
+ * Enlaces combinados de hosts, rutas y parámetros reales y retorcidos (mayúsculas,
+ * segmentos de más, parámetros vacíos, dominios ajenos): la validación de la
+ * interfaz y el CHECK deben dar la misma respuesta en todos.
+ */
+const HOSTS = [
+  "https://www.facebook.com",
+  "https://m.facebook.com",
+  "https://web.facebook.com",
+  "http://facebook.com",
+  "https://fb.com",
+  "https://fb.watch",
+  "https://www.instagram.com",
+  "https://instagram.com",
+  "https://instagr.am",
+  "https://www.tiktok.com",
+  "https://m.tiktok.com",
+  "https://vm.tiktok.com",
+  "https://vt.tiktok.com",
+  "https://facebook.com.evil.co",
+  "https://youtube.com",
+  "www.instagram.com",
+]
+
+const RUTAS = [
+  "",
+  "/",
+  "/p/C8xYz12AbCd",
+  "/P/C8xYz12AbCd/",
+  "/p/abc.def",
+  "/reel/C9AbCd-_EfG",
+  "/REEL/C9AbCd",
+  "/reels/C9AbCd/",
+  "/reels/audio/123",
+  "/tv/B8xYz",
+  "/usuario.x/p/C8xYz/",
+  "/usuario.x/reel/C9AbCd",
+  "/stories/noticias.pasto/3456789012345678901",
+  "/Stories/noticias/345",
+  "/stories/noticias.pasto",
+  "/stories/highlights/17912345678901234/",
+  "/usuario/stories/x/1",
+  "/explore/tags/pasto",
+  "/NoticiasDelHuila",
+  "/NoticiasDelHuila/",
+  "/profile.php",
+  "/x/posts/pfbid02KxYz",
+  "/x/POSTS/pfbid02KxYz",
+  "/x/posts/un-titulo/1234567890",
+  "/x/posts/a/b/c",
+  "/x/videos/1234567890123456/",
+  "/x/videos/un-titulo/1234567890123456",
+  "/x/photos/a.123/456",
+  "/x/photos/456",
+  "/reel/1234567890123456",
+  "/share/p/1AbCdEfGh2/",
+  "/share/r/15xYz9AbCd",
+  "/share/V/1Q2w3E4r5T",
+  "/share/1AbCdEfGh2",
+  "/share/x/1AbCdEfGh2",
+  "/share/p",
+  "/share",
+  "/groups/vecinos/posts/2468013579",
+  "/groups/vecinos/permalink/2468013579/",
+  "/groups/vecinos",
+  "/stories/100064527312345/UzpfSVNDOjEy",
+  "/stories/100064527312345",
+  "/watch",
+  "/watch/",
+  "/video.php",
+  "/photo",
+  "/photo.php",
+  "/permalink.php",
+  "/story.php",
+  "/@noticias.cucuta/video/7412345678901234567",
+  "/@Noticias_Cucuta/VIDEO/7412345678901234567",
+  "/@noticias/photo/7412345678901234567",
+  "/@noticias",
+  "/@noticias/live",
+  "/@noticias/video/abc",
+  "/@noti+cias/video/123",
+  "/t/ZT8AbCdEf",
+  "/T/ZT8AbCdEf/",
+  "/ZMhAbC123",
+  "/ZMh/abc",
+  "/abc_DEF-1",
+  "//a//b//",
+]
+
+const PARAMETROS = [
+  "",
+  "?v=1234567890",
+  "?V=1234567890",
+  "?v=",
+  "?fbid=987654321&set=a.123",
+  "?story_fbid=pfbid0abc&id=100064527312345",
+  "?id=100064527312345&story_fbid=123",
+  "?multi_permalinks=55",
+  "?utm_source=ig_web_copy_link&igsh=abc",
+  "?id=5",
+  "#comentarios",
+]
+
+describe("validarUrlPost · acepta exactamente lo que acepta el CHECK", () => {
+  it("coincide con publicaciones_url_chk en miles de combinaciones", () => {
+    const discrepancias: string[] = []
+    let revisados = 0
+    for (const host of HOSTS) {
+      for (const ruta of RUTAS) {
+        for (const parametros of PARAMETROS) {
+          const entrada = `${host}${ruta}${parametros}`
+          for (const plataforma of PLATAFORMAS) {
+            revisados++
+            const interfaz = validarUrlPost(plataforma, entrada).ok
+            if (interfaz !== aceptaLaBd(plataforma, entrada)) {
+              discrepancias.push(
+                `${plataforma} ${entrada} → interfaz ${interfaz ? "acepta" : "rechaza"}`
+              )
+            }
+          }
+        }
+      }
+    }
+    expect(revisados).toBeGreaterThan(30_000)
+    expect(discrepancias).toEqual([])
+  })
+
+  it("cuenta como aceptados los casos límite que el CHECK admite", () => {
+    for (const [plataforma, entrada] of [
+      ["INSTAGRAM", "https://www.instagram.com/Stories/noticias/345"],
+      ["TIKTOK", "https://www.tiktok.com/T/ZT8AbCdEf"],
+      ["FACEBOOK", "https://www.facebook.com/x/posts/un-titulo/1234567890"],
+      ["FACEBOOK", "https://www.facebook.com/share/V/1Q2w3E4r5T"],
+    ] as const) {
+      expect(validarUrlPost(plataforma, entrada).ok, entrada).toBe(true)
+      expect(aceptaLaBd(plataforma, entrada), entrada).toBe(true)
+    }
+  })
+})
+
+describe("validarUrlPost · formato de la oferta", () => {
+  const FORMATOS_POR_PLATAFORMA: Readonly<
+    Record<PlataformaPost, readonly FormatoPost[]>
+  > = {
+    INSTAGRAM: ["POST_FEED", "CARRUSEL", "REEL", "HISTORIA"],
+    FACEBOOK: ["POST_FEED", "VIDEO", "REEL", "HISTORIA"],
+    TIKTOK: ["VIDEO"],
+  }
+
+  it("cada formato tiene un ejemplo válido, de su tipo y sin aviso", () => {
+    for (const plataforma of PLATAFORMAS) {
+      for (const formato of FORMATOS_POR_PLATAFORMA[plataforma]) {
+        const ejemplo = ejemploUrlPost(plataforma, formato)
+        expect(validarUrlPost(plataforma, ejemplo, formato), ejemplo).toEqual({
+          ok: true,
+          url: normalizarUrlPost(ejemplo),
+        })
+      }
+    }
+    expect(ejemploUrlPost("INSTAGRAM", "REEL")).toMatch(/\/reel\//)
+    expect(ejemploUrlPost("INSTAGRAM", "HISTORIA")).toMatch(/\/stories\//)
+    expect(ejemploUrlPost("FACEBOOK", "VIDEO")).toMatch(/\/share\/v\//)
+  })
+
+  it("sin formato conocido usa el ejemplo de la plataforma", () => {
+    expect(ejemploUrlPost("INSTAGRAM")).toBe(EJEMPLOS_URL_POST.INSTAGRAM)
+    expect(ejemploUrlPost("TIKTOK", "VIDEO")).toBe(EJEMPLOS_URL_POST.TIKTOK)
+    expect(ejemploUrlPost("FACEBOOK", "OTRO")).toBe(EJEMPLOS_URL_POST.FACEBOOK)
+  })
+
+  it("rechaza lo que no es una publicación indicando el formato esperado (MED-013)", () => {
+    const resultado = validarUrlPost(
+      "INSTAGRAM",
+      "https://www.instagram.com/explore/tags/pasto/",
+      "REEL"
+    )
+    expect(resultado).toEqual({
+      ok: false,
+      mensaje:
+        "Ese enlace de Instagram no lleva a una publicación, un reel o una historia. Para esta oferta, copia el enlace del reel.",
+      ejemplo: "https://www.instagram.com/reel/C9AbCdEfGhI/",
+    })
+    const perfil = validarUrlPost(
+      "INSTAGRAM",
+      "https://www.instagram.com/elpilondevalledupar/",
+      "HISTORIA"
+    )
+    expect(perfil.ok ? null : perfil.mensaje).toMatch(
+      /enlace del perfil.*copia el enlace de la historia\.$/
+    )
+  })
+
+  it("pide el enlace del contenido que exige la oferta", () => {
+    const vacio = validarUrlPost("FACEBOOK", " ", "VIDEO")
+    expect(vacio).toEqual({
+      ok: false,
+      mensaje: "Pega el enlace del video.",
+      ejemplo: "https://www.facebook.com/share/v/1Q2w3E4r5T/",
+    })
+  })
+
+  it("con otra red no agrega la pista del formato", () => {
+    const resultado = validarUrlPost(
+      "TIKTOK",
+      "https://www.facebook.com/reel/123",
+      "VIDEO"
+    )
+    expect(resultado.ok ? null : resultado.mensaje).toBe(
+      "Ese enlace es de Facebook, pero la publicación debe estar en TikTok."
+    )
+  })
+
+  it("avisa, sin bloquear, cuando el enlace parece de otro tipo de contenido", () => {
+    expect(
+      validarUrlPost(
+        "INSTAGRAM",
+        "https://www.instagram.com/stories/noticias/3456789012345678901",
+        "REEL"
+      )
+    ).toEqual({
+      ok: true,
+      url: "https://www.instagram.com/stories/noticias/3456789012345678901",
+      aviso:
+        "Ese enlace parece de una historia, pero esta oferta pide un reel. Revisa que sea el de tu publicación.",
+    })
+    const historia = validarUrlPost(
+      "FACEBOOK",
+      "https://www.facebook.com/reel/1234567890123456",
+      "HISTORIA"
+    )
+    expect(historia.ok && historia.aviso).toMatch(/parece de un reel.*historia/)
+    const foto = validarUrlPost(
+      "TIKTOK",
+      "https://www.tiktok.com/@a/photo/7412345678901234567",
+      "VIDEO"
+    )
+    expect(foto.ok && foto.aviso).toMatch(/parece de una foto.*un video/)
+  })
+
+  it("no avisa en los casos dudosos (reel abierto con /p/, enlaces cortos)", () => {
+    for (const [plataforma, entrada, formato] of [
+      ["INSTAGRAM", "https://www.instagram.com/p/C8xYz12AbCd/", "REEL"],
+      ["INSTAGRAM", "https://www.instagram.com/reel/C9AbCdEfGhI/", "POST_FEED"],
+      ["FACEBOOK", "https://www.facebook.com/watch/?v=1", "REEL"],
+      ["FACEBOOK", "https://www.facebook.com/share/1AbCdEfGh2/", "HISTORIA"],
+      ["TIKTOK", "https://vm.tiktok.com/ZMhAbC123/", "VIDEO"],
+    ] as const) {
+      const resultado = validarUrlPost(plataforma, entrada, formato)
+      expect(resultado.ok, entrada).toBe(true)
+      expect(resultado.ok && resultado.aviso, entrada).toBeFalsy()
+    }
+  })
+})
+
+describe("validarUrlPost · cuenta de la campaña", () => {
+  it("dice qué cuenta nombra el enlace, si la nombra", () => {
+    expect(
+      cuentaDelEnlace(
+        "https://m.tiktok.com/@Noticias.Cucuta/video/7412345678901234567?lang=es"
+      )
+    ).toBe("Noticias.Cucuta")
+    expect(
+      cuentaDelEnlace(
+        "https://www.instagram.com/stories/noticias.pasto/3456789012345678901/"
+      )
+    ).toBe("noticias.pasto")
+    // Sin cuenta en el enlace: publicaciones, reels, Facebook, enlaces cortos y destacadas.
+    for (const enlace of [
+      "https://www.instagram.com/p/C8xYz12AbCd/",
+      "https://www.instagram.com/elpilondevalledupar/reel/C9AbCd-_EfG/",
+      "https://www.instagram.com/stories/highlights/17912345678901234/",
+      "https://www.facebook.com/NoticiasDelHuila/posts/pfbid02KxYz8aBcD1234efGh",
+      "https://vm.tiktok.com/ZMhAbC123/",
+      "https://www.tiktok.com/t/ZT8AbCdEf",
+    ]) {
+      expect(cuentaDelEnlace(enlace), enlace).toBeNull()
+    }
+  })
+
+  it("rechaza el video de TikTok o la historia de otra cuenta, como la BD (AMO_URL_OTRA_CUENTA)", () => {
+    expect(
+      validarUrlPost(
+        "TIKTOK",
+        "https://www.tiktok.com/@medio_b/video/7412345678901234567",
+        "VIDEO",
+        "noticias.cucuta"
+      )
+    ).toEqual({
+      ok: false,
+      mensaje:
+        "El enlace es de @medio_b y esta campaña es con @noticias.cucuta. Pega el enlace de la publicación en tu cuenta.",
+      ejemplo: EJEMPLOS_URL_POST.TIKTOK,
+    })
+    expect(
+      validarUrlPost(
+        "INSTAGRAM",
+        "https://www.instagram.com/stories/otro.medio/3456789012345678901",
+        "HISTORIA",
+        "noticias.pasto"
+      )
+    ).toMatchObject({
+      ok: false,
+      mensaje: expect.stringMatching(
+        /^El enlace es de @otro\.medio y esta campaña es con @noticias\.pasto\./
+      ),
+    })
+  })
+
+  it("no distingue mayúsculas y no exige cuenta a los enlaces que no la nombran", () => {
+    expect(
+      validarUrlPost(
+        "TIKTOK",
+        "https://www.tiktok.com/@Noticias.Cucuta/video/7412345678901234567",
+        "VIDEO",
+        "noticias.cucuta"
+      )
+    ).toEqual({
+      ok: true,
+      url: "https://www.tiktok.com/@Noticias.Cucuta/video/7412345678901234567",
+    })
+    expect(
+      validarUrlPost(
+        "INSTAGRAM",
+        "https://www.instagram.com/reel/C9AbCdEfGhI/",
+        "REEL",
+        "noticias.pasto"
+      )
+    ).toEqual({ ok: true, url: "https://www.instagram.com/reel/C9AbCdEfGhI" })
+    // Sin la cuenta de la campaña no se compara.
+    expect(
+      validarUrlPost(
+        "TIKTOK",
+        "https://www.tiktok.com/@medio_b/video/7412345678901234567",
+        "VIDEO",
+        null
+      )
+    ).toMatchObject({ ok: true })
+  })
+})
+
+describe("tipoContenidoPost", () => {
+  it("dice qué abre cada enlace válido", () => {
+    expect(
+      tipoContenidoPost("INSTAGRAM", "https://instagram.com/reels/C9AbCd/")
+    ).toBe("reel")
+    expect(
+      tipoContenidoPost("INSTAGRAM", "https://www.instagram.com/tv/B8x/")
+    ).toBe("publicacion")
+    expect(tipoContenidoPost("FACEBOOK", "https://fb.watch/qWeRtY12_a/")).toBe(
+      "video"
+    )
+    expect(
+      tipoContenidoPost("FACEBOOK", "https://www.facebook.com/photo/?fbid=9")
+    ).toBe("foto")
+    expect(
+      tipoContenidoPost(
+        "FACEBOOK",
+        "https://www.facebook.com/permalink.php?story_fbid=1&id=2"
+      )
+    ).toBe("publicacion")
+    expect(
+      tipoContenidoPost("TIKTOK", "https://www.tiktok.com/t/ZT8AbCdEf")
+    ).toBe("indeterminado")
+  })
+
+  it("es null si el enlace no vale para esa red", () => {
+    expect(
+      tipoContenidoPost("TIKTOK", "https://www.instagram.com/p/C8xYz12AbCd/")
+    ).toBeNull()
+    expect(tipoContenidoPost("INSTAGRAM", "no es un enlace")).toBeNull()
   })
 })

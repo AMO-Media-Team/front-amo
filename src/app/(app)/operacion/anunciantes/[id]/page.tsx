@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   FileText,
   Handshake,
   LayoutDashboard,
@@ -39,6 +40,14 @@ import {
 } from "@/features/operacion/queries/anunciantes"
 import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
 import { cargarDatosGestion } from "@/features/usuarios/gestion"
+import { PESTANA_VERIFICACION } from "@/features/verificacion/colas"
+import { EsqueletoExpediente } from "@/features/verificacion/components/esqueletos"
+import { AccionesEstadoAnunciante } from "@/features/verificacion-anunciantes/components/acciones-estado"
+import { SeccionVerificacionAnunciante } from "@/features/verificacion-anunciantes/components/seccion-verificacion"
+import {
+  accionesDecision,
+  accionesEstado,
+} from "@/features/verificacion-anunciantes/decision"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -61,11 +70,13 @@ async function SeccionDocumentos({ anuncianteId }: { anuncianteId: string }) {
 
 /**
  * Ficha de un anunciante: cabecera con su NIT, indicadores y pestañas
- * Resumen, Campañas, Asignaciones, Cartera, Documentos y Usuarios según los
- * permisos del rol. El contacto (dato personal) solo se ofrece con
- * `datos_sensibles.ver` y se revela dejando registro. El equipo AMO edita sus
- * datos (`anunciantes.editar`, incluido el NIT) e invita a su equipo
- * (`usuarios.invitar`).
+ * Resumen, Verificación, Campañas, Asignaciones, Cartera, Documentos y
+ * Usuarios según los permisos del rol. El contacto (dato personal) solo se
+ * ofrece con `datos_sensibles.ver` y se revela dejando registro. El equipo AMO
+ * edita sus datos (`anunciantes.editar`, incluido el NIT), invita a su equipo
+ * (`usuarios.invitar`), la verifica (`anunciantes.verificar`, ADM-003: la cola
+ * de verificación enlaza a `?pestana=verificacion`) y la suspende o reactiva
+ * (`anunciantes.suspender`).
  */
 export default async function PaginaAnunciante({
   params,
@@ -97,6 +108,8 @@ export default async function PaginaAnunciante({
     datosGestion?.rolesAsignables ?? null,
     anunciante
   )
+  // Suspender o reactivar (`anunciantes.suspender`), en la cabecera.
+  const cambiosEstado = accionesEstado(anunciante.estado, usuario.permisos)
 
   const pestanas: PestanaFicha[] = [
     {
@@ -111,6 +124,26 @@ export default async function PaginaAnunciante({
       ),
     },
   ]
+  // ADM-003: expediente y decisión (la cola de verificación enlaza aquí).
+  if (verDocumentos) {
+    pestanas.push({
+      clave: PESTANA_VERIFICACION,
+      titulo: "Verificación",
+      icono: <BadgeCheck aria-hidden />,
+      contenido: (
+        <Diferida
+          recurso="el expediente de verificación"
+          respaldo={<EsqueletoExpediente />}
+        >
+          <SeccionVerificacionAnunciante
+            anunciante={anunciante}
+            acciones={accionesDecision(anunciante.estado, usuario.permisos)}
+            puedeCargar={puedeEditar}
+          />
+        </Diferida>
+      ),
+    })
+  }
   if (verCampanas) {
     pestanas.push({
       clave: "campanas",
@@ -180,11 +213,26 @@ export default async function PaginaAnunciante({
       <CabeceraAnunciante
         anunciante={anunciante}
         acciones={
-          <AccionesAnunciante
-            edicion={edicion}
-            catalogos={catalogos}
-            invitarA={invitarA}
-          />
+          edicion || invitarA || cambiosEstado.length > 0 ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <AccionesAnunciante
+                edicion={edicion}
+                catalogos={catalogos}
+                invitarA={invitarA}
+              />
+              {cambiosEstado.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 max-sm:*:flex-1">
+                  <AccionesEstadoAnunciante
+                    anunciante={{
+                      id: anunciante.id,
+                      nombreComercial: anunciante.nombreComercial,
+                    }}
+                    acciones={cambiosEstado}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null
         }
       />
       <Diferida

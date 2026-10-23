@@ -106,6 +106,23 @@ export function crearClientePublico(
   })
 }
 
+/**
+ * Cliente con la clave publicable y las cabeceras de contexto confiable, como
+ * el del servidor de la app: tras ingresar, sus consultas van con la sesión
+ * del usuario (RLS de su rol) y la bitácora las registra con origen APP.
+ */
+export function crearClienteUsuario(
+  entorno: EntornoBootstrap
+): ClienteSupabase {
+  const headers = construirCabecerasContexto(CONTEXTO_VACIO, {
+    secreto: entorno.secretoServidor,
+  })
+  return createClient<Database>(entorno.url, entorno.clavePublicable, {
+    auth: SIN_SESION,
+    global: { headers },
+  })
+}
+
 /** Usuario de Auth por correo (vía su perfil, que `handle_new_user` crea siempre). */
 export async function buscarUsuarioPorEmail(
   servicio: ClienteSupabase,

@@ -47,7 +47,8 @@ test("las colas se recorren por la URL con lo pendiente en cada una", async ({
   await expect(
     page.getByRole("heading", { level: 1, name: "Verificación" })
   ).toBeVisible()
-  await expect(colas(page).getByRole("link")).toHaveCount(4)
+  // Medios, anunciantes (fase 2), cuentas, documentos y solicitudes.
+  await expect(colas(page).getByRole("link")).toHaveCount(5)
   await expect(
     colas(page).getByRole("link", { name: /^Medios:/ })
   ).toHaveAttribute("aria-current", "page")

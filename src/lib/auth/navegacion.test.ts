@@ -26,8 +26,15 @@ describe("registro de navegación", () => {
     const items = NAVEGACION.flatMap((grupo) => grupo.items)
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
     expect(new Set(items.map((item) => item.href)).size).toBe(items.length)
-    // El menú de comandos usa el título como valor único.
-    expect(new Set(items.map((item) => item.titulo)).size).toBe(items.length)
+    // El menú de comandos usa el título como valor único: único entre lo que
+    // ve cada tipo de rol (el medio y el anunciante tienen «Mis campañas»).
+    for (const tipo of ["ADMIN", "ANUNCIANTE", "MEDIO"] as const) {
+      const titulos = items
+        .filter((item) => item.enMenu !== false)
+        .filter((item) => !item.tiposRol || item.tiposRol.includes(tipo))
+        .map((item) => item.titulo)
+      expect(new Set(titulos).size).toBe(titulos.length)
+    }
   })
 
   it("todas las entradas tienen descripción y palabras clave para ⌘K", () => {
@@ -53,6 +60,29 @@ describe("filtrarNavegacion", () => {
       "notificaciones.ver",
     ])
     expect(visibles).toEqual(["inicio", "reportes", "notificaciones"])
+  })
+
+  it("el anunciante ve su negocio: campañas primero y luego su empresa", () => {
+    expect(
+      idsVisibles("ANUNCIANTE", [
+        "inicio.anunciante",
+        "anunciantes.editar_propio",
+        "campanas.gestionar_propias",
+      ])
+    ).toEqual(["inicio", "mis-campanas", "empresa"])
+  })
+
+  it("las secciones fuera del menú no se listan, pero tienen migas", () => {
+    expect(idsVisibles("ADMIN", ["ofertas.ver", "ofertas.moderar"])).toEqual([
+      "moderacion",
+    ])
+    expect(
+      migas("/operacion/ofertas/0190a3f2-1b2c-7d3e-8f40-123456789abc")
+    ).toEqual([
+      { titulo: "Operación" },
+      { titulo: "Ofertas", href: "/operacion/ofertas" },
+      { titulo: "Detalle" },
+    ])
   })
 
   it("Inicio aparece con cualquiera de los permisos de panel", () => {

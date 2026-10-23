@@ -15,6 +15,9 @@
  * cambia el viewport (en el móvil emulado ocurre al navegar) y solo se pierde
  * la animación; la app lo trata igual (`GuardiaTransiciones`, que lo marca como
  * atendido, pero Playwright registra la excepción antes de ese `preventDefault`).
+ *
+ * Además, `page.goto` y `page.reload` esperan a que React termine de revelar el
+ * contenido que llegó por streaming (`esperarStreaming`).
  */
 import {
   test as base,
@@ -22,6 +25,7 @@ import {
   type BrowserContext,
   type ConsoleMessage,
   expect,
+  type Page,
 } from "@playwright/test"
 
 export { expect }
@@ -155,7 +159,49 @@ function crearGuardia(): { guardia: Guardia; problemas: () => Problema[] } {
   }
 }
 
+/**
+ * Un documento recién cargado puede tener un instante dos copias de una
+ * sección: la del servidor llega oculta en `div#S:n` y espera a que React la
+ * revele por lotes, mientras el cliente ya pintó la suya. Al revelar, React
+ * quita el `div`. La copia oculta no se ve ni la anuncian los lectores de
+ * pantalla, pero `getByLabel` y `getByText` la cuentan (violación de modo
+ * estricto). Tras cargar un documento se espera a que no quede ninguna; si no
+ * ocurre en 5 s, la prueba sigue y sus aserciones dirán qué falta.
+ */
+export async function esperarStreaming(page: Page): Promise<void> {
+  await page.waitForLoadState("load")
+  await page
+    .waitForFunction(
+      () => !document.querySelector('div[hidden][id^="S:"]'),
+      undefined,
+      { timeout: 5_000 }
+    )
+    .catch(() => {})
+}
+
+/** `goto` y `reload` de la página esperan el fin del streaming. */
+function conEsperaDeStreaming(page: Page): void {
+  const goto = page.goto.bind(page)
+  const reload = page.reload.bind(page)
+  page.goto = (async (...argumentos: Parameters<Page["goto"]>) => {
+    const respuesta = await goto(...argumentos)
+    await esperarStreaming(page)
+    return respuesta
+  }) as Page["goto"]
+  page.reload = (async (...argumentos: Parameters<Page["reload"]>) => {
+    const respuesta = await reload(...argumentos)
+    await esperarStreaming(page)
+    return respuesta
+  }) as Page["reload"]
+}
+
 export const test = base.extend<FixturesAmo>({
+  context: async ({ context }, usar) => {
+    context.pages().forEach(conEsperaDeStreaming)
+    context.on("page", conEsperaDeStreaming)
+    await usar(context)
+  },
+
   guardia: [
     async ({ context }, usar, info) => {
       const { guardia, problemas } = crearGuardia()
@@ -208,6 +254,7 @@ export const test = base.extend<FixturesAmo>({
       })
       abiertos.push(contexto)
       await guardia.vigilar(contexto)
+      contexto.on("page", conEsperaDeStreaming)
       return contexto
     })
     await Promise.all(abiertos.map((contexto) => contexto.close()))

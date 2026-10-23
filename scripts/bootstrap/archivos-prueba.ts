@@ -2,14 +2,22 @@
  * Archivos de muestra para los documentos y capturas de las cuentas E2E
  * (módulo puro): una imagen PNG y un PDF de una página, válidos y livianos,
  * generados en memoria. Así el visor del equipo AMO abre algo real sin que el
- * repositorio guarde binarios ni datos de personas.
+ * repositorio guarde binarios ni datos de personas. El JPEG y el video MP4
+ * de los creativos están en `jpeg-prueba.ts` y `video-prueba.ts`.
  */
 import { crc32, deflateSync } from "node:zlib"
 
 export type ColorRgb = readonly [rojo: number, verde: number, azul: number]
 
+/** Lila AMO 100 y 600: una muestra se reconoce a simple vista. */
+export const FONDO_MUESTRA: ColorRgb = [237, 231, 254]
+export const FRANJA_MUESTRA: ColorRgb = [117, 73, 222]
+
 const FIRMA_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const BYTES_POR_PIXEL = 3
+/** Bloque auxiliar y privado (`amOe`: «AMO E2E»): los lectores lo ignoran. */
+const BLOQUE_RELLENO = "amOe"
+const CABECERA_BLOQUE = 12
 
 /** Bloque PNG: largo, tipo, datos y CRC-32 de tipo + datos. */
 function bloquePng(tipo: string, datos: Buffer): Buffer {
@@ -32,13 +40,16 @@ function filaDeColor(ancho: number, [rojo, verde, azul]: ColorRgb): Buffer {
 
 /**
  * PNG RGB de `ancho` × `alto` con una franja superior (`franja`, el 20 % del
- * alto) sobre un `fondo`: se reconoce a simple vista como una muestra.
+ * alto) sobre un `fondo`: se reconoce a simple vista como una muestra. Con
+ * `bytesMinimos` agrega un bloque auxiliar de relleno hasta ese peso (para
+ * probar archivos grandes sin cambiar la imagen ni su lectura).
  */
 export function pngDeMuestra(
   ancho: number,
   alto: number,
   fondo: ColorRgb,
-  franja: ColorRgb
+  franja: ColorRgb,
+  { bytesMinimos = 0 }: { bytesMinimos?: number } = {}
 ): Buffer {
   if (
     !Number.isInteger(ancho) ||
@@ -64,12 +75,26 @@ export function pngDeMuestra(
       y < altoFranja ? filaFranja : filaFondo
     )
   )
-  return Buffer.concat([
+  const bloques = [
     FIRMA_PNG,
     bloquePng("IHDR", cabecera),
     bloquePng("IDAT", deflateSync(pixeles)),
-    bloquePng("IEND", Buffer.alloc(0)),
-  ])
+  ]
+  const fin = bloquePng("IEND", Buffer.alloc(0))
+  const largo = bloques.reduce((total, b) => total + b.length, fin.length)
+  if (bytesMinimos > largo) {
+    // Los bloques no se comprimen: el archivo queda con el peso pedido (o
+    // unos bytes más, si lo que faltaba no alcanzaba para la cabecera).
+    const relleno = Buffer.alloc(
+      Math.max(0, bytesMinimos - largo - CABECERA_BLOQUE)
+    )
+    const texto = Buffer.from("AMO archivo de prueba E2E. ", "ascii")
+    for (let i = 0; i < relleno.length; i += texto.length) {
+      texto.copy(relleno, i, 0, Math.min(texto.length, relleno.length - i))
+    }
+    bloques.push(bloquePng(BLOQUE_RELLENO, relleno))
+  }
+  return Buffer.concat([...bloques, fin])
 }
 
 const LATIN1_MAXIMO = 0xff

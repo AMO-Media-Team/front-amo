@@ -1,8 +1,23 @@
 /**
  * Transformaciones puras del panel del medio: progreso del tope anual por
- * nivel, cuenta regresiva de las próximas acciones, etiquetas de acciones y
- * estados, y la serie de ganancias. Sin I/O ni React.
+ * nivel y el enlace para subir de nivel, el orden de las próximas acciones
+ * (con su pantalla, de `mis-campanas/siguiente-accion`), los estados de los
+ * negocios en curso y la serie de ganancias. Sin I/O ni React.
  */
+import type { Route } from "next"
+
+import { RUTAS_MI_MEDIO } from "@/features/mi-medio/alta"
+import { ESTADOS_PARA_MEDIO } from "@/features/mis-campanas/estados"
+import {
+  disponibilidadAccion,
+  interpretarAccion,
+} from "@/features/mis-campanas/siguiente-accion"
+import type {
+  AccionMedio,
+  Corte,
+  FilaAccionMedio,
+} from "@/features/mis-campanas/tipos"
+import type { PresentacionEstado } from "@/features/operacion/estados"
 import type { RangoFechas } from "@/lib/fechas"
 import { ZONA } from "@/lib/fechas"
 
@@ -106,95 +121,129 @@ export function progresoTope({
   }
 }
 
+/**
+ * «Cómo subir de nivel» en «Mi medio › Nivel»: la sección del camino al
+ * siguiente nivel (`#subir-de-nivel` en `vista-nivel.tsx`).
+ */
+export const RUTA_SUBIR_DE_NIVEL =
+  `${RUTAS_MI_MEDIO.nivel}#subir-de-nivel` as Route
+
+/**
+ * El aviso del tope enlaza a «Cómo subir de nivel» cuando ya importa: cerca
+ * del tope (alerta) o en el bloqueo. Un nivel sin tope no tiene a dónde subir
+ * por esa razón.
+ */
+export function enlazaSubirNivel(progreso: Pick<ProgresoTope, "estado">) {
+  return progreso.estado === "alerta" || progreso.estado === "bloqueo"
+}
+
 // ── Reputación ───────────────────────────────────────────────────────────────
 
 /** Meta de cumplimiento (docs/kpis.md §1.10): desde aquí la tasa se resalta. */
 export const META_CUMPLIMIENTO = 0.9
 
-// ── Próximas acciones ────────────────────────────────────────────────────────
+// ── Próximas acciones (DSH-006) ──────────────────────────────────────────────
 
-/** Fila de `proximas_acciones_medio`. */
+/**
+ * Fila de `proximas_acciones_medio`. `numero` y `corte` dicen a qué
+ * publicación y a qué corte va la acción, y `metricaId` qué métrica se
+ * corrige (opcionales para los datos de ejemplo de antes de la fase 3).
+ */
 export interface AccionPendiente {
   asignacionId: string
   ofertaTitulo: string
+  /** `DESCARGAR`, `DESCARGAR_NUEVA_VERSION`, `PUBLICAR`, `CARGAR_METRICA_H72`… */
   accion: string
   venceAt: string | null
+  numero?: number | null
+  corte?: Corte | null
+  metricaId?: string | null
 }
 
-const ACCIONES: Readonly<Record<string, string>> = {
-  DESCARGAR: "Descargar el contenido",
-  PUBLICAR: "Publicar la pauta",
-  CORREGIR_EVIDENCIA: "Corregir la evidencia",
-  CARGAR_METRICA_H24: "Cargar métricas de 24 h",
-  CARGAR_METRICA_H72: "Cargar métricas de 72 h",
-  CARGAR_METRICA_D7: "Cargar métricas de 7 días",
-  CORREGIR_METRICAS: "Corregir las métricas",
-}
-
-export function etiquetaAccion(accion: string): string {
-  return (
-    ACCIONES[accion] ??
-    accion.charAt(0) + accion.slice(1).toLowerCase().replace(/_/g, " ")
-  )
-}
-
-export type Urgencia = "vencida" | "critica" | "pronto" | "holgada"
-
-export interface CuentaRegresiva {
-  urgencia: Urgencia
-  /** "Vence en 2 h 15 min", "Venció hace 3 h", "Vence en 4 días". */
-  texto: string
-  /** Para lectores de pantalla y `title`. */
-  minutosRestantes: number | null
-}
-
-const MINUTO = 60_000
-const HORAS_CRITICA = 6
-const HORAS_PRONTO = 24
-
-function duracion(minutos: number): string {
-  const total = Math.max(0, Math.round(minutos))
-  const dias = Math.floor(total / (60 * 24))
-  const horas = Math.floor((total % (60 * 24)) / 60)
-  const mins = total % 60
-  if (dias >= 2) return `${dias} días`
-  if (dias === 1) return horas > 0 ? `1 día ${horas} h` : "1 día"
-  if (horas > 0) return mins > 0 ? `${horas} h ${mins} min` : `${horas} h`
-  return `${Math.max(1, mins)} min`
-}
-
-/** Cuenta regresiva hasta `venceAt`, con la urgencia que colorea la acción. */
-export function cuentaRegresiva(
-  venceAt: string | null,
-  ahora: Date
-): CuentaRegresiva {
-  const limite = venceAt ? new Date(venceAt).getTime() : Number.NaN
-  if (!Number.isFinite(limite)) {
-    return {
-      urgencia: "holgada",
-      texto: "Sin fecha límite",
-      minutosRestantes: null,
-    }
-  }
-  const minutos = (limite - ahora.getTime()) / MINUTO
-  if (minutos <= 0) {
-    return {
-      urgencia: "vencida",
-      texto: `Venció hace ${duracion(-minutos)}`,
-      minutosRestantes: Math.round(minutos),
-    }
-  }
-  const horas = minutos / 60
+function aFila(accion: AccionPendiente): FilaAccionMedio {
   return {
-    urgencia:
-      horas < HORAS_CRITICA
-        ? "critica"
-        : horas < HORAS_PRONTO
-          ? "pronto"
-          : "holgada",
-    texto: `Vence en ${duracion(minutos)}`,
-    minutosRestantes: Math.round(minutos),
+    asignacionId: accion.asignacionId,
+    ofertaTitulo: accion.ofertaTitulo,
+    accion: accion.accion,
+    venceAt: accion.venceAt,
+    numero: accion.numero ?? null,
+    corte: accion.corte ?? null,
+    metricaId: accion.metricaId ?? null,
   }
+}
+
+function instante(iso: string | null): number {
+  const valor = iso ? new Date(iso).getTime() : Number.NaN
+  return Number.isFinite(valor) ? valor : Number.POSITIVE_INFINITY
+}
+
+export interface OpcionesAccionesInicio {
+  /** Instante del servidor al pintar: decide qué se puede hacer ya. */
+  ahora: Date
+  /** `metricas.plazo_carga_horas`: un corte se habilita ese tiempo antes de vencer. */
+  plazoCargaHoras?: number
+  /**
+   * Publicaciones que pide cada asignación (`mis_asignaciones_medio`): con
+   * más de una, la acción dice a cuál va.
+   */
+  publicacionesPorAsignacion?: ReadonlyMap<string, number>
+}
+
+/**
+ * Las próximas acciones listas para el inicio, cada una con su pantalla
+ * (botón directo): primero lo que ya se puede hacer, del plazo más cercano al
+ * más lejano (lo vencido va arriba: es lo más urgente), y después los cortes
+ * de métricas que aún no se habilitan, por la hora en que se habilitan. Los
+ * códigos que esta versión de la app no conoce se omiten (no habría a dónde
+ * llevar al medio).
+ */
+export function accionesDelInicio(
+  filas: readonly AccionPendiente[],
+  { ahora, plazoCargaHoras, publicacionesPorAsignacion }: OpcionesAccionesInicio
+): AccionMedio[] {
+  const acciones = filas.flatMap((fila) => {
+    const publicaciones = publicacionesPorAsignacion?.get(fila.asignacionId)
+    const accion = interpretarAccion(aFila(fila), {
+      plazoCargaHoras,
+      variasPublicaciones:
+        publicaciones === undefined ? undefined : publicaciones > 1,
+    })
+    return accion ? [accion] : []
+  })
+  const bloqueada = (accion: AccionMedio) =>
+    disponibilidadAccion(accion, ahora) === "bloqueada"
+  const orden = (accion: AccionMedio) =>
+    bloqueada(accion)
+      ? instante(accion.disponibleDesde)
+      : instante(accion.venceAt)
+  return acciones
+    .map((accion, indice) => ({ accion, indice }))
+    .sort(
+      (a, b) =>
+        Number(bloqueada(a.accion)) - Number(bloqueada(b.accion)) ||
+        orden(a.accion) - orden(b.accion) ||
+        a.indice - b.indice
+    )
+    .map(({ accion }) => accion)
+}
+
+/**
+ * Clave estable de una acción en la lista (una asignación tiene varias, y una
+ * publicación puede tener varios cortes personalizados por corregir).
+ */
+export function claveAccion(
+  accion: Pick<
+    AccionMedio,
+    "asignacionId" | "codigo" | "numero" | "corte" | "metricaId"
+  >
+): string {
+  return [
+    accion.asignacionId,
+    accion.codigo,
+    accion.numero ?? "",
+    accion.corte ?? "",
+    accion.metricaId ?? "",
+  ].join(":")
 }
 
 // ── Asignaciones en curso ────────────────────────────────────────────────────
@@ -209,43 +258,14 @@ export interface AsignacionEnCurso {
   montoMedio: number | null
 }
 
-/** Lo que identifica a una oferta para el medio (`ofertas_para_medio`). */
-export interface OfertaDelNegocio {
-  id: string
-  titulo: string
-  marca: string | null
-}
-
-/** Asignación en curso con el nombre de su oferta (si se pudo consultar). */
+/** Asignación en curso con su oferta (la RPC ya trae el título y la marca). */
 export interface NegocioEnCurso extends AsignacionEnCurso {
   titulo: string | null
   marca: string | null
-}
-
-/**
- * Une cada asignación con su oferta. Sin oferta (permiso ausente o consulta
- * fallida) el negocio se muestra por su estado, sin nombre.
- */
-export function negociosEnCurso(
-  asignaciones: readonly AsignacionEnCurso[],
-  ofertas: readonly OfertaDelNegocio[]
-): NegocioEnCurso[] {
-  const porId = new Map(ofertas.map((oferta) => [oferta.id, oferta]))
-  return asignaciones.map((asignacion) => {
-    const oferta = porId.get(asignacion.ofertaId)
-    return {
-      ...asignacion,
-      titulo: oferta?.titulo.trim() || null,
-      marca: oferta?.marca?.trim() || null,
-    }
-  })
-}
-
-/** Ofertas distintas de las asignaciones, en su orden de aparición. */
-export function ofertasDistintas(
-  asignaciones: readonly AsignacionEnCurso[]
-): string[] {
-  return [...new Set(asignaciones.map((asignacion) => asignacion.ofertaId))]
+  /** Cuenta con la que aceptó, sin `@`. */
+  handle?: string | null
+  /** Publicaciones que pide la oferta. */
+  publicaciones?: number
 }
 
 export const ESTADOS_EN_CURSO = [
@@ -258,21 +278,30 @@ export const ESTADOS_EN_CURSO = [
 
 export type EstadoEnCurso = (typeof ESTADOS_EN_CURSO)[number]
 
-const ESTADOS: Readonly<Record<EstadoEnCurso, string>> = {
-  ACEPTADA: "Por descargar",
-  CONTENIDO_ENTREGADO: "Por publicar",
-  PUBLICADA: "Evidencia en revisión",
-  EVIDENCIA_VALIDADA: "Por cargar métricas",
-  METRICAS_CARGADAS: "Métricas en revisión",
-}
-
+/** El estado en voz del medio (la misma de «Mis campañas»). */
 export function etiquetaEstado(estado: string): string {
-  return (ESTADOS as Readonly<Record<string, string>>)[estado] ?? estado
+  return (
+    (ESTADOS_PARA_MEDIO as Readonly<Record<string, PresentacionEstado>>)[estado]
+      ?.etiqueta ?? estado
+  )
 }
 
 /** Paso del recorrido (1–5) para la barra de avance de cada asignación. */
 export function pasoEstado(estado: string): number {
   return (ESTADOS_EN_CURSO as readonly string[]).indexOf(estado) + 1
+}
+
+/** Publicaciones que pide cada asignación, para nombrar la de cada acción. */
+export function publicacionesPorAsignacion(
+  negocios: readonly Pick<NegocioEnCurso, "id" | "publicaciones">[]
+): Map<string, number> {
+  return new Map(
+    negocios.flatMap((negocio) =>
+      negocio.publicaciones === undefined
+        ? []
+        : [[negocio.id, negocio.publicaciones] as const]
+    )
+  )
 }
 
 // ── Ganancias ────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@
  * activación va por `activar_perfil_srv` y la restauración de una cuenta
  * suspendida o desactivada, por `transicionar_srv` con un operador temporal.
  */
+import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 import { type EstadoPerfil, transicionesParaRestaurar } from "./estado-perfil"
 import { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
 import { enrolarTotpEnSesion } from "./mfa"
@@ -33,6 +34,8 @@ export { codigoTotpEstable } from "./mfa"
 
 export { ANUNCIANTE_E2E_ID } from "./organizacion"
 
+export { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
+
 export { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
 
 export interface CuentaE2E {
@@ -40,6 +43,8 @@ export interface CuentaE2E {
   rol: RolCuentaPrueba
   /** Medio al que pertenece una cuenta de rol MEDIO (obligatorio para ese rol). */
   medioId?: string
+  /** Empresa de una cuenta de rol ANUNCIANTE (por omisión, «Anunciante E2E»). */
+  anuncianteId?: string
   nombre: string
   emailPorDefecto: string
   /** Variables de `.env.local` con el correo y la contraseña. */
@@ -101,6 +106,19 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     emailPorDefecto: "e2e.medio.nuevo@amo.test",
     variableEmail: "E2E_MEDIO_NUEVO_EMAIL",
     variablePassword: "E2E_MEDIO_NUEVO_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: false,
+  },
+  {
+    // «Anunciante Nuevo E2E»: PENDIENTE en Colombia, sin documentos; cada
+    // corrida lo reinicia (anunciantes-e2e.ts).
+    clave: "ANUNCIANTE_NUEVO",
+    rol: "ANUNCIANTE",
+    anuncianteId: ANUNCIANTE_NUEVO_E2E_ID,
+    nombre: "Anunciante Nuevo E2E",
+    emailPorDefecto: "e2e.anunciante.nuevo@amo.test",
+    variableEmail: "E2E_ANUNCIANTE_NUEVO_EMAIL",
+    variablePassword: "E2E_ANUNCIANTE_NUEVO_PASSWORD",
     debeCambiarPassword: false,
     conTotp: false,
   },
