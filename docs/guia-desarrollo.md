@@ -106,7 +106,8 @@ supabase/{migrations,seed,tests}/   e2e/   docs/
 2. Probarlo en la **base local** (ver «Base local» abajo): `supabase migration up --local` o `pnpm db:local`,
    y `pnpm db:suites local`.
 3. Aplicarlo en **develop** y luego en **producción** con `pnpm db:push <develop|produccion>` (`--dry-run` lista
-   lo pendiente; producción exige `--confirmar-produccion`). Por dentro es
+   lo pendiente; producción exige `--confirmar-produccion`). Antes de producción, respaldo de esquema y datos con
+   `pnpm db:respaldo produccion --etiqueta antes-<migración>` (queda en `context/respaldos/`, 0600, fuera de git). Por dentro es
    `supabase db push --db-url` con la URL del _Session pooler_ de cada proyecto (usuario `postgres.<ref>`,
    contraseña alfanumérica) guardada en `.env.db.<entorno>` (0600, git lo ignora). Así `session_user` es
    `postgres`, como exigen `private.modo_carga()` y las guardas de roles; con `--linked` el CLI entra como
@@ -142,7 +143,9 @@ supabase stop                      # al terminar (conserva los datos); colima st
   superadministrador sin el enlace de confirmación.
 - La base (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) acepta `psql` dentro del contenedor:
   `docker exec -i supabase_db_front-amo psql -U postgres -d postgres`.
-- `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop.
+- `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop. En `config.toml` la pila local admite
+  500 ingresos y 500 verificaciones de código cada 5 minutos por IP (la suite y sus fábricas ingresan cientos de veces);
+  cambiar `[auth.rate_limit]` exige `supabase stop` y volver a `supabase start` (los datos se conservan).
 
 ### Producción como entorno de pruebas del cliente
 

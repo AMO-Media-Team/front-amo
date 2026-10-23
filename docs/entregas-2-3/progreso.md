@@ -7,7 +7,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ---- | --------------------------------------------------------------------------------------- | ------ |
 | P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
-| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | 🔧     |
+| P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | 🧪     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ⬜     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
@@ -30,19 +30,19 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ADM-001          | Cola de verificación de medios                             | P1    | ✅     |
 | ADM-006          | Clasificación de pertinencia geográfica                    | P1    | ✅     |
 | NOT-003          | Notificaciones por eventos del negocio                     | P1    | 🔧     |
-| ANU-001          | Registro y datos de la empresa                             | P0/P2 | 🔧     |
-| ANU-002          | Varios usuarios por anunciante                             | P2    | ⬜     |
-| ANU-003          | Creación de campañas                                       | P2    | ⬜     |
-| ANU-004          | Asistente de oferta · Qué se publica                       | P2    | ⬜     |
-| ANU-005          | Asistente de oferta · A quién le llega                     | P2    | ⬜     |
-| ANU-006          | Asistente de oferta · Cuándo                               | P2    | ⬜     |
-| ANU-007          | Asistente de oferta · Cuánto y estimador                   | P2    | ⬜     |
-| ANU-008          | Asistente de oferta · Paquete creativo                     | P2    | ⬜     |
-| ANU-009          | Asistente de oferta · Condiciones, revisión y envío        | P2    | ⬜     |
-| ANU-010          | Versionado de creativos                                    | P2    | ⬜     |
-| ANU-014          | Cancelación de ofertas y campañas                          | P2    | ⬜     |
-| ADM-003          | Verificación de anunciantes                                | P2    | ⬜     |
-| ADM-005          | Moderación de ofertas                                      | P2    | ⬜     |
+| ANU-001          | Registro y datos de la empresa                             | P0/P2 | 🧪     |
+| ANU-002          | Varios usuarios por anunciante                             | P2    | 🧪     |
+| ANU-003          | Creación de campañas                                       | P2    | 🧪     |
+| ANU-004          | Asistente de oferta · Qué se publica                       | P2    | 🧪     |
+| ANU-005          | Asistente de oferta · A quién le llega                     | P2    | 🧪     |
+| ANU-006          | Asistente de oferta · Cuándo                               | P2    | 🧪     |
+| ANU-007          | Asistente de oferta · Cuánto y estimador                   | P2    | 🧪     |
+| ANU-008          | Asistente de oferta · Paquete creativo                     | P2    | 🧪     |
+| ANU-009          | Asistente de oferta · Condiciones, revisión y envío        | P2    | 🧪     |
+| ANU-010          | Versionado de creativos                                    | P2    | 🧪     |
+| ANU-014          | Cancelación de ofertas y campañas                          | P2    | 🧪     |
+| ADM-003          | Verificación de anunciantes                                | P2    | 🧪     |
+| ADM-005          | Moderación de ofertas                                      | P2    | 🧪     |
 | MED-008          | Marketplace de ofertas elegibles                           | P3    | ⬜     |
 | MED-009          | Detalle de la oferta                                       | P3    | ⬜     |
 | MED-010          | Aceptar o rechazar una oferta                              | P3    | ⬜     |
