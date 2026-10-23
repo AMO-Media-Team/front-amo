@@ -33,6 +33,23 @@ describe("describirReglas", () => {
       `MP4 · hasta 50${ESPACIO}MB · proporción 9:16 · video de hasta 1${ESPACIO}min`
     )
   })
+
+  it("lista varias proporciones admitidas", () => {
+    expect(
+      describirReglas({
+        mimes: ["image/jpeg", "video/mp4"],
+        maxBytes: 50 * MIB,
+        aspecto: [
+          { relacion: 1, tolerancia: 0.02 },
+          { relacion: 0.8, tolerancia: 0.02 },
+          { relacion: 1.91, tolerancia: 0.02 },
+        ],
+      })
+    ).toBe(`JPG o MP4 · hasta 50${ESPACIO}MB · proporción 1:1, 4:5 o 1,91:1`)
+    expect(
+      describirReglas({ mimes: ["video/mp4"], maxBytes: MIB, aspecto: [] })
+    ).toBe(`MP4 · hasta 1${ESPACIO}MB`)
+  })
 })
 
 describe("cámara", () => {

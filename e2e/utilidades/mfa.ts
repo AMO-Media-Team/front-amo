@@ -24,6 +24,7 @@ import {
 import type { ClienteSupabase } from "../../scripts/bootstrap/supabase"
 import { PASO_TOTP_SEGUNDOS } from "../../scripts/bootstrap/totp"
 import { type Credenciales, entorno, ingresar } from "./cuentas"
+import { esperarStreaming } from "./prueba"
 
 export interface CredencialesMfa extends Credenciales {
   id: string
@@ -88,6 +89,7 @@ export async function ingresarConMfa(
     .getByLabel("Código de verificación")
     .fill(await codigoNuevo(cuenta.secreto))
   await expect(page).toHaveURL(/\/inicio$/)
+  await esperarStreaming(page)
 }
 
 export type CookiesSesion = Awaited<ReturnType<BrowserContext["cookies"]>>

@@ -4,6 +4,15 @@ import { Building2 } from "lucide-react"
 
 import { EsqueletoTarjetaGrafico } from "@/components/charts/esqueleto-grafico"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { AvisoEmpresa } from "@/features/campanas/components/aviso-empresa"
+import {
+  anticipacionMinimaHoras,
+  campanasActivas,
+  ofertasAbiertasDeEmpresa,
+  situacionEmpresa,
+} from "@/features/campanas/queries"
+import { ofertasPorAtender } from "@/features/campanas/reglas"
+import type { SituacionEmpresa } from "@/features/campanas/tipos"
 import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { serializarFecha } from "@/lib/fechas"
@@ -40,10 +49,15 @@ import {
   facturasPendientes,
   kpisAnunciante,
 } from "../queries"
+import { LIMITE_ATENCION, LIMITE_CAMPANAS_ACTIVAS } from "../operacion"
 import {
   GraficoInversion,
   GraficoPlataformasAnunciante,
 } from "./graficos-anunciante"
+import {
+  CampanasActivasPanel,
+  OfertasPorAtenderPanel,
+} from "./operacion-anunciante"
 import {
   CarteraAnunciante,
   CoberturaAnunciante,
@@ -136,14 +150,73 @@ async function BloqueCartera({ ahora }: { ahora: Date }) {
   )
 }
 
+async function BloqueAtencion({
+  anuncianteId,
+  ahora,
+}: {
+  anuncianteId: string
+  ahora: Date
+}) {
+  const [ofertas, anticipacionHoras] = await Promise.all([
+    ofertasAbiertasDeEmpresa(anuncianteId),
+    anticipacionMinimaHoras(),
+  ])
+  const atenciones = ofertasPorAtender(ofertas, { ahora, anticipacionHoras })
+  return (
+    <OfertasPorAtenderPanel
+      atenciones={atenciones.slice(0, LIMITE_ATENCION)}
+      total={atenciones.length}
+      ahora={ahora}
+    />
+  )
+}
+
+async function BloqueCampanasActivas({
+  anuncianteId,
+  ahora,
+}: {
+  anuncianteId: string
+  ahora: Date
+}) {
+  const { campanas, total } = await campanasActivas(
+    anuncianteId,
+    LIMITE_CAMPANAS_ACTIVAS
+  )
+  return (
+    <CampanasActivasPanel
+      campanas={campanas}
+      total={total}
+      hoy={serializarFecha(ahora)}
+      puedeCrear
+    />
+  )
+}
+
+/**
+ * Estado de la verificación de la empresa. Un fallo al leerlo no tumba el
+ * inicio: sin dato no hay aviso (la ficha de cada campaña lo repite).
+ */
+async function leerSituacionEmpresa(
+  anuncianteId: string
+): Promise<SituacionEmpresa | null> {
+  try {
+    return await situacionEmpresa(anuncianteId)
+  } catch {
+    return null
+  }
+}
+
 const FILA = "grid gap-4 sm:gap-5"
 
 /**
- * Panel del anunciante: su inversión y lo que le devolvió (alcance,
+ * Panel del anunciante: arriba, lo que pide su atención (la verificación de
+ * la empresa si aún falta, las ofertas devueltas o con el plazo encima y sus
+ * campañas activas); después, su inversión y lo que le devolvió (alcance,
  * interacciones, eficiencia), por plataforma y territorio, sus medios
- * destacados y su cartera. Solo ve lo suyo: las RPC filtran a su organización.
+ * destacados y su cartera. Solo ve lo suyo: la RLS y las RPC filtran a su
+ * organización.
  */
-export function PanelAnunciante({
+export async function PanelAnunciante({
   usuario,
   periodo,
   ahora,
@@ -163,9 +236,37 @@ export function PanelAnunciante({
     )
   }
   const conCartera = tieneAlgunPermiso(usuario, ["facturas.ver_propias"])
+  const conCampanas = tieneAlgunPermiso(usuario, ["campanas.gestionar_propias"])
+  const empresa = conCampanas
+    ? await leerSituacionEmpresa(usuario.anuncianteId)
+    : null
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
+      {empresa ? <AvisoEmpresa situacion={empresa} /> : null}
+
+      {conCampanas ? (
+        <div className={cn(FILA, FILA_PRINCIPAL)}>
+          <BloquePanel
+            titulo="Requieren tu atención"
+            esqueleto={<EsqueletoLista filas={3} />}
+          >
+            <BloqueAtencion anuncianteId={usuario.anuncianteId} ahora={ahora} />
+          </BloquePanel>
+          <BloquePanel
+            titulo="Campañas activas"
+            orden={1}
+            className={PRINCIPAL}
+            esqueleto={<EsqueletoLista filas={LIMITE_CAMPANAS_ACTIVAS} />}
+          >
+            <BloqueCampanasActivas
+              anuncianteId={usuario.anuncianteId}
+              ahora={ahora}
+            />
+          </BloquePanel>
+        </div>
+      ) : null}
+
       <BloquePanel
         titulo="Indicadores de tu pauta"
         esqueleto={<EsqueletoTarjetasKpi />}

@@ -6,21 +6,24 @@ import { LimiteErrorTabla } from "@/components/data-table/limite-error-tabla"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { enFrase } from "@/features/cuentas-medio/franjas"
+import { ColaAnunciantes } from "@/features/verificacion-anunciantes/components/cola-anunciantes"
 import {
   ColaSolicitudes,
   EsqueletoColaSolicitudes,
 } from "@/features/vinculacion/components/cola-solicitudes"
 
-import { type AccesoColas, type Cola, COLAS_VERIFICACION } from "../colas"
+import {
+  type AccesoColas,
+  type Cola,
+  COLAS_VERIFICACION,
+  rutaCola,
+  tieneAccesoCola,
+} from "../colas"
 import { MENSAJES_VERIFICACION } from "../errores"
 import { ColaCuentas } from "./cola-cuentas"
 import { ColaDocumentos } from "./cola-documentos"
 import { ColaMedios } from "./cola-medios"
 import { EsqueletoCola } from "./esqueletos"
-
-function tieneAcceso(cola: Cola, acceso: AccesoColas): boolean {
-  return cola === "documentos" ? acceso.verDocumentos : acceso.verificarMedios
-}
 
 function SinAcceso({ cola, acceso }: { cola: Cola; acceso: AccesoColas }) {
   if (cola === "documentos" && acceso.verificarMedios) {
@@ -32,15 +35,34 @@ function SinAcceso({ cola, acceso }: { cola: Cola; acceso: AccesoColas }) {
       />
     )
   }
+  if (cola === "anunciantes") {
+    return (
+      <EstadoVacio
+        icono={LockKeyhole}
+        titulo="Sin acceso a la cola de anunciantes"
+        descripcion="Revisarla exige el permiso de verificar anunciantes."
+      >
+        <EnlaceBoton href={rutaCola("medios")} variant="outline">
+          Ir a la cola de medios
+        </EnlaceBoton>
+      </EstadoVacio>
+    )
+  }
   return (
     <EstadoVacio
       icono={LockKeyhole}
       titulo="Sin acceso a las colas de medios"
-      descripcion="Revisarlas exige el permiso de verificar medios. Los anunciantes se verifican desde su ficha."
+      descripcion="Revisarlas exige el permiso de verificar medios."
     >
-      <EnlaceBoton href={"/operacion/anunciantes" as Route} variant="outline">
-        Ir a Anunciantes
-      </EnlaceBoton>
+      {acceso.verificarAnunciantes ? (
+        <EnlaceBoton href={rutaCola("anunciantes")} variant="outline">
+          Ir a la cola de anunciantes
+        </EnlaceBoton>
+      ) : (
+        <EnlaceBoton href={"/operacion/anunciantes" as Route} variant="outline">
+          Ir a Anunciantes
+        </EnlaceBoton>
+      )}
     </EstadoVacio>
   )
 }
@@ -63,6 +85,8 @@ function Contenido({
       return <ColaDocumentos pagina={pagina} />
     case "solicitudes":
       return <ColaSolicitudes />
+    case "anunciantes":
+      return <ColaAnunciantes pagina={pagina} />
   }
 }
 
@@ -89,7 +113,7 @@ export function ColaActiva({
         </h2>
         <p className="text-sm text-muted-foreground">{descripcion}</p>
       </div>
-      {tieneAcceso(cola, acceso) ? (
+      {tieneAccesoCola(cola, acceso) ? (
         <LimiteErrorTabla recurso={`la cola de ${enFrase(titulo)}`}>
           <Suspense
             key={`${cola}-${pagina}`}

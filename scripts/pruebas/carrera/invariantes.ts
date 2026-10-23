@@ -3,27 +3,10 @@
  * clasificación de los resultados de una ráfaga de `reservar_cupo_srv` y los
  * invariantes que deben cumplir contadores, presupuestos y topes después.
  */
+import { consumeCupo } from "../../bootstrap/pauta-e2e"
 
-/** Estados de asignación que ocupan cupo (`private.estados_con_cupo()`). */
-const ESTADOS_CON_CUPO = new Set([
-  "ACEPTADA",
-  "CONTENIDO_ENTREGADO",
-  "PUBLICADA",
-  "EVIDENCIA_VALIDADA",
-  "METRICAS_CARGADAS",
-  "VERIFICADA",
-  "LIQUIDADA",
-  "PAGADA",
-  "EN_DISPUTA",
-])
-
-/** Réplica de `private.consume_cupo(estado, previo)`. */
-export function consumeCupo(estado: string, previo: string | null): boolean {
-  return (
-    ESTADOS_CON_CUPO.has(estado) &&
-    !(estado === "EN_DISPUTA" && previo === "VENCIDA_SIN_PUBLICAR")
-  )
-}
+/** Réplica de `private.consume_cupo(estado, previo)` (la comparte con las fábricas de la pauta). */
+export { consumeCupo }
 
 /** Error de PostgREST tal como lo entrega supabase-js. */
 export interface ErrorRpc {
@@ -72,6 +55,11 @@ export function resumirRafaga(
     errores,
     deadlocks: errores[CODIGO_DEADLOCK] ?? 0,
   }
+}
+
+/** Cuántas veces salió `codigo` (`AMO_*` o `SQLSTATE_*`) en la ráfaga. */
+export function vecesError(resumen: ResumenRafaga, codigo: string): number {
+  return resumen.errores[codigo] ?? 0
 }
 
 /** Errores que no son ni éxito ni uno de los rechazos esperados del escenario. */

@@ -81,7 +81,7 @@ src/components/{ui,brand,layout,data-table,charts,kpi,maps,feedback,motion,provi
 src/features/<dominio>/{actions.ts,queries.ts,schemas.ts,components/,*.test.ts}
 src/lib/{supabase,auth,geo,export}/  src/lib/{env,format,fechas,result,csp}.ts
 src/types/database.types.ts  # generado desde Supabase (no editar a mano)
-scripts/{geo,brand,db,bootstrap,demo,pruebas}/
+scripts/{geo,brand,db,bootstrap,demo,pruebas,produccion}/
 supabase/{migrations,seed,tests}/   e2e/   docs/
 ```
 
@@ -106,7 +106,8 @@ supabase/{migrations,seed,tests}/   e2e/   docs/
 2. Probarlo en la **base local** (ver «Base local» abajo): `supabase migration up --local` o `pnpm db:local`,
    y `pnpm db:suites local`.
 3. Aplicarlo en **develop** y luego en **producción** con `pnpm db:push <develop|produccion>` (`--dry-run` lista
-   lo pendiente; producción exige `--confirmar-produccion`). Por dentro es
+   lo pendiente; producción exige `--confirmar-produccion`). Antes de producción, respaldo de esquema y datos con
+   `pnpm db:respaldo produccion --etiqueta antes-<migración>` (queda en `context/respaldos/`, 0600, fuera de git). Por dentro es
    `supabase db push --db-url` con la URL del _Session pooler_ de cada proyecto (usuario `postgres.<ref>`,
    contraseña alfanumérica) guardada en `.env.db.<entorno>` (0600, git lo ignora). Así `session_user` es
    `postgres`, como exigen `private.modo_carga()` y las guardas de roles; con `--linked` el CLI entra como
@@ -142,7 +143,31 @@ supabase stop                      # al terminar (conserva los datos); colima st
   superadministrador sin el enlace de confirmación.
 - La base (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) acepta `psql` dentro del contenedor:
   `docker exec -i supabase_db_front-amo psql -U postgres -d postgres`.
-- `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop.
+- `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop. En `config.toml` la pila local admite
+  500 ingresos y 500 verificaciones de código cada 5 minutos por IP (la suite y sus fábricas ingresan cientos de veces);
+  cambiar `[auth.rate_limit]` exige `supabase stop` y volver a `supabase start` (los datos se conservan).
+
+### Producción como entorno de pruebas del cliente
+
+Hasta nueva orden, producción es donde el cliente hace sus pruebas funcionales. `pnpm prod:config-pruebas`
+(`scripts/produccion/configuracion-pruebas.ts`) deja una configuración rotulada para que los flujos se recorran en
+minutos: anticipación mínima de la oferta en 0 h, un solo corte de métricas (`["H24"]`), creativos de hasta 25 MB
+(cuida el 1 GB del plan gratuito) y términos, condiciones y política de datos publicados como versión `0.1-PRUEBA`
+(«VERSIÓN DE PRUEBA», sin valor legal; si el cliente ya publicó un texto propio de un tipo, ese tipo no se toca).
+
+```bash
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas                    # simulación: muestra el plan
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas --aplicar --confirmar-produccion
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas --revertir --confirmar-produccion
+```
+
+- Escribe como servicio con contexto confiable a nombre del superadministrador de `SUPERADMIN_EMAIL`: la bitácora
+  registra cada cambio con ese actor y origen `APP`.
+- Guarda lo que cambia en `context/respaldos/configuracion-pruebas-<ref>.json` (0600, fuera de git). `--revertir`
+  devuelve cada parámetro a su valor anterior solo si sigue con el de prueba. Las versiones legales publicadas son
+  inmutables: las retira la limpieza final, que se construye en la fase 6 y no se ejecuta sin orden de Andrés.
+- Es idempotente y sin argumentos no cambia nada. Sin `AMO_ARCHIVO_ENTORNO` actúa sobre `.env.local` (la base
+  local), útil para probarlo antes.
 
 ## Identidad visual
 
@@ -168,3 +193,15 @@ Geist (UI), Geist Mono / `tabular-nums` (cifras). Detalle completo en `docs/marc
   las teselas) mientras no se añada ese origen al token. Antes de la primera vez: `pnpm bootstrap:e2e` y los datos
   demo (`pnpm demo:generar`). El proyecto `preparacion` guarda las sesiones compartidas en `playwright/.auth/`
   (ignorado por git).
+- Proyectos E2E que escriben, en serie (un worker): `alta-medio` (`onboarding-medio-*`, «Medio Nuevo E2E»), `anunciante`
+  (`anunciante-*`, «Anunciante E2E» y «Anunciante Nuevo E2E») y `pauta-medio` (`pauta-medio-*`, a 390 px, «Medio E2E»). Sus
+  pruebas de solo lectura corren también en escritorio, tablet y móvil. Fábricas: `e2e/utilidades/negocio.ts` (campañas y
+  ofertas con creativo real), `e2e/utilidades/pauta.ts` (aceptar, descargar, evidencia, métricas y validación por el camino
+  real; `restablecerPautaMedioE2E()` en el `beforeAll` de cada `pauta-medio-*`; las campañas de esos specs llevan el prefijo
+  «Pauta E2E» y las de los specs del anunciante, «Seguimiento E2E» con `borrarPautaE2E`). Una asignación que descargó
+  contenido no se puede borrar por la API (`descargas_contenido` es de solo inserción): la limpieza la cancela.
+- `page.goto`, `page.reload` y los ingresos de `e2e/utilidades` esperan a que React revele el contenido que llegó por
+  streaming (`esperarStreaming`): mientras tanto la copia del servidor sigue oculta en `div#S:n` y `getByLabel` o
+  `getByText` la cuentan. Para lo demás, busca por rol o dentro de un contenedor visible (`getByRole("main")`, el formulario).
+- `pnpm pruebas:pauta-e2e` comprueba las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
+  de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia).

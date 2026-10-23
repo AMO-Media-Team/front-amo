@@ -83,7 +83,7 @@ function cargarModuloDeServidor<T>(especificador: string): T {
 }
 
 /** Cifrado de `src/lib/cifrado.ts` con las llaves de `.env.local` (`AMO_CIFRADO_KEY`). */
-function cifradorDelEntorno(): CifradorPago {
+export function cifradorDelEntorno(): CifradorPago {
   const { cifrar, descifrar, huella, enmascarar } = cargarModuloDeServidor<
     typeof ModuloCifrado
   >("../../src/lib/cifrado")
@@ -91,7 +91,7 @@ function cifradorDelEntorno(): CifradorPago {
 }
 
 /** Rutas de Storage de `src/lib/storage/rutas.ts`: las mismas carpetas y nombres que la app. */
-function rutasStorage(): typeof ModuloRutas {
+export function rutasStorage(): typeof ModuloRutas {
   return cargarModuloDeServidor<typeof ModuloRutas>(
     "../../src/lib/storage/rutas"
   )
@@ -100,7 +100,7 @@ function rutasStorage(): typeof ModuloRutas {
 // ── Lecturas de catálogos ────────────────────────────────────────────────────
 
 /** El municipio preferido si está activo (y su departamento); si no, el primero activo. */
-async function municipioActivo(
+export async function municipioActivo(
   servicio: ClienteSupabase,
   preferido: string
 ): Promise<string> {
@@ -263,7 +263,7 @@ async function vaciarMedio(
 }
 
 /** Rutas de todos los archivos bajo `carpeta` (Storage lista un nivel por llamada). */
-async function listarArchivos(
+export async function listarArchivos(
   servicio: ClienteSupabase,
   bucket: string,
   carpeta: string

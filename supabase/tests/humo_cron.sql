@@ -1,7 +1,7 @@
 -- Pruebas de humo de la migración 11 (cron): procedures por lotes (vencer_asignaciones y actualizar_estados con
 -- p_confirmar = false, porque dentro de esta transacción no se puede hacer COMMIT), recordatorios, reverificación,
 -- multiplicadores de calidad (cálculo, aviso y aplicación con amo.reloj), indicadores de medios, retención, purga demo
--- y la agenda de pg_cron (6 jobs con horarios UTC).
+-- y la agenda de pg_cron (6 jobs con horarios UTC; los multiplicadores programados entran a las 00:01 de Bogotá).
 -- Se ejecuta como owner (MCP execute_sql o psql) dentro de una transacción que SIEMPRE se revierte.
 -- Cada prueba deja `true` si pasa o un texto con lo observado si falla.
 begin;
@@ -194,27 +194,36 @@ begin
                                                          and (select estado = 'ACTIVA' from public.campanas where id = c1));
   r := r || jsonb_build_object('b5_factura_vencida', (select estado = 'VENCIDA' from public.facturas where id = f1));
   r := r || jsonb_build_object('b6_documento_vencido', (select estado_validacion = 'VENCIDO' from public.documentos_medio where id = dm1));
+  -- Desde e2_integridad_ejecucion la marca queda aquí y el aviso al medio sale por corte en generar_recordatorios (c5).
   r := r || jsonb_build_object('b7_metricas_atrasadas',
     (select metricas_atrasadas_at = now() from public.asignaciones where id = a3)
-    and exists (select 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas' and usuario_id = u_mea
-                  and entidad_id = a3::text and mensaje like '%D7%'));
+    and not exists (select 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas'));
   r := r || jsonb_build_object('b8_no_toca_lo_vigente',
     (select estado = 'EN_EJECUCION' from public.ofertas where id = o5) and (select estado = 'PUBLICADA' from public.ofertas where id = o_d));
   call private.actualizar_estados(20, false);
   r := r || jsonb_build_object('b9_idempotente',
-    (select count(*) = 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas' and entidad_id = a3::text));
+    private.marcar_metricas_atrasadas(20) = 0
+    and not exists (select 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas'));
 
   -- ── (c) Recordatorios y reverificación ─────────────────────────────────────────────────────────────
   v_n := private.generar_recordatorios();
   r := r || jsonb_build_object('c1_recordatorios',
     v_n >= 3
     and exists (select 1 from public.notificaciones where tipo = 'asignacion.recordatorio_metricas' and usuario_id = u_mea
-                  and entidad_id = a3::text and mensaje like '%corte D7 %')
+                  and entidad_id = a3::text and mensaje like '%métricas de 7 días de «%')
     and exists (select 1 from public.notificaciones where tipo = 'asignacion.recordatorio_publicacion' and usuario_id = u_meb
                   and entidad_id = a2::text)
     and exists (select 1 from public.notificaciones where tipo = 'asignacion.recordatorio_metricas' and usuario_id = u_meb
-                  and entidad_id = a4::text and mensaje like '%corte H24 %'));
-  r := r || jsonb_build_object('c2_recordatorios_sin_duplicar', private.generar_recordatorios() = 0);
+                  and entidad_id = a4::text and mensaje like '%métricas de 24 horas de «%'));
+  -- NOT-005: a3 (D7 cumplido hace 3 días, plazo de 48 h vencido) recibe el aviso de atrasadas de ese corte, con
+  -- prioridad alta; a4 (H24 cumplido hace 1 día) todavía está en plazo.
+  r := r || jsonb_build_object('c5_metricas_atrasadas_por_corte',
+    (select count(*) = 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas' and usuario_id = u_mea
+       and entidad_id = a3::text and prioridad = 2 and mensaje like '%métricas de 7 días de «Oferta Once métricas»%')
+    and exists (select 1 from private.avisos_metricas_atrasadas where asignacion_id = a3 and corte = 'D7')
+    and not exists (select 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas' and entidad_id = a4::text));
+  r := r || jsonb_build_object('c2_recordatorios_sin_duplicar', private.generar_recordatorios() = 0
+    and (select count(*) = 1 from public.notificaciones where tipo = 'asignacion.metricas_atrasadas' and entidad_id = a3::text));
   v_n := private.revisar_reverificacion();
   r := r || jsonb_build_object('c3_reverificacion',
     v_n >= 2
@@ -231,10 +240,15 @@ begin
     and (select multiplicador_proximo = 1.333 and multiplicador_calidad = 1.000 and alcance_mediano = 10000
                 and publicaciones_verificadas_count = 1 and indice_calidad = 0.222222
                 and multiplicador_proximo_desde = private.inicio_dia(private.hoy() + 7)
+                and indice_franja = 0.166667
          from public.cuentas_sociales where id = cu_a)
-    and (select multiplicador_proximo = 0.700 from public.cuentas_sociales where id = cu_b)
+    and (select multiplicador_proximo = 0.700 and indice_franja = 0.166667 from public.cuentas_sociales where id = cu_b)
+    -- PRC-004: el aviso explica el índice frente a la mediana de la franja, en formato es-CO.
     and exists (select 1 from public.notificaciones where tipo = 'multiplicador.cambio_programado' and usuario_id = u_mea
-                  and mensaje like '%1.000 a 1.333%'));
+                  and mensaje = format('Desde el %s, el multiplicador de calidad de @humo11_a pasará de 1,00 a 1,333. '
+                                       'Se calcula con tus últimas 1 publicaciones verificadas: tu índice de alcance es '
+                                       '0,2222 y la mediana de tu franja es 0,1667.',
+                                       to_char(private.hoy() + 7, 'DD/MM/YYYY'))));
   r := r || jsonb_build_object('d2_no_reanuncia', private.recalcular_multiplicadores() = 0
     and (select count(*) = 1 from public.notificaciones where tipo = 'multiplicador.cambio_programado' and usuario_id = u_mea));
   r := r || jsonb_build_object('d3_no_aplica_antes', private.aplicar_multiplicadores_programados() = 0);
@@ -291,7 +305,7 @@ begin
   select jsonb_object_agg(j.jobname, j.schedule) into v_j from cron.job j where j.jobname like 'amo\_%';
   r := r || jsonb_build_object('f1_agenda_utc',
     v_j = '{"amo_vencer_asignaciones": "*/15 * * * *", "amo_actualizar_estados": "5-59/15 * * * *",
-            "amo_recordatorios": "20 * * * *", "amo_indicadores_medios": "0 8 * * *",
+            "amo_recordatorios": "20 * * * *", "amo_indicadores_medios": "1 5 * * *",
             "amo_recalcular_multiplicadores": "30 8 * * 1", "amo_retencion": "0 9 * * *"}'::jsonb
     and (select bool_and(j.username = 'postgres' and j.active) from cron.job j where j.jobname like 'amo\_%'));
   r := r || jsonb_build_object('f2_sin_execute_api',

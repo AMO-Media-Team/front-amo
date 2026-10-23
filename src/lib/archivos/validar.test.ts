@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest"
 
 import { MIB } from "./formato"
 import {
+  cumpleAlgunAspecto,
   cumpleAspecto,
+  describirAspectos,
   describirRelacion,
   ejemploMedidas,
   evaluarArchivo,
   type LectoresArchivo,
+  reglasDeAspecto,
   type ReglasArchivo,
   validarArchivo,
 } from "./validar"
@@ -50,6 +53,109 @@ describe("describirRelacion", () => {
     expect(cumpleAspecto({ ancho: 1080, alto: 1900 }, regla)).toBe(true)
     expect(cumpleAspecto({ ancho: 1080, alto: 1350 }, regla)).toBe(false)
     expect(cumpleAspecto({ ancho: 0, alto: 1920 }, regla)).toBe(false)
+  })
+})
+
+const POST_FEED: ReglasArchivo = {
+  mimes: ["image/jpeg", "image/png", "video/mp4"],
+  maxBytes: 50 * MIB,
+  aspecto: [
+    { relacion: 1, tolerancia: 0.02 },
+    { relacion: 0.8, tolerancia: 0.02 },
+    { relacion: 1.91, tolerancia: 0.02 },
+  ],
+}
+
+describe("varias proporciones", () => {
+  it("normaliza una regla o varias a una lista", () => {
+    expect(reglasDeAspecto(undefined)).toEqual([])
+    expect(reglasDeAspecto({ relacion: 1, tolerancia: 0 })).toEqual([
+      { relacion: 1, tolerancia: 0 },
+    ])
+    expect(reglasDeAspecto(POST_FEED.aspecto)).toHaveLength(3)
+  })
+
+  it("basta con cumplir una; sin reglas vale cualquiera", () => {
+    const reglas = reglasDeAspecto(POST_FEED.aspecto)
+    expect(cumpleAlgunAspecto({ ancho: 1080, alto: 1350 }, reglas)).toBe(true)
+    expect(cumpleAlgunAspecto({ ancho: 1910, alto: 1000 }, reglas)).toBe(true)
+    expect(cumpleAlgunAspecto({ ancho: 1080, alto: 1920 }, reglas)).toBe(false)
+    expect(cumpleAlgunAspecto({ ancho: 1, alto: 9 }, [])).toBe(true)
+  })
+
+  it("las describe con la orientación en el género de la pieza", () => {
+    const reglas = reglasDeAspecto(POST_FEED.aspecto)
+    expect(describirAspectos(reglas)).toBe(
+      "cuadrado 1:1, vertical 4:5 u horizontal 1,91:1"
+    )
+    expect(describirAspectos(reglas, "femenino")).toBe(
+      "cuadrada 1:1, vertical 4:5 u horizontal 1,91:1"
+    )
+  })
+
+  it("rechaza con todas las admitidas y la medida del archivo", () => {
+    expect(
+      evaluarArchivo(
+        {
+          nombre: "historia.png",
+          tipo: "image/png",
+          tamano: MIB,
+          dimensiones: { ancho: 1080, alto: 1920 },
+        },
+        POST_FEED
+      )
+    ).toEqual({
+      ok: false,
+      motivo: "aspecto",
+      mensaje:
+        "Debe ser cuadrado 1:1, vertical 4:5 u horizontal 1,91:1; este archivo mide 1080 × 1920 px.",
+    })
+  })
+})
+
+describe("rechazo con el nombre de la pieza", () => {
+  const REEL: ReglasArchivo = {
+    mimes: ["video/mp4"],
+    maxBytes: 50 * MIB,
+    aspecto: [{ relacion: 9 / 16, tolerancia: 0.02 }],
+    pieza: "Un reel",
+  }
+
+  it("dice qué necesita el reel y qué es el video", () => {
+    expect(
+      evaluarArchivo(
+        {
+          nombre: "horizontal.mp4",
+          tipo: "video/mp4",
+          tamano: MIB,
+          dimensiones: { ancho: 1920, alto: 1080 },
+        },
+        REEL
+      )
+    ).toEqual({
+      ok: false,
+      motivo: "aspecto",
+      mensaje:
+        "Un reel necesita video vertical 9:16 (por ejemplo, 1080 × 1920 px); el tuyo es horizontal 16:9 (1920 × 1080 px).",
+    })
+  })
+
+  it("concuerda en femenino con una imagen y lista varias proporciones", () => {
+    expect(
+      evaluarArchivo(
+        {
+          nombre: "foto.jpg",
+          tipo: "image/jpeg",
+          tamano: MIB,
+          dimensiones: { ancho: 1080, alto: 1920 },
+        },
+        { ...POST_FEED, pieza: "Un post de feed" }
+      )
+    ).toMatchObject({
+      motivo: "aspecto",
+      mensaje:
+        "Un post de feed necesita imagen cuadrada 1:1, vertical 4:5 u horizontal 1,91:1; la tuya es vertical 9:16 (1080 × 1920 px).",
+    })
   })
 })
 
@@ -134,6 +240,23 @@ describe("evaluarArchivo", () => {
     })
   })
 
+  it("compara la duración con dos decimales, como la BD", () => {
+    const video = {
+      nombre: "historia.mp4",
+      tipo: "video/mp4",
+      tamano: MIB,
+      dimensiones: { ancho: 1080, alto: 1920 },
+    }
+    expect(evaluarArchivo({ ...video, duracionSeg: 60.004 }, HISTORIA).ok).toBe(
+      true
+    )
+    expect(evaluarArchivo({ ...video, duracionSeg: 60.4 }, HISTORIA)).toEqual({
+      ok: false,
+      motivo: "duracion",
+      mensaje: `El video dura 60,4${ESPACIO}s y el máximo es 1${ESPACIO}min.`,
+    })
+  })
+
   it("no exige proporción a un PDF ni duración a una imagen", () => {
     const reglas: ReglasArchivo = {
       mimes: ["application/pdf", "image/jpeg"],
@@ -205,6 +328,55 @@ describe("validarArchivo", () => {
       dimensiones: { ancho: 1080, alto: 1920 },
       duracionSeg: 42.5,
     })
+  })
+
+  it("con medidas obligatorias lee dimensiones y duración aunque no haya reglas", async () => {
+    const lector = lectores({ ancho: 1920, alto: 1080 }, 12)
+    const reglas: ReglasArchivo = {
+      mimes: ["video/mp4", "image/png"],
+      maxBytes: 50 * MIB,
+      medidasObligatorias: true,
+    }
+    await expect(
+      validarArchivo(
+        new File(["x"], "clip.mp4", { type: "video/mp4" }),
+        reglas,
+        lector
+      )
+    ).resolves.toEqual({
+      ok: true,
+      tipo: "video/mp4",
+      dimensiones: { ancho: 1920, alto: 1080 },
+      duracionSeg: 12,
+    })
+    expect(lector.leerDuracionVideo).toHaveBeenCalledOnce()
+
+    const imagen = lectores({ ancho: 800, alto: 600 })
+    await validarArchivo(
+      new File(["x"], "a.png", { type: "image/png" }),
+      reglas,
+      imagen
+    )
+    expect(imagen.leerDimensiones).toHaveBeenCalledOnce()
+    expect(imagen.leerDuracionVideo).not.toHaveBeenCalled()
+  })
+
+  it("con medidas obligatorias rechaza un video sin duración legible", async () => {
+    const lector: LectoresArchivo = {
+      leerDimensiones: vi.fn().mockResolvedValue({ ancho: 1080, alto: 1920 }),
+      leerDuracionVideo: vi.fn().mockRejectedValue(new Error("sin duración")),
+    }
+    await expect(
+      validarArchivo(
+        new File(["x"], "clip.mov", { type: "video/quicktime" }),
+        {
+          mimes: ["video/quicktime"],
+          maxBytes: MIB,
+          medidasObligatorias: true,
+        },
+        lector
+      )
+    ).resolves.toMatchObject({ ok: false, motivo: "ilegible" })
   })
 
   it("informa un archivo ilegible si el navegador no puede leerlo", async () => {

@@ -68,12 +68,16 @@ test.describe("equipo interno", () => {
 test.describe("anunciante", () => {
   test.use({ storageState: sesion("anunciante") })
 
-  test("su menú solo ofrece Inicio y Reportes", async ({ page }, info) => {
+  test("su menú ofrece Inicio, Reportes y su negocio, nada interno", async ({
+    page,
+  }, info) => {
     await page.goto(PARTIDA)
     const principal = await abrirMenuPrincipal(page, info.project.name)
     await expect(principal.getByRole("listitem").getByRole("link")).toHaveText([
       "Inicio",
       "Reportes",
+      "Mis campañas",
+      "Mi empresa",
     ])
   })
 })

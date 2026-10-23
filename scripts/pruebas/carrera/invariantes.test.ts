@@ -10,6 +10,7 @@ import {
   type OfertaFila,
   resumirRafaga,
   sessionIdDeToken,
+  vecesError,
   verificarInvariantes,
 } from "./invariantes"
 
@@ -97,6 +98,8 @@ describe("resumirRafaga", () => {
     expect(erroresInesperados(resumen, ["AMO_SIN_CUPO"])).toEqual([
       "SQLSTATE_40P01",
     ])
+    expect(vecesError(resumen, "AMO_SIN_CUPO")).toBe(1)
+    expect(vecesError(resumen, "AMO_IDEMPOTENCIA_INVALIDA")).toBe(0)
   })
 
   it("distingue los errores de negocio del resto por SQLSTATE", () => {

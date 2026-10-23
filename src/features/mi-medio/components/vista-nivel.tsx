@@ -39,7 +39,8 @@ import { notaRequisito, SITUACIONES_DOCUMENTO } from "../presentacion"
 import { DOCUMENTO_FACULTATIVO, type EstadoRequisito } from "../requisitos"
 import type { ConsumoTope, NivelVerificacion, ResumenMiMedio } from "../tipos"
 
-const ID_CAMINO = "subir-de-nivel"
+/** Ancla de «Cómo subir de nivel» (el inicio del medio enlaza aquí). */
+export const ID_SUBIR_DE_NIVEL = "subir-de-nivel"
 const TARJETA = "rounded-2xl"
 
 /** «tope de $30 M al año» o «sin tope anual» (en minúscula, para frases). */
@@ -270,7 +271,7 @@ function CaminoNivel({
     : `Cómo subir al nivel ${nivel.nivel}`
   return (
     <section
-      id={ID_CAMINO}
+      id={ID_SUBIR_DE_NIVEL}
       aria-labelledby={idTitulo}
       className="flex scroll-mt-24 flex-col gap-5 rounded-2xl border bg-card p-4 sm:p-6"
     >
@@ -498,7 +499,7 @@ export function VistaNivel({
             {vista.objetivo ? (
               <>
                 {" "}
-                <a href={`#${ID_CAMINO}`}>Mira cómo subir de nivel</a>.
+                <a href={`#${ID_SUBIR_DE_NIVEL}`}>Mira cómo subir de nivel</a>.
               </>
             ) : null}
           </AlertDescription>

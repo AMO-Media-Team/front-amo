@@ -73,6 +73,27 @@ describe("pngDeMuestra", () => {
     expect(() => pngDeMuestra(0, 5, fondo, franja)).toThrow(RangeError)
     expect(() => pngDeMuestra(10, 2.5, fondo, franja)).toThrow(RangeError)
   })
+
+  it("con bytesMinimos agrega un bloque auxiliar privado antes de IEND", () => {
+    const pesado = pngDeMuestra(10, 5, fondo, franja, { bytesMinimos: 5000 })
+    expect(pesado.length).toBe(5000)
+    const bloques = leerBloques(pesado)
+    expect(bloques.map((bloque) => bloque.tipo)).toEqual([
+      "IHDR",
+      "IDAT",
+      "amOe",
+      "IEND",
+    ])
+    expect(bloques.every((bloque) => bloque.crcValido)).toBe(true)
+    // Minúscula en la 1.ª letra: auxiliar (los lectores lo ignoran); en la 2.ª: privado.
+    expect(bloques[2].tipo[0]).toBe("a")
+    // La imagen no cambia.
+    expect(bloques[1].datos.equals(leerBloques(png)[1].datos)).toBe(true)
+    // Sin bytesMinimos (o si ya pesa más), no hay relleno.
+    expect(pngDeMuestra(10, 5, fondo, franja, { bytesMinimos: 10 })).toEqual(
+      png
+    )
+  })
 })
 
 describe("escaparTextoPdf", () => {

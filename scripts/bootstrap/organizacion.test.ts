@@ -26,6 +26,17 @@ describe("organizacionDe", () => {
     })
   })
 
+  it("el anunciante con empresa propia queda en ella y en nada más", () => {
+    const empresa = "e2e00000-0000-4000-8000-00000000a002"
+    expect(
+      organizacionDe({
+        rol: "ANUNCIANTE",
+        anuncianteId: empresa,
+        medioId: MEDIO,
+      })
+    ).toEqual({ anunciante_id: empresa, medio_id: null })
+  })
+
   it("el medio queda vinculado al medio indicado y a nada más", () => {
     expect(organizacionDe({ rol: "MEDIO", medioId: MEDIO })).toEqual({
       anunciante_id: null,

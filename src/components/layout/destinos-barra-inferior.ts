@@ -11,6 +11,7 @@ export const MAXIMO_DESTINOS_BARRA = 4
 
 /** Títulos cortos: la etiqueta de la pestaña tiene una sola línea. */
 const TITULOS_CORTOS: Readonly<Record<string, string>> = {
+  "campanas-medio": "Campañas",
   notificaciones: "Avisos",
   perfil: "Perfil",
 }

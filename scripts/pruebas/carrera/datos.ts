@@ -1,11 +1,32 @@
 /**
  * Datos de la prueba de carrera, creados por las vías normales (inserciones
  * con la secret key + `transicionar_srv` con el operador): anunciante
- * verificado, medios de nivel 1 con una cuenta de Instagram vigente en la
- * franja F1, y campañas activas con ofertas publicadas. Todo es `es_demo` y
- * lleva el identificador de la corrida en el nombre para poder limpiarlo.
+ * verificado (con su RUT y su Cámara de Comercio aprobados), medios de nivel 1
+ * con una cuenta de Instagram vigente en la franja F1, y campañas activas con
+ * ofertas publicadas cuyo creativo es un archivo real en Storage (la BD exige
+ * el objeto, su SHA-256 y sus medidas). Todo es `es_demo` y lleva el
+ * identificador de la corrida en el nombre para poder limpiarlo.
  */
+import { randomInt } from "node:crypto"
+
+import {
+  contextoCifrado,
+  type CuentaPago,
+  serializarCuentaPago,
+} from "../../../src/features/mi-medio/datos-pago"
+import { digitoVerificacion } from "../../../src/lib/colombia/nit"
 import type { Json } from "../../../src/types/database.types"
+import { DOCUMENTOS_EXIGIDOS_CO } from "../../bootstrap/anunciantes-e2e"
+import {
+  type ArchivoPrueba,
+  huellaSha256,
+  imagenPrueba,
+  pdfPrueba,
+} from "../../bootstrap/archivos-e2e"
+import {
+  cifradorDelEntorno,
+  rutasStorage,
+} from "../../bootstrap/aprovisionar-medios"
 import type { ClienteSupabase } from "../../bootstrap/supabase"
 import type { Actor } from "./cuentas"
 
@@ -19,6 +40,10 @@ const DOCUMENTOS_NIVEL_1 = [
   "CERT_BANCARIA",
 ] as const
 const DIA_MS = 86_400_000
+/** Prefijo de los NIT de la carrera: los datos demo usan 90 y 99, las pruebas E2E 87 y 999. */
+const PREFIJO_NIT = "86"
+/** Pieza del post de feed (1:1, como lo exige el formato). */
+const LADO_PIEZA = 1080
 
 /** Ids creados en esta corrida (la limpieza los borra en orden inverso de dependencias). */
 export interface Registro {
@@ -127,18 +152,77 @@ export async function leerCatalogo(
   }
 }
 
+/**
+ * Sube `archivo` a la ruta que construye la app y registra su fila. Si
+ * `registrar` falla, borra el objeto: no quedan huérfanos en Storage.
+ */
+async function conObjetoSubido<T>(
+  prep: Preparacion,
+  destino: { bucket: string; ruta: string },
+  archivo: ArchivoPrueba,
+  registrar: () => Promise<T>
+): Promise<T> {
+  const almacen = prep.servicio.storage.from(destino.bucket)
+  const { error } = await almacen.upload(destino.ruta, archivo.buffer, {
+    contentType: archivo.mimeType,
+    upsert: false,
+  })
+  if (error) fallar(`subir ${destino.ruta}`, error)
+  try {
+    return await registrar()
+  } catch (falla) {
+    await almacen.remove([destino.ruta])
+    throw falla
+  }
+}
+
+/** RUT y Cámara de Comercio en PDF (objetos reales), aprobados por el operador. */
+async function aprobarDocumentosAnunciante(
+  prep: Preparacion,
+  anuncianteId: string
+): Promise<void> {
+  const rutas = rutasStorage()
+  for (const tipo of DOCUMENTOS_EXIGIDOS_CO) {
+    const archivo = pdfPrueba({ titulo: `${tipo} · carrera ${prep.corrida}` })
+    const destino = rutas.nuevaRuta(
+      rutas.carpetaDocumentoAnunciante(anuncianteId, tipo),
+      archivo.mimeType
+    )
+    const documentoId = await conObjetoSubido(
+      prep,
+      destino,
+      archivo,
+      async () => {
+        const { data, error } = await prep.servicio
+          .from("documentos_anunciante")
+          .insert({
+            anunciante_id: anuncianteId,
+            tipo,
+            archivo_path: destino.ruta,
+          })
+          .select("id")
+          .single()
+        if (error) fallar(`documento ${tipo} del anunciante`, error)
+        return data.id
+      }
+    )
+    await transicionar(prep, "documentos_anunciante", documentoId, "APROBADO")
+  }
+}
+
 export async function crearAnunciante(
   prep: Preparacion,
   catalogo: Catalogo
 ): Promise<string> {
-  const nit = String(900_000_000 + Math.floor(Math.random() * 99_999_999))
+  // NIT de 10 dígitos con su DV: el trigger de identificación rechaza uno errado.
+  const nit = `${PREFIJO_NIT}${String(randomInt(100_000_000)).padStart(8, "0")}`
   const { data, error } = await prep.servicio
     .from("anunciantes")
     .insert({
       razon_social: `${PREFIJO_NOMBRE}${prep.corrida} SAS`,
       nombre_comercial: `${PREFIJO_NOMBRE}${prep.corrida}`,
       nit,
-      digito_verificacion: "7",
+      digito_verificacion: digitoVerificacion(nit),
       sector_id: catalogo.sectorId,
       pais_iso2: "CO",
       municipio_codigo: MUNICIPIO,
@@ -148,6 +232,8 @@ export async function crearAnunciante(
     .single()
   if (error) fallar("anunciante", error)
   prep.registro.anunciantes.push(data.id)
+  // Verificar exige el RUT y la Cámara de Comercio aprobados y vigentes.
+  await aprobarDocumentosAnunciante(prep, data.id)
   await transicionar(prep, "anunciantes", data.id, "VERIFICADO")
   return data.id
 }
@@ -218,6 +304,29 @@ async function verificarCuenta(
   return cuenta.data.id
 }
 
+/**
+ * Datos de pago completos (la BD exige método, cuenta cifrada y resumen
+ * juntos), con el contrato de «Mi medio»: la cuenta va cifrada con las llaves
+ * de `.env.local` y su contexto, como la guarda la app.
+ */
+function datosPago(medioId: string, indice: number) {
+  const cifrador = cifradorDelEntorno()
+  const cuenta: CuentaPago = {
+    metodo: "BANCARIO",
+    banco: "Bancolombia",
+    tipoCuenta: "AHORROS",
+    numero: `409${String(indice).padStart(8, "0")}`,
+  }
+  return {
+    metodo_pago: cuenta.metodo,
+    datos_pago_cifrados: cifrador.cifrar(
+      serializarCuentaPago(cuenta),
+      contextoCifrado(medioId, "datos_pago_cifrados")
+    ),
+    datos_pago_resumen: cifrador.enmascarar(cuenta.numero, cuenta.banco),
+  }
+}
+
 /** Medio VERIFICADO de nivel 1 en Bogotá con una cuenta vigente (elegible para toda oferta sin segmentación). */
 export async function crearMedio(
   prep: Preparacion,
@@ -238,7 +347,7 @@ export async function crearMedio(
   prep.registro.medios.push(medioId)
   const privado = await prep.servicio
     .from("medios_privado")
-    .insert({ medio_id: medioId, metodo_pago: "BANCARIO" })
+    .insert({ medio_id: medioId, ...datosPago(medioId, indice) })
   if (privado.error) fallar(`datos privados del medio ${indice}`, privado.error)
   await aprobarDocumentos(prep, medioId)
   const cuentaId = await verificarCuenta(prep, medioId, indice)
@@ -286,6 +395,11 @@ export interface OpcionesOferta {
   multiplesCupos?: boolean
 }
 
+/**
+ * Creativo IMAGEN con una pieza PNG 1:1 real: el objeto se sube a Storage y la
+ * fila declara su tamaño, SHA-256 y medidas (`fn_creativo_archivos_validar`
+ * los revalida contra el formato y el objeto).
+ */
 async function cargarCreativo(
   prep: Preparacion,
   ofertaId: string
@@ -300,14 +414,26 @@ async function cargarCreativo(
     .select("id")
     .single()
   if (creativo.error) fallar(`creativo de ${ofertaId}`, creativo.error)
-  const archivo = await prep.servicio.from("creativo_archivos").insert({
-    creativo_id: creativo.data.id,
-    archivo_path: `oferta/${ofertaId}/${creativo.data.id}/pieza.png`,
-    mime: "image/png",
-    tamano_bytes: 1024,
+  const pieza = imagenPrueba({ ancho: LADO_PIEZA, alto: LADO_PIEZA })
+  const rutas = rutasStorage()
+  const destino = rutas.nuevaRuta(
+    rutas.carpetaCreativo(ofertaId, creativo.data.id),
+    pieza.mimeType
+  )
+  await conObjetoSubido(prep, destino, pieza, async () => {
+    const archivo = await prep.servicio.from("creativo_archivos").insert({
+      creativo_id: creativo.data.id,
+      archivo_path: destino.ruta,
+      mime: pieza.mimeType,
+      tamano_bytes: pieza.buffer.length,
+      ancho: LADO_PIEZA,
+      alto: LADO_PIEZA,
+      sha256: huellaSha256(pieza),
+    })
+    if (archivo.error) {
+      fallar(`archivo del creativo de ${ofertaId}`, archivo.error)
+    }
   })
-  if (archivo.error)
-    fallar(`archivo del creativo de ${ofertaId}`, archivo.error)
 }
 
 /** Oferta PUBLICADA sin segmentación, con todos sus cupos en F1 y la ventana dentro de 3 días. */

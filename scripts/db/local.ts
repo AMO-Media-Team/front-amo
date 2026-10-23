@@ -115,6 +115,9 @@ async function main(): Promise<void> {
       for (const archivo of [...definiciones, ...pasos]) {
         await ejecutarSql(sql, archivo)
       }
+      // Estadísticas recién cargadas: sin ellas el planificador no usa los
+      // índices que comprueba `humo_bitacora_indice.sql`.
+      await sql`analyze`
     }
   } finally {
     await sql.end()

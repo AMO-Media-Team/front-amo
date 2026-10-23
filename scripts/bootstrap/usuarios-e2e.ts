@@ -6,9 +6,15 @@
  * - ANUNCIANTE con cambio de contraseña obligatorio.
  * - MEDIO del «Medio E2E»: VERIFICADO nivel 1, con una cuenta de Instagram
  *   verificada (40.000 seguidores), datos de pago cifrados y los documentos
- *   del nivel aprobados y vigentes (`aprovisionar-medios.ts`).
+ *   del nivel aprobados y vigentes (`aprovisionar-medios.ts`), y sin la pauta
+ *   de corridas anteriores (`fabricas-pauta.ts`).
  * - MEDIO del «Medio Nuevo E2E»: PENDIENTE recién registrado, sin cuentas,
  *   documentos ni pago. Cada corrida lo reinicia a ese estado.
+ * - ANUNCIANTE (y la del cambio obligatorio) del «Anunciante E2E»: VERIFICADO
+ *   con el RUT y la Cámara de Comercio aprobados y vigentes
+ *   (`aprovisionar-anunciantes.ts`).
+ * - ANUNCIANTE del «Anunciante Nuevo E2E»: PENDIENTE en Colombia, con NIT
+ *   válido y sin documentos ni campañas. Cada corrida lo reinicia.
  *
  * Las cuentas externas aceptan los términos vigentes (si el cliente ya los
  * publicó), para que la compuerta de términos no cambie a dónde llegan.
@@ -20,13 +26,20 @@
  */
 import { readFileSync, writeFileSync } from "node:fs"
 
+import { describirAccionAnuncianteNuevo } from "./anunciantes-e2e"
+import {
+  completarAnuncianteVerificado,
+  prepararAnunciantesBase,
+} from "./aprovisionar-anunciantes"
 import {
   completarMedioVerificado,
   prepararMediosBase,
 } from "./aprovisionar-medios"
 import { agregarVariables } from "./archivo-env"
 import { generarContrasena } from "./contrasena"
-import { describirAccionMedioNuevo } from "./medios-e2e"
+import { restablecerPautaMedio } from "./fabricas-pauta"
+import { describirAccionMedioNuevo, MEDIO_E2E_ID } from "./medios-e2e"
+import { describirLimpieza } from "./pauta-e2e"
 import {
   asegurarTotp,
   clienteComoSuperadmin,
@@ -60,8 +73,9 @@ interface CuentaLista {
 
 /**
  * Lo que la cuenta necesita además de su perfil: los términos vigentes
- * aceptados (cuentas externas) y, para el Medio E2E, que su medio esté
- * verificado. Devuelve lo que hizo, en palabras, para el registro.
+ * aceptados (cuentas externas) y, para el Medio E2E y el Anunciante E2E, que
+ * su organización esté verificada. Devuelve lo que hizo, en palabras, para el
+ * registro.
  */
 async function completarCuenta(
   entorno: EntornoBootstrap,
@@ -81,6 +95,28 @@ async function completarCuenta(
   }
   if (cuenta.clave === "MEDIO") {
     hechos.push(...(await completarMedioVerificado(entorno, servicio, lista)))
+    // Sin la pauta de corridas anteriores: ni asignaciones ni campañas «Pauta E2E…».
+    const pauta = await restablecerPautaMedio(entorno, servicio, {
+      id: MEDIO_E2E_ID,
+      credenciales: lista,
+    })
+    if (
+      pauta.asignaciones + pauta.campanas + pauta.archivadas > 0 ||
+      pauta.plan.liberar.length > 0
+    ) {
+      hechos.push(
+        describirLimpieza({
+          plan: pauta.plan,
+          campanasBorradas: pauta.campanas,
+          campanasArchivadas: pauta.archivadas,
+        })
+      )
+    }
+  }
+  if (cuenta.clave === "ANUNCIANTE") {
+    hechos.push(
+      ...(await completarAnuncianteVerificado(entorno, servicio, lista))
+    )
   }
   return hechos
 }
@@ -96,12 +132,20 @@ async function main(): Promise<void> {
   informar(`Cuentas E2E en ${describirProyecto(entorno)}`)
   const variables: Record<string, string> = {}
 
-  // Antes que las cuentas: un perfil MEDIO activo exige su medio.
+  // Antes que las cuentas: un perfil MEDIO o ANUNCIANTE activo exige su
+  // organización.
   const accionNuevo = await prepararMediosBase(
     servicio,
     emailDe(cuentaE2E("MEDIO_NUEVO"))
   )
   informar(`✓ Medio Nuevo E2E: ${describirAccionMedioNuevo(accionNuevo)}`)
+  const accionAnunciante = await prepararAnunciantesBase(
+    servicio,
+    emailDe(cuentaE2E("ANUNCIANTE_NUEVO"))
+  )
+  informar(
+    `✓ Anunciante Nuevo E2E: ${describirAccionAnuncianteNuevo(accionAnunciante)}`
+  )
 
   for (const cuenta of CUENTAS_E2E) {
     const email = emailDe(cuenta)
