@@ -1,11 +1,13 @@
 -- Pruebas de humo de 20261023171316_e3_validacion (fase 4): validación atómica de evidencias con plazo de recarga
 -- (ADM-007), validación de métricas con alertas, constancia y corrección auditada (ADM-008), alertas por cuenta y por
--- impresiones, persistentes e invisibles para medio y anunciante (INT-003, INT-004), verificación como puerta a pago y
--- constancia manual de permanencia (ADM-009, INT-006), cancelación con causa y suspensión atómica (ADM-010), colas del
--- equipo, suspensión y reactivación del medio con lo que tiene en curso (ADM-002, D73), disputas de cada parte y reclamo
--- de una vencida sin cupo (ADM-011), hilo con su parte, notas internas y avisos, y resolución con cada destino:
--- restaurar, verificar, reabrir la vencida con cupo y plazo, cancelar con causa y descartar (ADM-012), métricas durante
--- la disputa (D72), oferta que no cierra mientras una vencida pueda reclamarse (D70) y configuración nueva (D74).
+-- impresiones, persistentes en cada edición (la previa sube en la cola y exige constancia) e invisibles para medio y
+-- anunciante (INT-003, INT-004), verificación como puerta a pago y constancia manual de permanencia (ADM-009, INT-006),
+-- cancelación con causa y suspensión atómica (ADM-010), colas del equipo, suspensión y reactivación del medio con lo que
+-- tiene en curso (ADM-002, D73), disputas de cada parte y reclamo de una vencida sin cupo (ADM-011), hilo con su parte,
+-- notas internas y avisos, y resolución con cada destino: restaurar, verificar, reabrir la vencida con cupo y plazo,
+-- cancelar con causa y descartar (ADM-012), métricas durante la disputa (D72: se aprueban; la evidencia y el rechazo con
+-- todo cargado esperan la resolución), oferta que no cierra mientras una vencida pueda reclamarse (D70) y configuración
+-- nueva (D74).
 -- Se ejecuta como owner (pnpm db:suites) en una transacción que SIEMPRE se revierte. Fija la configuración que usa
 -- (umbral de 30.000, factor 3, historial mínimo 5, múltiplo 2 en Instagram, plazos de 24, 48 y 72 h…) y aísla la
 -- elegibilidad con una categoría propia: no depende de los datos demo (las colas también listan lo de la demo, así que
@@ -145,7 +147,7 @@ declare
   a_pg constant uuid := '00000000-0000-4000-9000-0000000f4308';   -- PAGADA
   a_d3 constant uuid := '00000000-0000-4000-9000-0000000f4309';   -- medio D, VERIFICADA (se liquida suspendido)
   a_d4 constant uuid := '00000000-0000-4000-9000-0000000f4310';   -- medio D, METRICAS_CARGADAS (no se liquida)
-  c_adm text; c_ope text; c_fin text; c_an text; c_ao text; c_ma text; c_mb text; c_mc text; c_md text;
+  c_adm text; c_ope text; c_fin text; c_an text; c_ao text; c_ma text; c_mb text; c_mc text; c_md text; c_gs text;
   v_mun char(5) := (select m.codigo from public.municipios m join public.departamentos d on d.codigo = m.departamento_codigo
                     where m.activo and d.activo order by m.codigo limit 1);
   v_sector uuid := (select id from public.sectores order by nombre limit 1);
@@ -325,6 +327,7 @@ begin
   c_mb := jsonb_build_object('sub', u_mb, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_mb)::text;
   c_mc := jsonb_build_object('sub', u_mc, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_mc)::text;
   c_md := jsonb_build_object('sub', u_md, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_md)::text;
+  c_gs := jsonb_build_object('sub', u_gs, 'role', 'authenticated', 'aal', 'aal2', 'session_id', s_gs)::text;
 
   -- Reservas, descargas y evidencias por el camino real (T). Las publicaciones se declaran en el pasado (D63): sus
   -- cortes ya se cumplieron. a_cs, a_vc, a_vz y a_vx se quedan ACEPTADA; a_d2 descarga y no publica.
@@ -825,6 +828,19 @@ begin
               and (v_j ->> 'metricas_fuera')::integer = 0 and v_j ->> 'verificar' = v_j ->> 'verificar_esperado'
               and (v_j ->> 'verificar_limite_0')::integer = 1 and (v_j ->> 'tope')::boolean
          then 'true'::jsonb else v_j end);
+  -- Lo que la interfaz muestra sin otra consulta: etiqueta declarada y formato en evidencias; oferta y formato en métricas.
+  v_j := pg_temp.como(c_ope, 'authenticated', format('
+    select jsonb_build_object(
+      ''evidencia'', (select jsonb_build_object(''etiqueta'', c.etiqueta_declarada, ''clave'', c.formato_clave,
+                                                ''nombre'', c.formato_nombre)
+                      from public.cola_evidencias(200, 0) c where c.publicacion_id = %L),
+      ''metrica'', (select jsonb_build_object(''oferta'', c.oferta_id, ''clave'', c.formato_clave, ''nombre'', c.formato_nombre)
+                    from public.cola_metricas(false, 200, 0) c where c.metrica_id = %L))', p_rc, m_al1_h));
+  select jsonb_build_object('clave', f.clave, 'nombre', f.nombre) into v_k from public.formatos f where f.id = f_post;
+  r := r || jsonb_build_object('q08_colas_con_etiqueta_oferta_y_formato',
+    case when v_j -> 'evidencia' = v_k || jsonb_build_object('etiqueta', true)
+              and v_j -> 'metrica' = v_k || jsonb_build_object('oferta', o_al)
+         then 'true'::jsonb else v_j end);
 
   -- Una asignación cancelada sale de la cola y su evidencia ya no se valida.
   v_res := pg_temp.srv(format('select public.cancelar_asignacion_srv(%L, ''ADMINISTRATIVA'', %L, false, %L, %L)', a_e2,
@@ -932,6 +948,19 @@ begin
   v_m := coalesce(jsonb_array_length(pg_temp.como(c_an, 'authenticated', v_txt)), 0);
   v_p := coalesce(jsonb_array_length(pg_temp.como(c_fin, 'authenticated', v_txt)), 0);
   r := r || jsonb_build_object('s02_en_curso_solo_para_el_equipo', v_n = 0 and v_m = 0 and v_p = 4);
+  -- Quien ve asignaciones pero no ofertas ni empresas (el rol propio) recibe igual todas las filas: la RLS de ofertas y
+  -- anunciantes solo deja en blanco el título y la marca.
+  v_k := pg_temp.como(c_gs, 'authenticated', v_txt);
+  v_n := pg_temp.como(c_gs, 'authenticated', format('select count(*) from public.ofertas where id in (%L, %L, %L)',
+                                                     o_cn, o_vf, o_h));
+  v_m := pg_temp.como(c_gs, 'authenticated', format('select count(*) from public.anunciantes where id = %L', an_v));
+  r := r || jsonb_build_object('s02b_en_curso_aunque_la_rls_esconda_oferta_y_empresa',
+    case when v_n = 0 and v_m = 0
+              and (select array_agg(e ->> 'id' order by e ->> 'id') from jsonb_array_elements(v_k) e)
+                  = (select array_agg(x::text order by x::text) from unnest(array[a_d1, a_d2, a_d3, a_d4]) x)
+              and not exists (select 1 from jsonb_array_elements(v_k) e
+                              where e ->> 'oferta' is not null or e ->> 'anunciante' is not null)
+         then 'true'::jsonb else jsonb_build_object('filas', v_k, 'ofertas', v_n, 'anunciantes', v_m) end);
   v_txt2 := 'select public.transicionar_srv(''medios'', %L, %L, %L, %L, %L)';
   v_e := pg_temp.srv_falla(format(v_txt2, me_d, 'SUSPENDIDO', u_fin, s_fin, 'Revisión de cumplimiento en curso'));
   v_e2 := pg_temp.srv_falla(format(v_txt2, me_d, 'SUSPENDIDO', u_ope, s_ope, null));
@@ -968,6 +997,20 @@ begin
   r := r || jsonb_build_object('x12_en_disputa_se_cancela_al_resolverla', pg_temp.es(pg_temp.srv_falla(format(
     'select public.cancelar_asignacion_srv(%L, ''INCUMPLIMIENTO_MEDIO'', ''No cumplió'', false, %L, %L)', a_d1, u_ope, s_ope)),
     'AMO_TRANSICION_INVALIDA', 'La asignación está en disputa: cancélala al resolver la disputa.', 'en_disputa'));
+  -- Su evidencia también se decide al resolverla: aprobarla no movería la asignación y rechazarla pediría una recarga que
+  -- la disputa no admite. Tampoco está en la cola.
+  v_e := pg_temp.srv_falla(format('select public.validar_evidencia_srv(%L, true, true, null, %L, %L)', p_d1, u_ope, s_ope));
+  v_e2 := pg_temp.srv_falla(format('select public.validar_evidencia_srv(%L, false, false, %L, %L, %L)', p_d1,
+                                   'La captura no muestra el post', u_ope, s_ope));
+  v_n := pg_temp.como(c_ope, 'authenticated', format('select count(*) from public.cola_evidencias(200, 0) where publicacion_id = %L',
+                                                     p_d1));
+  r := r || jsonb_build_object('v13_evidencia_en_disputa_se_decide_al_resolverla',
+    case when pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA', 'La asignación está en disputa: decide sobre la evidencia al resolverla.',
+                         'en_disputa') = 'true'
+              and pg_temp.es(v_e2, 'AMO_TRANSICION_INVALIDA',
+                             'La asignación está en disputa: decide sobre la evidencia al resolverla.', 'en_disputa') = 'true'
+              and v_n = 0 and (select estado_validacion = 'PENDIENTE' from public.publicaciones where id = p_d1)
+         then 'true'::jsonb else jsonb_build_object('aprobar', v_e, 'rechazar', v_e2, 'en_cola', v_n) end);
   -- D73 · INT-006: la verificada del suspendido se liquida; la que aún no está verificada, no.
   v_liq := pg_temp.srv(format('select to_jsonb(public.generar_liquidacion_srv(%L, %L, %L, %L, %L))', me_d,
                               private.hoy() - 30, private.hoy(), u_fin, s_fin)) #>> '{}';
@@ -1017,6 +1060,17 @@ begin
               and not exists (select 1 from jsonb_array_elements(v_j) with ordinality e (x, i)
                               where i > 1 and (x ->> 'lista')::boolean)
               and jsonb_array_length(v_j) > 1
+         then 'true'::jsonb else v_j end);
+  -- `listas` cuenta las listas de toda la cola, no las de la página (una sola sentencia: una instantánea).
+  v_j := pg_temp.como(c_ope, 'authenticated', '
+    select (select jsonb_build_object(''listas'', max(listas), ''valores'', count(distinct listas),
+                                      ''contadas'', count(*) filter (where lista), ''total'', max(total))
+            from public.cola_verificacion(200, 0))
+           || jsonb_build_object(''listas_otra_pagina'', (select max(listas) from public.cola_verificacion(1, 1)))');
+  r := r || jsonb_build_object('r03b_conteo_de_listas',
+    case when (v_j ->> 'listas')::integer >= 1 and v_j ->> 'listas' = v_j ->> 'contadas'
+              and v_j ->> 'listas_otra_pagina' = v_j ->> 'listas' and (v_j ->> 'valores')::integer = 1
+              and (v_j ->> 'total')::integer > (v_j ->> 'listas')::integer
          then 'true'::jsonb else v_j end);
   r := r || jsonb_build_object('r04_finanzas_no_verifica', pg_temp.es(pg_temp.srv_falla(format(v_txt, a_vf, u_fin, s_fin, null, '{}')),
     'AMO_NO_AUTORIZADO'));
@@ -1215,7 +1269,19 @@ begin
     'insert into public.disputa_mensajes (disputa_id, mensaje, interno) values (%L, ''Caso cerrado sin cambios'', true)', d_p));
   r := r || jsonb_build_object('h11_cerrada_solo_escribe_quien_resuelve',
     case when v_e ->> 's' = '42501' and v_n = 1 then 'true'::jsonb else jsonb_build_object('parte', v_e, 'equipo', v_n) end);
-  -- Disputa del anunciante sobre METRICAS_CARGADAS: se valida durante la disputa y verificar exige lo mismo que siempre.
+  -- Disputa del anunciante sobre METRICAS_CARGADAS: rechazar dejaría METRICAS_CARGADAS con una rechazada al restaurarla
+  -- (D10), así que se rechaza al resolverla. Con otro estado previo (a_de, EVIDENCIA_VALIDADA) el rechazo procede.
+  v_txt2 := 'select public.validar_metrica_srv(%L, false, ''La captura no muestra la fecha'', %L, %L)';
+  v_e := pg_temp.srv_falla(format(v_txt2, m_dm_h, u_ope, s_ope));
+  v_e2 := pg_temp.srv_falla(format(v_txt2, m_de_h, u_ope, s_ope));
+  r := r || jsonb_build_object('z04b_en_disputa_con_todo_cargado_no_se_rechaza',
+    case when pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA',
+                         'La asignación está en disputa con todas sus métricas cargadas: recházala al resolver la disputa.',
+                         'en_disputa') = 'true'
+              and v_e2 ->> 'e' = 'NO FALLÓ'
+              and (select estado_validacion = 'PENDIENTE' from public.metricas where id = m_dm_h)
+         then 'true'::jsonb else jsonb_build_object('todo_cargado', v_e, 'evidencia_validada', v_e2) end);
+  -- Aprobar sí se puede durante la disputa, y verificar exige lo mismo que siempre.
   v_res := pg_temp.srv(format('select public.validar_metrica_srv(%L, true, null, %L, %L)', m_dm_h, u_ope, s_ope));
   r := r || jsonb_build_object('z05_se_valida_durante_la_disputa',
     case when v_res ->> 'estado' = 'EN_DISPUTA' and (select estado_validacion = 'APROBADA' from public.metricas where id = m_dm_h)
@@ -1317,6 +1383,50 @@ begin
               and (v_j #>> '{detalle_alertas,alerta_previa,desviacion}')::boolean
               and (v_j #>> '{detalle_alertas,alerta_previa,impresiones}')::integer = 50000
          then 'true'::jsonb else v_j end);
+  -- Una tercera edición tampoco la borra, aunque la versión que reemplaza ya no alertaba.
+  v_n := pg_temp.hacer(c_ma, 'authenticated', format('update public.metricas set alcance = 10500, impresiones = 15500 where id = %L',
+                                                     m_al1_h));
+  select to_jsonb(m) into v_j from (select alerta_desviacion, alerta_multiplo, detalle_alertas from public.metricas where id = m_al1_h) m;
+  r := r || jsonb_build_object('a14_tercera_edicion_conserva_la_previa',
+    case when v_n = 1 and not (v_j ->> 'alerta_desviacion')::boolean and not (v_j ->> 'alerta_multiplo')::boolean
+              and (v_j #>> '{detalle_alertas,alcance}')::integer = 10500
+              and (v_j #>> '{detalle_alertas,alerta_previa,desviacion}')::boolean
+              and (v_j #>> '{detalle_alertas,alerta_previa,alcance}')::integer = 12000
+              and (v_j #>> '{detalle_alertas,alerta_previa,impresiones}')::integer = 50000
+              and not (v_j #> '{detalle_alertas,alerta_previa}') ? 'alerta_previa'
+         then 'true'::jsonb else v_j end);
+  -- La que tuvo alerta sigue arriba en la cola (por delante de las que nunca alertaron, aunque sean más antiguas) y en el
+  -- filtro de alertas.
+  v_ids := array[o_ev, o_rc, o_al, o_vf, o_cn, o_vc, o_vz, o_dp, o_vx];
+  v_j := pg_temp.como(c_ope, 'authenticated', format('
+    select jsonb_build_object(
+      ''cola'', (select jsonb_agg(jsonb_build_object(''m'', c.metrica_id, ''alerta'', c.alerta_desviacion or c.alerta_multiplo,
+                                                    ''previa'', c.detalle_alertas ? ''alerta_previa'') order by c.ordinality)
+                 from public.cola_metricas(false, 200, 0) with ordinality c where c.oferta_id = any (%L::uuid[])),
+      ''filtro'', (select jsonb_agg(c.metrica_id) from public.cola_metricas(true, 200, 0) c where c.oferta_id = any (%L::uuid[])))',
+    v_ids, v_ids));
+  select (select min(x.i) from jsonb_array_elements(v_j -> 'cola') with ordinality x (e, i) where x.e ->> 'm' = m_al1_h::text)
+         < (select min(x.i) from jsonb_array_elements(v_j -> 'cola') with ordinality x (e, i)
+            where not (x.e ->> 'alerta')::boolean and not (x.e ->> 'previa')::boolean)
+    into v_ok;
+  r := r || jsonb_build_object('a15_alerta_previa_arriba_y_en_el_filtro',
+    case when coalesce(v_ok, false)
+              and v_j -> 'cola' @> jsonb_build_array(jsonb_build_object('m', m_al1_h, 'alerta', false, 'previa', true))
+              and v_j -> 'filtro' @> to_jsonb(array[m_al1_h, m_al2_h]) and not v_j -> 'filtro' @> to_jsonb(array[m_al2_d])
+         then 'true'::jsonb else v_j end);
+  -- Y aprobarla exige la misma constancia que una alerta vigente (en las observaciones o en el motivo).
+  v_e := pg_temp.srv_falla(format('select public.validar_metrica_srv(%L, true, null, %L, %L)', m_al1_h, u_ope, s_ope));
+  v_e2 := pg_temp.srv_falla(format('select public.transicionar_srv(''metricas'', %L, ''APROBADA'', %L, %L, %L, %L)', m_al1_h,
+                                   u_ope, s_ope, 'Revisé la captura corregida contra el panel', '{}'));
+  v_res := pg_temp.srv(format('select public.validar_metrica_srv(%L, true, %L, %L, %L)', m_al1_h,
+                              'Revisé la captura corregida: coincide con el panel', u_ope, s_ope));
+  r := r || jsonb_build_object('m10_alerta_previa_exige_constancia',
+    case when pg_temp.es(v_e, 'AMO_MOTIVO_REQUERIDO', 'La métrica tiene alertas: anota qué revisaste antes de aprobarla.',
+                         'alerta_sin_revision') = 'true'
+              and v_e2 ->> 'e' = 'NO FALLÓ'
+              and (select estado_validacion = 'APROBADA' and observaciones = 'Revisé la captura corregida: coincide con el panel'
+                          and detalle_alertas ? 'alerta_previa' from public.metricas where id = m_al1_h)
+         then 'true'::jsonb else jsonb_build_object('sin_constancia', v_e, 'con_motivo', v_e2, 'aprobar', v_res) end);
 
   -- ── (c) ADM-008 c2 · D66: corrección auditada de una métrica aprobada (T+15h) ───────────────────────────────
   perform set_config('amo.reloj', (t0 + interval '15 hours')::text, true);

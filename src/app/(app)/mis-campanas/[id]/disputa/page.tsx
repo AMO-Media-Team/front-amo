@@ -32,12 +32,12 @@ import {
 import type { AsignacionMedio } from "@/features/mis-campanas/tipos"
 import { UUID } from "@/features/operacion/components/ficha"
 import { formatearHandle } from "@/features/operacion/formato"
-import { requerirPermiso } from "@/lib/auth/dal"
+import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
   params,
 }: PageProps<"/mis-campanas/[id]/disputa">): Promise<Metadata> {
-  await requerirPermiso("disputas.abrir")
+  await requerirPermiso("asignaciones.ver_propias")
   const { id } = await params
   const asignacion = UUID.test(id)
     ? await miAsignacion(id).catch(() => null)
@@ -51,15 +51,21 @@ export async function generateMetadata({
   }
 }
 
-/** El paso del medio junto al estado de la disputa (evidencia o cortes). */
+/**
+ * El paso del medio junto al estado de la disputa: cargar la evidencia (con
+ * `asignaciones.ejecutar`) o ver sus cortes en la ficha.
+ */
 function AccionDisputa({
   asignacion,
   siguiente,
+  puedeEjecutar,
 }: {
   asignacion: AsignacionMedio
   siguiente: ReturnType<typeof siguienteTrasDisputa>
+  puedeEjecutar: boolean
 }) {
   if (!siguiente) return null
+  if (siguiente.destino === "evidencia" && !puedeEjecutar) return null
   return siguiente.destino === "evidencia" ? (
     <EnlaceBoton href={rutaEvidencia(asignacion.id)} size="sm">
       <Upload data-icon="inline-start" aria-hidden />
@@ -84,12 +90,16 @@ function AccionDisputa({
  * regresiva); en los estados disputables se reporta un problema (Métricas,
  * Contenido, Pago u Otro). Con una abierta, su estado y la conversación con
  * el anunciante y el equipo AMO; cerrada, el resultado en la voz del medio.
- * La BD vuelve a comprobarlo todo al abrir y al escribir.
+ * Leerla pide lo mismo que ver sus campañas (`asignaciones.ver_propias`: así
+ * se llega desde `/ir` sin un 403); abrirla, responder y adjuntar, además
+ * `disputas.abrir` (sin él, la página dice que no puede escribir). La BD
+ * vuelve a comprobarlo todo al abrir y al escribir.
  */
 export default async function PaginaDisputaMedio({
   params,
 }: PageProps<"/mis-campanas/[id]/disputa">) {
-  const usuario = await requerirPermiso("disputas.abrir")
+  const usuario = await requerirPermiso("asignaciones.ver_propias")
+  const puedeDisputar = tieneAlgunPermiso(usuario, ["disputas.abrir"])
   const { id } = await params
   if (!UUID.test(id)) notFound()
   if (!usuario.medioId) {
@@ -121,7 +131,7 @@ export default async function PaginaDisputaMedio({
     ? await mensajesDeDisputa(vigente.id)
     : []
   const apertura: AperturaDisputa | null =
-    vista.tipo === "abrir"
+    vista.tipo === "abrir" && puedeDisputar
       ? {
           perspectiva: "medio",
           asignacionId: asignacion.id,
@@ -134,7 +144,7 @@ export default async function PaginaDisputaMedio({
           handle: asignacion.handle,
         }
       : null
-  const titulo = tituloDisputa(vista, "medio")
+  const titulo = tituloDisputa(vista, "medio", puedeDisputar)
   const volver = (
     <EnlaceBoton href={rutaAsignacionMedio(asignacion.id)} variant="outline">
       <ArrowLeft data-icon="inline-start" aria-hidden />
@@ -173,7 +183,7 @@ export default async function PaginaDisputaMedio({
               ? contextoEstadoDisputa(vigente, asignacion, plazo)
               : { plazoRecargaHoras: plazo }
           }
-          puedeEscribir
+          puedeEscribir={puedeDisputar}
           autorApertura={
             vigente
               ? autorAperturaParte({
@@ -188,6 +198,9 @@ export default async function PaginaDisputaMedio({
               <AccionDisputa
                 asignacion={asignacion}
                 siguiente={siguienteTrasDisputa(vigente, asignacion.estado)}
+                puedeEjecutar={tieneAlgunPermiso(usuario, [
+                  "asignaciones.ejecutar",
+                ])}
               />
             ) : null
           }

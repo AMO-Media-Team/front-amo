@@ -94,30 +94,3 @@ export const esquemaCancelarAsignacion = z
 export type EntradaCancelarAsignacion = z.input<
   typeof esquemaCancelarAsignacion
 >
-
-/** Lo que admite la BD en `disputas.descripcion` (`disputas_descripcion_chk`). */
-export const LONGITUD_DESCRIPCION_DISPUTA = {
-  minima: 10,
-  maxima: 4000,
-} as const
-
-/** Abrir una disputa como equipo AMO (`abrir_disputa_srv`). */
-export const esquemaAbrirDisputa = z.object({
-  asignacionId: z.uuid({ error: "Identificador inválido." }),
-  motivo: z.enum(ENUMS.disputa_motivo, {
-    error: "Elige el motivo de la disputa.",
-  }),
-  descripcion: z
-    .string({ error: "Describe qué pasó." })
-    .trim()
-    .min(
-      LONGITUD_DESCRIPCION_DISPUTA.minima,
-      `Describe qué pasó (al menos ${LONGITUD_DESCRIPCION_DISPUTA.minima} caracteres).`
-    )
-    .max(
-      LONGITUD_DESCRIPCION_DISPUTA.maxima,
-      `Máximo ${LONGITUD_DESCRIPCION_DISPUTA.maxima.toLocaleString("es-CO")} caracteres.`
-    ),
-})
-
-export type EntradaAbrirDisputa = z.input<typeof esquemaAbrirDisputa>

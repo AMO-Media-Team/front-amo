@@ -170,16 +170,15 @@ test.describe("suspensión del medio", () => {
       .getByRole("article")
       .filter({ hasText: conAlerta.oferta.titulo })
     await expect(alerta).toContainText("Por validar")
-    const limite = alerta.getByRole("table", {
-      name: "Cifras de «Alcance por encima de sus seguidores»",
-    })
+    // La misma explicación que la cola y la ficha de la asignación.
+    const porque = alerta.getByRole("region", { name: "Por qué tiene alerta" })
+    await expect(porque).toContainText(
+      "Alcance excesivo frente a los seguidores"
+    )
     expect(conAlerta.alerta.limiteAlcance).not.toBeNull()
-    await expect(limite.getByRole("row", { name: /^Alcance/ })).toContainText(
-      `Hasta ${numero.format(conAlerta.alerta.limiteAlcance ?? 0)}`
-    )
-    await expect(limite.getByRole("row", { name: /^Alcance/ })).toContainText(
-      "(fuera de lo esperado)"
-    )
+    await expect(
+      porque.getByText("Límite", { exact: true }).locator("xpath=..")
+    ).toContainText(numero.format(conAlerta.alerta.limiteAlcance ?? 0))
     await expect(
       alerta.getByRole("link", { name: /^Ver la asignación/ })
     ).toHaveAttribute(

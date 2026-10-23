@@ -87,7 +87,7 @@ export function PanelSeguimiento({
 }: {
   inicial: SeguimientoCampana
   estadoCampana: EstadoCampana
-  /** `disputas.abrir`: cada tarjeta ofrece reportar un problema o ver su disputa. */
+  /** `disputas.abrir`: cada tarjeta ofrece reportar un problema (ver su disputa no lo pide). */
   puedeDisputar?: boolean
 }) {
   const [datos, setDatos] = useState(() => masReciente(inicial))

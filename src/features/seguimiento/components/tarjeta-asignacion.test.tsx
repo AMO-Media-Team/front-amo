@@ -315,10 +315,30 @@ describe("TarjetaAsignacion · disputas (ADM-011)", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("sin permiso para disputar no ofrece nada", () => {
-    pintarConDisputa(asignacionPrueba({ estado: "PUBLICADA" }), false)
+  it("sin permiso para disputar no ofrece reportar, pero sí ver la que haya", () => {
+    const { unmount } = pintarConDisputa(
+      asignacionPrueba({ estado: "PUBLICADA", disputa: null }),
+      false
+    )
     expect(
-      screen.queryByRole("link", { name: /^Reportar un problema/ })
+      screen.queryByRole("link", { name: /disputa|problema/ })
     ).not.toBeInTheDocument()
+    unmount()
+    const enDisputa = asignacionPrueba({
+      estado: "EN_DISPUTA",
+      estadoPrevioDisputa: "PUBLICADA",
+      disputa: {
+        id: "0199f3a0-0000-7000-8000-0000000000d1",
+        estado: "ABIERTA",
+        estadoOrigen: "PUBLICADA",
+      },
+    })
+    pintarConDisputa(enDisputa, false)
+    expect(
+      screen.getByRole("link", { name: /^Ver la disputa/ })
+    ).toHaveAttribute(
+      "href",
+      `/campanas/${CAMPANA_PRUEBA}/asignaciones/${enDisputa.id}/disputa`
+    )
   })
 })

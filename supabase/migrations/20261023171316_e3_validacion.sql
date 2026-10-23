@@ -316,8 +316,10 @@ begin
   select m.id, m.asignacion_id, m.estado_validacion, m.created_at, m.alerta_desviacion, m.alerta_multiplo, m.detalle_alertas
   from public.metricas m
   where case when p_asignacion_id is not null then m.asignacion_id = p_asignacion_id
-             when p_medio_id is not null then m.medio_id = p_medio_id and (m.alerta_desviacion or m.alerta_multiplo)
-             else m.estado_validacion = 'PENDIENTE' and (m.alerta_desviacion or m.alerta_multiplo) end
+             when p_medio_id is not null
+               then m.medio_id = p_medio_id and (m.alerta_desviacion or m.alerta_multiplo or m.detalle_alertas ? 'alerta_previa')
+             else m.estado_validacion = 'PENDIENTE'
+                  and (m.alerta_desviacion or m.alerta_multiplo or m.detalle_alertas ? 'alerta_previa') end
   order by m.created_at, m.id;
 end $$;
 revoke all on function public.alertas_metricas(uuid, uuid) from public, anon;
@@ -393,19 +395,18 @@ returns table (asignacion_id uuid, oferta_id uuid, oferta_titulo text, marca tex
                cortes_requeridos integer, cortes_aprobados integer, metricas_pendientes integer, metricas_con_alerta integer,
                permanencia_hasta timestamptz, lista boolean, bloqueo text, listas bigint, total bigint)
 language sql stable security definer set search_path = '' as $$
-  with base as (
+  with base as materialized (
     select a.id, a.oferta_id, o.titulo, ca.marca, a.medio_id, me.nombre, c.handle::text as handle, a.plataforma,
            a.publicaciones, a.metricas_cargadas_at,
            a.publicaciones * coalesce(cardinality(o.cortes_requeridos), 0) as requeridos,
-           (select count(*) from public.publicaciones p cross join unnest(o.cortes_requeridos) k (corte)
-            where p.asignacion_id = a.id
-              and exists (select 1 from public.metricas m
-                          where m.publicacion_id = p.id and m.corte = k.corte and m.estado_validacion = 'APROBADA'))::integer
-             as aprobados,
+           (select count(distinct (m.publicacion_id, m.corte)) from public.metricas m
+            where m.asignacion_id = a.id and m.estado_validacion = 'APROBADA'
+              and m.corte = any (o.cortes_requeridos))::integer as aprobados,
            (select count(*) from public.metricas m where m.asignacion_id = a.id and m.estado_validacion = 'PENDIENTE')::integer
              as pendientes,
            (select count(*) from public.metricas m
-            where m.asignacion_id = a.id and (m.alerta_desviacion or m.alerta_multiplo))::integer as con_alerta,
+            where m.asignacion_id = a.id
+              and (m.alerta_desviacion or m.alerta_multiplo or m.detalle_alertas ? 'alerta_previa'))::integer as con_alerta,
            (select max(p.permanencia_hasta) from public.publicaciones p
             where p.asignacion_id = a.id and p.permanencia_verificada_at is null) as permanencia
     from public.asignaciones a

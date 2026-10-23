@@ -409,7 +409,7 @@ describe("adjuntos", () => {
       mensajeId: 9,
       descargar: true,
     })
-    expect(estado.orden.at(-1)).toBe("dal:disputas.ver|disputas.abrir")
+    expect(estado.orden.at(-1)).toBe("dal:disputas.ver|disputas.abrir|asignaciones.ver_propias")
     expect(estado.firmadas).toEqual([
       expect.objectContaining({
         bucket: "evidencias",

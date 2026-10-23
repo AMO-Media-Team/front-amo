@@ -2,12 +2,10 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import {
-  type CorteMetrica,
-  leerDetalleAlertas,
-} from "@/features/operacion/metricas"
+import { leerAlerta, SIN_ALERTA } from "@/features/operacion/alertas"
+import type { CorteMetrica } from "@/features/operacion/metricas"
 import type { PublicacionEvidencia } from "@/features/operacion/tipos"
-import { exito } from "@/lib/result"
+import { exito, fallo } from "@/lib/result"
 
 import { type AccionesCorte, BLOQUEO_EVIDENCIA_SIN_APROBAR } from "../decision"
 import { MENSAJES_VALIDACION } from "../errores"
@@ -20,6 +18,8 @@ const acciones = vi.hoisted(() => ({
 vi.mock("../actions", () => acciones)
 const avisos = vi.hoisted(() => ({ success: vi.fn() }))
 vi.mock("sonner", () => ({ toast: avisos }))
+const navegacion = vi.hoisted(() => ({ refresh: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => navegacion }))
 
 import {
   DecisionCorte,
@@ -46,9 +46,7 @@ function corte(cambios: Partial<CorteMetrica> = {}): CorteMetrica {
     interacciones: 300,
     clics: null,
     estado: "PENDIENTE",
-    alertaDesviacion: false,
-    alertaMultiplo: false,
-    detalleAlertas: leerDetalleAlertas({}),
+    alerta: SIN_ALERTA,
     observaciones: null,
     validadaAt: null,
     conImagen: false,
@@ -59,7 +57,13 @@ function corte(cambios: Partial<CorteMetrica> = {}): CorteMetrica {
 const VALIDAR: AccionesCorte = {
   validar: true,
   bloqueoAprobar: null,
+  rechazoEnDisputa: false,
   corregir: false,
+}
+
+const SIN_ACCIONES: AccionesCorte = {
+  ...VALIDAR,
+  validar: false,
 }
 
 beforeEach(() => {
@@ -78,6 +82,7 @@ beforeEach(() => {
     })
   )
   avisos.success.mockReset()
+  navegacion.refresh.mockReset()
 })
 
 describe("DecisionEvidencia (ficha)", () => {
@@ -181,12 +186,15 @@ describe("DecisionCorte (ficha)", () => {
   it("con alerta, aprobar exige anotar qué se revisó (con sus razones a la vista)", async () => {
     const usuario = userEvent.setup()
     const conAlerta = corte({
-      alertaMultiplo: true,
-      detalleAlertas: leerDetalleAlertas({
-        multiplo: 2,
-        seguidores: 40000,
-        alcance: 95000,
-        limite_alcance: 80000,
+      alerta: leerAlerta({
+        alerta_desviacion: false,
+        alerta_multiplo: true,
+        detalle_alertas: {
+          multiplo: 2,
+          seguidores: 40000,
+          alcance: 95000,
+          limite_alcance: 80000,
+        },
       }),
     })
     const { rerender } = render(<Fila valor={conAlerta} />)
@@ -212,9 +220,72 @@ describe("DecisionCorte (ficha)", () => {
     rerender(
       <Fila
         valor={{ ...conAlerta, estado: "APROBADA" }}
-        acciones={{ validar: false, bloqueoAprobar: null, corregir: false }}
+        acciones={SIN_ACCIONES}
       />
     )
+    await waitFor(() => expect(screen.getByText("24 horas")).toHaveFocus())
+  })
+
+  it("una corregida que tuvo alerta también exige anotar qué se revisó", async () => {
+    const usuario = userEvent.setup()
+    const corregida = corte({
+      alerta: leerAlerta({
+        alerta_desviacion: false,
+        alerta_multiplo: false,
+        detalle_alertas: {
+          alcance: 60000,
+          alerta_previa: {
+            multiplo: 2,
+            seguidores: 40000,
+            alcance: 95000,
+            limite_alcance: 80000,
+            multiplo_superado: true,
+          },
+        },
+      }),
+    })
+    render(<Fila valor={corregida} />)
+    await usuario.click(screen.getByRole("button", { name: "Aprobar" }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Aprobar las métricas de 24 horas con alerta?",
+    })
+    expect(dialogo).toHaveTextContent("Tuvo alerta antes de corregirse.")
+    expect(dialogo).toHaveTextContent(/El alcance \(95\.000\) supera/)
+  })
+
+  it("si el rechazo espera a la disputa, solo se ofrece aprobar", () => {
+    render(
+      <Fila valor={corte()} acciones={{ ...VALIDAR, rechazoEnDisputa: true }} />
+    )
+    expect(screen.queryByRole("button", { name: "Rechazar" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Aprobar" })).toBeEnabled()
+  })
+
+  it("si la BD responde que espera a la disputa, al cerrar refresca la ficha", async () => {
+    acciones.validarMetrica.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.enDisputaRechazoMetrica)
+    )
+    const usuario = userEvent.setup()
+    render(<Fila valor={corte()} />)
+    await usuario.click(screen.getByRole("button", { name: "Rechazar" }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Rechazar las métricas de 24 horas?",
+    })
+    await usuario.type(
+      within(dialogo).getByRole("textbox"),
+      "Las cifras no coinciden con la captura."
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Rechazar" })
+    )
+    expect(
+      await within(dialogo).findByText(
+        MENSAJES_VALIDACION.enDisputaRechazoMetrica
+      )
+    ).toBeInTheDocument()
+    expect(navegacion.refresh).not.toHaveBeenCalled()
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(navegacion.refresh).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(screen.getByText("24 horas")).toHaveFocus())
   })
 
@@ -255,17 +326,14 @@ describe("DecisionCorte (ficha)", () => {
     const { rerender } = render(
       <Fila
         valor={corte({ estado: "APROBADA" })}
-        acciones={{ validar: false, bloqueoAprobar: null, corregir: true }}
+        acciones={{ ...SIN_ACCIONES, corregir: true }}
         onCorregir={onCorregir}
       />
     )
     await usuario.click(screen.getByRole("button", { name: "Corregir" }))
     expect(onCorregir).toHaveBeenCalledTimes(1)
     rerender(
-      <Fila
-        valor={corte({ estado: "APROBADA" })}
-        acciones={{ validar: false, bloqueoAprobar: null, corregir: false }}
-      />
+      <Fila valor={corte({ estado: "APROBADA" })} acciones={SIN_ACCIONES} />
     )
     expect(screen.queryByRole("group")).toBeNull()
   })

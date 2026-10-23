@@ -18,9 +18,9 @@ import {
   type ErrorConsulta,
   fallar,
 } from "@/features/operacion/queries/comun"
+import { leerAlerta } from "@/features/operacion/alertas"
 import type { Database, Json } from "@/types/database.types"
 
-import { leerAlerta } from "./alertas"
 import {
   type AccesoValidacion,
   desplazamientoDe,
@@ -150,30 +150,6 @@ export const plazoRecargaHoras = cache(async (): Promise<number> => {
   return valor !== null && valor > 0 ? valor : PLAZO_RECARGA_HORAS_POR_DEFECTO
 })
 
-/** Formato de cada oferta (por asignación) de una página de la cola. */
-async function formatosDeAsignaciones(
-  asignacionIds: readonly string[]
-): Promise<ReadonlyMap<string, FormatoCatalogo>> {
-  if (asignacionIds.length === 0) return new Map()
-  const supabase = await clienteSolicitud()
-  const [{ data, error }, formatos] = await Promise.all([
-    supabase
-      .from("asignaciones")
-      .select("id, oferta:ofertas ( formato_id )")
-      .in("id", [...new Set(asignacionIds)]),
-    formatosPorId(),
-  ])
-  if (error) fallar("leer los formatos de las ofertas", error)
-  return new Map(
-    data.flatMap((fila) => {
-      const formato = fila.oferta?.formato_id
-        ? formatos.get(fila.oferta.formato_id)
-        : undefined
-      return formato ? [[fila.id, formato] as const] : []
-    })
-  )
-}
-
 // ── Contadores ───────────────────────────────────────────────────────────────
 
 async function contarEvidencias(): Promise<number> {
@@ -197,23 +173,20 @@ async function contarMetricas(soloAlertas: boolean): Promise<number> {
   return numero(data[0]?.total) ?? 0
 }
 
-/** Máximo de filas que admite la RPC: las listas van primero. */
-const LIMITE_RPC = 200
-
 async function contarPorVerificar(): Promise<{
   total: number
   listas: number
 }> {
   const supabase = await clienteSolicitud()
-  // La cola ordena las listas primero: con hasta 200 se cuentan exactas.
+  // `listas` y `total` cuentan toda la cola (ventana): basta una fila.
   const { data, error } = await supabase.rpc("cola_verificacion", {
-    p_limite: LIMITE_RPC,
+    p_limite: 1,
     p_desplazamiento: 0,
   })
   if (error) fallar("contar las asignaciones por verificar", error)
   return {
     total: numero(data[0]?.total) ?? 0,
-    listas: data.filter((fila) => fila.lista).length,
+    listas: numero(data[0]?.listas) ?? 0,
   }
 }
 
@@ -238,24 +211,20 @@ export const contadoresValidacion = cache(
 
 // ── Cola de evidencias (ADM-007) ─────────────────────────────────────────────
 
-function evidenciaDe(
-  fila: FilaColaEvidencias,
-  etiquetas: ReadonlyMap<string, boolean>,
-  formatos: ReadonlyMap<string, FormatoCatalogo>
-): EvidenciaEnCola {
+function evidenciaDe(fila: FilaColaEvidencias): EvidenciaEnCola {
   return {
     publicacionId: fila.publicacion_id,
     asignacionId: fila.asignacion_id,
     numero: fila.numero,
     publicaciones: fila.publicaciones,
     plataforma: fila.plataforma,
-    formato: formatos.get(fila.asignacion_id)?.nombre ?? null,
+    formato: texto(fila.formato_nombre),
     urlPost: fila.url_post,
     fechaPublicacion: fila.fecha_publicacion,
     conImagen: texto(fila.captura_path) !== null,
     enviadaAt: fila.enviada_at,
     observacionesPrevias: texto(fila.observaciones_previas),
-    etiquetaDeclarada: etiquetas.get(fila.publicacion_id) ?? true,
+    etiquetaDeclarada: fila.etiqueta_declarada !== false,
     medio: {
       id: fila.medio_id,
       nombre: fila.medio_nombre,
@@ -274,22 +243,6 @@ function evidenciaDe(
   }
 }
 
-/** Etiqueta de publicidad declarada por el medio en cada publicación. */
-async function etiquetasDeclaradas(
-  publicacionIds: readonly string[]
-): Promise<ReadonlyMap<string, boolean>> {
-  if (publicacionIds.length === 0) return new Map()
-  const supabase = await clienteSolicitud()
-  const { data, error } = await supabase
-    .from("publicaciones")
-    .select("id, etiqueta_publicidad_confirmada")
-    .in("id", [...publicacionIds])
-  if (error) fallar("leer la etiqueta declarada de las evidencias", error)
-  return new Map(
-    data.map((fila) => [fila.id, fila.etiqueta_publicidad_confirmada])
-  )
-}
-
 /** Evidencias por validar, la cargada (o corregida) hace más tiempo primero. */
 export async function colaEvidencias(
   pagina: number
@@ -304,16 +257,10 @@ export async function colaEvidencias(
         p_desplazamiento: desplazamiento,
       })
   )
-  const [etiquetas, formatos] = await Promise.all([
-    etiquetasDeclaradas(resultado.filas.map((fila) => fila.publicacion_id)),
-    formatosDeAsignaciones(resultado.filas.map((fila) => fila.asignacion_id)),
-  ])
   return {
     total: resultado.total,
     pagina: resultado.pagina,
-    filas: resultado.filas.map((fila) =>
-      evidenciaDe(fila, etiquetas, formatos)
-    ),
+    filas: resultado.filas.map(evidenciaDe),
   }
 }
 
@@ -372,8 +319,7 @@ function periodoDe(
 
 function metricaDe(
   fila: FilaColaMetricas,
-  cifras: CifrasMetrica | undefined,
-  formato: FormatoCatalogo | undefined
+  cifras: CifrasMetrica | undefined
 ): MetricaEnCola {
   const valores = valoresDeFila(
     cifras ?? {
@@ -393,8 +339,8 @@ function metricaDe(
     fechaCorte: fila.fecha_corte,
     periodo: periodoDe(cifras),
     plataforma: fila.plataforma,
-    formatoClave: formato?.clave ?? null,
-    formato: formato?.nombre ?? null,
+    formatoClave: texto(fila.formato_clave),
+    formato: texto(fila.formato_nombre),
     valores,
     interacciones: numero(fila.interacciones),
     conImagen: texto(fila.captura_path) !== null,
@@ -408,14 +354,16 @@ function metricaDe(
       handle: texto(fila.handle),
     },
     seguidoresAlAceptar: numero(fila.seguidores_al_aceptar),
+    ofertaId: fila.oferta_id,
     ofertaTitulo: fila.oferta_titulo,
     estadoAsignacion: fila.asignacion_estado,
   }
 }
 
 /**
- * Métricas por validar: primero las que tienen alerta, después la cargada
- * hace más tiempo. Con `soloAlertas`, solo las que tienen alerta.
+ * Métricas por validar: primero las que tienen alerta (también la que la tuvo
+ * antes de que el medio la corrigiera), después la cargada hace más tiempo.
+ * Con `soloAlertas`, solo esas.
  */
 export async function colaMetricas(
   pagina: number,
@@ -432,19 +380,14 @@ export async function colaMetricas(
         p_desplazamiento: desplazamiento,
       })
   )
-  const [cifras, formatos] = await Promise.all([
-    cifrasDeMetricas(resultado.filas.map((fila) => fila.metrica_id)),
-    formatosDeAsignaciones(resultado.filas.map((fila) => fila.asignacion_id)),
-  ])
+  const cifras = await cifrasDeMetricas(
+    resultado.filas.map((fila) => fila.metrica_id)
+  )
   return {
     total: resultado.total,
     pagina: resultado.pagina,
     filas: resultado.filas.map((fila) =>
-      metricaDe(
-        fila,
-        cifras.get(fila.metrica_id),
-        formatos.get(fila.asignacion_id)
-      )
+      metricaDe(fila, cifras.get(fila.metrica_id))
     ),
   }
 }

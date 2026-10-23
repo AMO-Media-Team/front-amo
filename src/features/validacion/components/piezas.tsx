@@ -1,10 +1,14 @@
-import { CircleCheck, ExternalLink } from "lucide-react"
+import { CircleCheck, ExternalLink, Scale } from "lucide-react"
+import type { Route } from "next"
+import Link from "next/link"
 import { type ReactNode, useId } from "react"
 
 import { EnlaceBotonExterno } from "@/components/layout/enlace-boton"
 import { formatearHandle } from "@/features/operacion/formato"
 import { formatearFechaHora, formatearRelativo } from "@/lib/format"
 import { cn } from "@/lib/utils"
+
+import { TEXTO_SE_DECIDE_EN_DISPUTA } from "../decision"
 
 /** Un dato corto con su icono (tarjetas de la cola). */
 export function Dato({
@@ -140,6 +144,48 @@ export function AbrirPublicacion({
       <span className="truncate text-xs text-muted-foreground" title={url}>
         {url.replace(/^https?:\/\//, "")}
       </span>
+    </div>
+  )
+}
+
+/**
+ * Una decisión que espera a la disputa (hint `en_disputa`): en lugar de sus
+ * botones, el porqué y el enlace a la disputa (o a la ficha de la asignación,
+ * que enlaza a ella).
+ */
+export function EsperaDisputa({
+  detalle,
+  enlace,
+  className,
+}: {
+  /** Qué espera y por qué, tras «Se decide al resolver la disputa.». */
+  detalle: string
+  enlace: { href: Route; etiqueta: string } | null
+  className?: string
+}) {
+  return (
+    <div
+      role="note"
+      className={cn(
+        "flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-xs text-pretty",
+        className
+      )}
+    >
+      <Scale aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+      <p className="flex min-w-0 flex-col gap-1">
+        <span>
+          <span className="font-medium">{TEXTO_SE_DECIDE_EN_DISPUTA}</span>{" "}
+          <span className="text-muted-foreground">{detalle}</span>
+        </span>
+        {enlace ? (
+          <Link
+            href={enlace.href}
+            className="w-fit font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
+          >
+            {enlace.etiqueta}
+          </Link>
+        ) : null}
+      </p>
     </div>
   )
 }

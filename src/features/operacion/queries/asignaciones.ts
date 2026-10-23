@@ -5,6 +5,7 @@ import { cache } from "react"
 import type { RangoFechas } from "@/lib/fechas"
 import type { Database } from "@/types/database.types"
 
+import { alertaRevisable, indexarAlertas } from "../alertas"
 import {
   CAUSAS_CANCELACION,
   type Corte,
@@ -12,9 +13,7 @@ import {
   type EstadoAsignacion,
   GRUPOS_ASIGNACION,
   type GrupoAsignacion,
-  MOTIVOS_DISPUTA,
   ORIGENES_COMISION,
-  PARTES_DISPUTA,
 } from "../estados"
 import type { EstadoTablaAsignaciones } from "../estado-tablas"
 import { normalizarBusqueda, patronContiene, patronLiteral } from "../formato"
@@ -24,12 +23,7 @@ import {
   type MarcasAsignacion,
   type TransicionRegistrada,
 } from "../linea-tiempo"
-import {
-  type CorteMetrica,
-  indexarAlertas,
-  ordenarCortes,
-  tieneAlerta,
-} from "../metricas"
+import { type CorteMetrica, ordenarCortes } from "../metricas"
 import { ventanaOpcional } from "../periodo"
 import type {
   AsignacionDetalle,
@@ -470,7 +464,7 @@ export const obtenerAsignacion = cache(
     const cargaDeMetrica = new Map(
       metricas.data.map((m) => [m.id, m.created_at])
     )
-    const alertasDe = indexarAlertas(alertas.data)
+    const alertaDe = indexarAlertas(alertas.data)
     const cortes: (CorteMetrica & { numero: number })[] = metricas.data.map(
       (metrica) => ({
         id: metrica.id,
@@ -483,7 +477,7 @@ export const obtenerAsignacion = cache(
         interacciones: metrica.interacciones,
         clics: metrica.clics_enlace,
         estado: metrica.estado_validacion,
-        ...alertasDe(metrica.id),
+        alerta: alertaDe(metrica.id),
         observaciones: metrica.observaciones,
         validadaAt: metrica.validada_at,
         conImagen: Boolean(metrica.captura_path),
@@ -594,7 +588,7 @@ export const obtenerAsignacion = cache(
           validadaAt: c.validadaAt,
           observaciones: c.observaciones,
           corte: c.corte,
-          conAlerta: tieneAlerta(c),
+          conAlerta: alertaRevisable(c.alerta),
         })),
         disputas: disputas.data.map((d) => ({
           id: d.id,
@@ -612,8 +606,8 @@ export const obtenerAsignacion = cache(
       disputas: disputas.data.map((d) => ({
         id: d.id,
         estado: d.estado,
-        motivo: MOTIVOS_DISPUTA[d.motivo],
-        parte: PARTES_DISPUTA[d.parte],
+        motivo: d.motivo,
+        parte: d.parte,
         descripcion: d.descripcion,
         resolucion: d.resolucion,
         creadaAt: d.created_at,

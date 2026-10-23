@@ -200,6 +200,9 @@ export function AlertasPanel({
                   atipicas.multiplo > 0
                     ? `${formatearNumero(atipicas.multiplo)} superan el alcance esperado`
                     : null,
+                  atipicas.corregidas > 0
+                    ? `${formatearNumero(atipicas.corregidas)} se corrigieron tras una alerta`
+                    : null,
                   atipicas.masAntiguaAt
                     ? `la más antigua llegó ${formatearRelativo(atipicas.masAntiguaAt, ahora)}`
                     : null,

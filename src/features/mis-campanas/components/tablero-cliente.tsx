@@ -59,6 +59,8 @@ export interface TableroMisCampanasProps {
   segmentoInicial: SegmentoMisCampanas
   ahoraServidor: number
   puedeEjecutar: boolean
+  /** `disputas.abrir`: reclamar una vencida desde su tarjeta. */
+  puedeDisputar: boolean
   puedeVerOfertas: boolean
   /** `false` si hay más asignaciones de las que caben (las más antiguas). */
   completas: boolean
@@ -76,6 +78,7 @@ export function TableroCampanasCliente({
   segmentoInicial,
   ahoraServidor,
   puedeEjecutar,
+  puedeDisputar,
   puedeVerOfertas,
   completas,
 }: TableroMisCampanasProps) {
@@ -190,6 +193,7 @@ export function TableroCampanasCliente({
                         tarjeta={tarjeta}
                         ahoraServidor={ahoraServidor}
                         puedeEjecutar={puedeEjecutar}
+                        puedeDisputar={puedeDisputar}
                         indice={indice}
                       />
                     </li>

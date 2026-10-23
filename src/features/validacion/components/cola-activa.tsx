@@ -80,7 +80,7 @@ async function ColaMetricas({
       <EstadoVacio
         icono={TriangleAlert}
         titulo="Ninguna métrica pendiente tiene alerta"
-        descripcion="Las métricas con desviación frente al histórico o alcance excesivo aparecerán aquí primero."
+        descripcion="Las métricas con desviación frente al histórico o alcance excesivo, también las que la tuvieron antes de que el medio las corrigiera, aparecerán aquí primero."
       >
         <EnlaceBoton href={rutaCola("metricas")} variant="outline">
           Ver todas las métricas

@@ -15,10 +15,13 @@ import {
   mensajePruebas,
   motivoInicial,
   opcionesMotivo,
+  SIN_PERMISO_DISPUTA,
   siguienteTrasDisputa,
   textoPlazoReclamo,
   tituloDisputa,
+  tituloSinPermiso,
   validarEnlacePublicacion,
+  type VistaDisputa,
   vistaDisputa,
 } from "./disputa"
 
@@ -260,6 +263,47 @@ describe("títulos", () => {
       )
     ).toBe("Disputa")
   })
+
+  it("sin `disputas.abrir`, la vista para abrir se titula como lo que consulta", () => {
+    expect(
+      tituloDisputa(
+        { tipo: "abrir", modo: "reclamo", motivos: ["OTRO"], anteriores: [] },
+        "medio",
+        false
+      )
+    ).toBe("Reclamo")
+    expect(
+      tituloDisputa(
+        { tipo: "abrir", modo: "problema", motivos: ["OTRO"], anteriores: [] },
+        "anunciante",
+        false
+      )
+    ).toBe("Disputa")
+    // Las demás vistas no cambian.
+    expect(
+      tituloDisputa(
+        {
+          tipo: "abierta",
+          disputa: disputa({ estadoOrigen: "VENCIDA_SIN_PUBLICAR" }),
+          anteriores: [],
+        },
+        "medio",
+        false
+      )
+    ).toBe("Tu reclamo")
+  })
+
+  it("sin `disputas.abrir`: por qué no puede escribir y a quién pedirlo", () => {
+    expect(tituloSinPermiso("reclamo")).toBe(
+      "Tu rol no permite reclamar esta publicación"
+    )
+    expect(tituloSinPermiso("problema")).toBe(
+      "Tu rol no permite reportar problemas"
+    )
+    for (const texto of Object.values(SIN_PERMISO_DISPUTA)) {
+      expect(texto).toMatch(/pídeselo a un administrador\.$/)
+    }
+  })
 })
 
 describe("motivos del formulario", () => {
@@ -464,6 +508,52 @@ describe("enlaceDisputa", () => {
     ).toBeNull()
   })
 
+  it("sin `disputas.abrir` solo ofrece ver la que haya, nunca abrir otra", () => {
+    const sinPermiso = { ahora: AHORA, puedeAbrir: false } as const
+    expect(
+      enlaceDisputa({
+        ...sinPermiso,
+        perspectiva: "anunciante",
+        estado: "PUBLICADA",
+      })
+    ).toBeNull()
+    expect(
+      enlaceDisputa({
+        ...sinPermiso,
+        perspectiva: "medio",
+        estado: "VENCIDA_SIN_PUBLICAR",
+        disputa: null,
+        reclamoHasta: "2026-10-25T15:00:00.000Z",
+      })
+    ).toBeNull()
+    // Una disputable con la anterior ya cerrada: su resultado, no otro reporte.
+    expect(
+      enlaceDisputa({
+        ...sinPermiso,
+        perspectiva: "anunciante",
+        estado: "METRICAS_CARGADAS",
+        disputa: { estado: "DESCARTADA", estadoOrigen: "METRICAS_CARGADAS" },
+      })
+    ).toEqual({ tipo: "ver", texto: "Ver la disputa" })
+    expect(
+      enlaceDisputa({
+        ...sinPermiso,
+        perspectiva: "medio",
+        estado: "EN_DISPUTA",
+        disputa: { estado: "ABIERTA", estadoOrigen: "VENCIDA_SIN_PUBLICAR" },
+      })
+    ).toEqual({ tipo: "ver", texto: "Ver tu reclamo" })
+    expect(
+      enlaceDisputa({
+        ...sinPermiso,
+        perspectiva: "medio",
+        estado: "VENCIDA_SIN_PUBLICAR",
+        disputa: { estado: "RESUELTA", estadoOrigen: "VENCIDA_SIN_PUBLICAR" },
+        reclamoHasta: "2026-10-20T15:00:00.000Z",
+      })
+    ).toEqual({ tipo: "ver", texto: "Ver tu reclamo" })
+  })
+
   it("cerrada y sin otra posible, enlaza su resultado", () => {
     expect(
       enlaceDisputa({
@@ -603,6 +693,22 @@ describe("avisoPaginaAnunciante", () => {
       })
     ).toBe(
       "Mientras dure la disputa, esta publicación no se verifica ni se liquida. Lo que escribas lo verán el medio y el equipo AMO."
+    )
+  })
+
+  it("sin permiso para escribir, solo lo que queda en pausa", () => {
+    const abierta = (
+      estadoOrigen: DisputaDetalle["estadoOrigen"]
+    ): VistaDisputa => ({
+      tipo: "abierta",
+      disputa: disputa({ parte: "MEDIO", estadoOrigen }),
+      anteriores: [],
+    })
+    expect(avisoPaginaAnunciante(abierta("PUBLICADA"), false)).toBe(
+      "Mientras dure la disputa, esta publicación no se verifica ni se liquida."
+    )
+    expect(avisoPaginaAnunciante(abierta("VERIFICADA"), false)).toBe(
+      "Mientras dure la disputa, esta publicación no se liquida."
     )
   })
 

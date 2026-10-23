@@ -24,7 +24,7 @@ import {
   interpretarAccion,
   PLAZO_CARGA_HORAS_POR_DEFECTO,
 } from "./siguiente-accion"
-import { LIMITE_TABLERO } from "./tablero"
+import { LIMITE_TABLERO, vencidasPorLeer } from "./tablero"
 import type {
   AccionMedio,
   ArchivoContenido,
@@ -49,9 +49,6 @@ const LIMITE_ACCIONES = 100
 
 const CLAVE_PLAZO_CARGA = "metricas.plazo_carga_horas"
 const CLAVE_CORREO_SOPORTE = "soporte.correo"
-
-/** Vencidas por reclamar cuyas disputas se leen de una vez (con holgura). */
-const LIMITE_RECLAMABLES = 100
 
 /** Las SRF generan columnas «no nulas» que sí llegan nulas: se normaliza aquí. */
 function texto(valor: string | null | undefined): string | null {
@@ -139,29 +136,16 @@ function resumenDisputa(disputa: DisputaDetalle): DisputaDeAsignacion {
   }
 }
 
-/** Una vencida que todavía se puede reclamar (el plazo sigue abierto). */
-function esReclamable(asignacion: AsignacionMedio, ahora: number): boolean {
-  return (
-    asignacion.estado === "VENCIDA_SIN_PUBLICAR" &&
-    asignacion.reclamoHasta !== null &&
-    Date.parse(asignacion.reclamoHasta) >= ahora
-  )
-}
-
 /**
- * La disputa más reciente de cada vencida que aún se podría reclamar: una
- * vencida se reclama una sola vez y el tablero no debe ofrecer otro reclamo.
- * Dato de apoyo: si la lectura falla, el tablero sigue (la página de la
- * disputa vuelve a comprobarlo todo).
+ * La disputa más reciente de cada vencida dada (`vencidasPorLeer`): una
+ * vencida se reclama una sola vez, así que el tablero no ofrece otro reclamo
+ * y, aunque el plazo ya terminó, dice que ya reclamó. Una sola consulta por
+ * sus ids. Dato de apoyo: si la lectura falla, el tablero sigue (la página de
+ * la disputa vuelve a comprobarlo todo).
  */
-async function disputasDeReclamables(
-  asignaciones: readonly AsignacionMedio[]
+async function disputasDeVencidas(
+  ids: readonly string[]
 ): Promise<ReadonlyMap<string, DisputaDeAsignacion>> {
-  const ahora = Date.now()
-  const ids = asignaciones
-    .filter((asignacion) => esReclamable(asignacion, ahora))
-    .map((asignacion) => asignacion.id)
-    .slice(0, LIMITE_RECLAMABLES)
   if (ids.length === 0) return new Map()
   const supabase = await clienteSolicitud()
   const { data, error } = await supabase
@@ -195,8 +179,9 @@ async function disputasDeReclamables(
 
 /**
  * Las asignaciones aceptadas del medio, de la más reciente a la más antigua.
- * Las vencidas que aún se pueden reclamar traen su disputa (`null` si no la
- * tienen): así el tablero sabe si ya se reclamaron.
+ * Las vencidas que aún se pueden reclamar y las que pasaron por una disputa
+ * traen la suya (`null` si no la tienen): así el tablero sabe si ya se
+ * reclamaron, dentro o fuera del plazo.
  */
 export const misAsignaciones = cache(
   async (): Promise<AsignacionesDelMedio> => {
@@ -206,11 +191,11 @@ export const misAsignaciones = cache(
     })
     if (error) fallar("consultar tus campañas", error)
     const asignaciones = data.map(comoAsignacion)
-    const disputas = await disputasDeReclamables(asignaciones)
-    const ahora = Date.now()
+    const leidas = new Set(vencidasPorLeer(asignaciones, Date.now()))
+    const disputas = await disputasDeVencidas([...leidas])
     return {
       asignaciones: asignaciones.map((asignacion) =>
-        esReclamable(asignacion, ahora)
+        leidas.has(asignacion.id)
           ? { ...asignacion, disputa: disputas.get(asignacion.id) ?? null }
           : asignacion
       ),

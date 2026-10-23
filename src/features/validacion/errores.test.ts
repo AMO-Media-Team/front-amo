@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import { frasePermanenciaPendiente } from "./decision"
-import { interpretarErrorValidacion, MENSAJES_VALIDACION } from "./errores"
+import {
+  esperaDisputa,
+  interpretarErrorValidacion,
+  MENSAJES_VALIDACION,
+} from "./errores"
 
 const TRANSICION = {
   code: "P0001",
@@ -27,6 +31,24 @@ describe("interpretarErrorValidacion", () => {
         hint: "metricas_pendientes",
       }).mensaje
     ).toBe(MENSAJES_VALIDACION.metricasPendientes)
+  })
+
+  it("en disputa: dice qué espera a la disputa según lo que se decidía", () => {
+    const enDisputa = {
+      ...TRANSICION,
+      details:
+        "La asignación está en disputa: decide sobre la evidencia al resolverla.",
+      hint: "en_disputa",
+    }
+    expect(interpretarErrorValidacion(enDisputa)).toEqual({
+      codigo: "AMO_TRANSICION_INVALIDA",
+      esperado: true,
+      mensaje: MENSAJES_VALIDACION.enDisputaEvidencia,
+    })
+    expect(
+      interpretarErrorValidacion(enDisputa, { enDisputa: "rechazoMetrica" })
+        .mensaje
+    ).toBe(MENSAJES_VALIDACION.enDisputaRechazoMetrica)
   })
 
   it("una alerta sin revisar va al campo de las observaciones", () => {
@@ -100,5 +122,29 @@ describe("interpretarErrorValidacion", () => {
     })
     expect(interpretado.esperado).toBe(false)
     expect(interpretado.mensaje).not.toMatch(/metricas/)
+  })
+})
+
+describe("esperaDisputa", () => {
+  it("reconoce el fallo `en_disputa` de cada decisión", () => {
+    const evidencia = {
+      ok: false,
+      error: MENSAJES_VALIDACION.enDisputaEvidencia,
+    }
+    expect(esperaDisputa(evidencia, "evidencia")).toBe(true)
+    expect(esperaDisputa(evidencia, "rechazoMetrica")).toBe(false)
+    expect(
+      esperaDisputa(
+        { ok: false, error: MENSAJES_VALIDACION.enDisputaRechazoMetrica },
+        "rechazoMetrica"
+      )
+    ).toBe(true)
+    expect(esperaDisputa({ ok: true }, "evidencia")).toBe(false)
+    expect(
+      esperaDisputa(
+        { ok: false, error: MENSAJES_VALIDACION.asignacionCerrada },
+        "evidencia"
+      )
+    ).toBe(false)
   })
 })

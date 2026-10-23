@@ -1,17 +1,25 @@
 import { describe, expect, it } from "vitest"
 
-import type { Corte, EstadoValidacion } from "@/features/operacion/estados"
+import type {
+  Corte,
+  EstadoAsignacion,
+  EstadoValidacion,
+} from "@/features/operacion/estados"
 import type { CorteMetrica } from "@/features/operacion/metricas"
 
 import {
+  type AccionesCorte,
   accionesCorte,
   BLOQUEO_EVIDENCIA_SIN_APROBAR,
   bloqueoEnCola,
   detalleFaltanMetricas,
   enCurso,
-  puedeValidarEvidencia,
-  situacionVerificacion,
+  evidenciaEnDisputa,
+  evidenciaEsperaDisputa,
   frasePermanenciaPendiente,
+  puedeValidarEvidencia,
+  rechazoMetricaEnDisputa,
+  situacionVerificacion,
   validacionEnFicha,
 } from "./decision"
 
@@ -37,6 +45,27 @@ function publicacion(
   return { cortes, permanenciaHasta, permanenciaVerificadaAt }
 }
 
+/** La ficha de una asignación en `estado`, sin disputas. */
+function ficha(
+  permisos: readonly string[],
+  estado: EstadoAsignacion,
+  cambios: Partial<Parameters<typeof validacionEnFicha>[1]> = {}
+) {
+  return validacionEnFicha(permisos, {
+    estado,
+    estadoPrevioDisputa: null,
+    disputas: [],
+    ...cambios,
+  })
+}
+
+const SIN_ACCIONES: AccionesCorte = {
+  validar: false,
+  bloqueoAprobar: null,
+  rechazoEnDisputa: false,
+  corregir: false,
+}
+
 describe("decisiones de la ficha", () => {
   it("solo se valida en una asignación en curso", () => {
     expect(enCurso("PUBLICADA")).toBe(true)
@@ -46,36 +75,36 @@ describe("decisiones de la ficha", () => {
   })
 
   it("una evidencia pendiente se valida con el permiso y la asignación en curso", () => {
-    const ficha = validacionEnFicha(OPERACIONES, "PUBLICADA")
-    expect(puedeValidarEvidencia("PENDIENTE", ficha)).toBe(true)
-    expect(puedeValidarEvidencia("APROBADA", ficha)).toBe(false)
+    const publicada = ficha(OPERACIONES, "PUBLICADA")
+    expect(puedeValidarEvidencia("PENDIENTE", publicada)).toBe(true)
+    expect(puedeValidarEvidencia("APROBADA", publicada)).toBe(false)
     expect(puedeValidarEvidencia("PENDIENTE", undefined)).toBe(false)
     expect(
       puedeValidarEvidencia(
         "PENDIENTE",
-        validacionEnFicha(["metricas.validar"], "PUBLICADA")
+        ficha(["metricas.validar"], "PUBLICADA")
       )
     ).toBe(false)
     expect(
       puedeValidarEvidencia(
         "PENDIENTE",
-        validacionEnFicha(OPERACIONES, "VENCIDA_SIN_PUBLICAR")
+        ficha(OPERACIONES, "VENCIDA_SIN_PUBLICAR")
       )
     ).toBe(false)
   })
 
   it("un corte pendiente no se aprueba sin la evidencia aprobada (se explica)", () => {
-    const ficha = validacionEnFicha(OPERACIONES, "EVIDENCIA_VALIDADA")
-    expect(accionesCorte({ estado: "PENDIENTE" }, false, ficha)).toEqual({
+    const evidenciaValidada = ficha(OPERACIONES, "EVIDENCIA_VALIDADA")
+    expect(
+      accionesCorte({ estado: "PENDIENTE" }, false, evidenciaValidada)
+    ).toEqual({
+      ...SIN_ACCIONES,
       validar: true,
       bloqueoAprobar: BLOQUEO_EVIDENCIA_SIN_APROBAR,
-      corregir: false,
     })
-    expect(accionesCorte({ estado: "PENDIENTE" }, true, ficha)).toEqual({
-      validar: true,
-      bloqueoAprobar: null,
-      corregir: false,
-    })
+    expect(
+      accionesCorte({ estado: "PENDIENTE" }, true, evidenciaValidada)
+    ).toEqual({ ...SIN_ACCIONES, validar: true })
   })
 
   it("corregir una aprobada es solo de quien corrige métricas validadas", () => {
@@ -83,21 +112,90 @@ describe("decisiones de la ficha", () => {
       accionesCorte(
         { estado: "APROBADA" },
         true,
-        validacionEnFicha(OPERACIONES, "VERIFICADA")
+        ficha(OPERACIONES, "VERIFICADA")
       ).corregir
     ).toBe(false)
     expect(
-      accionesCorte(
-        { estado: "APROBADA" },
-        true,
-        validacionEnFicha(ADMIN, "VERIFICADA")
-      )
-    ).toEqual({ validar: false, bloqueoAprobar: null, corregir: true })
-    expect(accionesCorte({ estado: "APROBADA" }, true, undefined)).toEqual({
-      validar: false,
-      bloqueoAprobar: null,
-      corregir: false,
+      accionesCorte({ estado: "APROBADA" }, true, ficha(ADMIN, "VERIFICADA"))
+    ).toEqual({ ...SIN_ACCIONES, corregir: true })
+    expect(accionesCorte({ estado: "APROBADA" }, true, undefined)).toEqual(
+      SIN_ACCIONES
+    )
+  })
+
+  it("enlaza a la disputa abierta solo con `disputas.ver`", () => {
+    const disputas = [
+      { id: "d-cerrada", estado: "RESUELTA" as const },
+      { id: "d-abierta", estado: "EN_REVISION" as const },
+    ]
+    expect(
+      ficha([...OPERACIONES, "disputas.ver"], "EN_DISPUTA", {
+        estadoPrevioDisputa: "PUBLICADA",
+        disputas,
+      })
+    ).toMatchObject({
+      estadoAsignacion: "EN_DISPUTA",
+      estadoPrevioDisputa: "PUBLICADA",
+      disputaId: "d-abierta",
     })
+    expect(ficha(OPERACIONES, "EN_DISPUTA", { disputas }).disputaId).toBeNull()
+    expect(
+      ficha([...OPERACIONES, "disputas.ver"], "VERIFICADA", {
+        disputas: [disputas[0]],
+      }).disputaId
+    ).toBeNull()
+  })
+})
+
+describe("durante una disputa (hint `en_disputa`)", () => {
+  it("la evidencia pendiente espera a la disputa: no se ofrece decidirla, se explica", () => {
+    const enDisputa = ficha(OPERACIONES, "EN_DISPUTA", {
+      estadoPrevioDisputa: "PUBLICADA",
+    })
+    expect(evidenciaEnDisputa("EN_DISPUTA")).toBe(true)
+    expect(evidenciaEnDisputa("PUBLICADA")).toBe(false)
+    expect(puedeValidarEvidencia("PENDIENTE", enDisputa)).toBe(false)
+    expect(evidenciaEsperaDisputa("PENDIENTE", enDisputa)).toBe(true)
+    expect(evidenciaEsperaDisputa("APROBADA", enDisputa)).toBe(false)
+    // Sin el permiso no hay nada que explicar.
+    expect(
+      evidenciaEsperaDisputa(
+        "PENDIENTE",
+        ficha(["metricas.validar"], "EN_DISPUTA")
+      )
+    ).toBe(false)
+    expect(
+      evidenciaEsperaDisputa("PENDIENTE", ficha(OPERACIONES, "PUBLICADA"))
+    ).toBe(false)
+  })
+
+  it("con todo cargado, el rechazo de una métrica espera; aprobarla sigue", () => {
+    const conTodo = ficha(OPERACIONES, "EN_DISPUTA", {
+      estadoPrevioDisputa: "METRICAS_CARGADAS",
+    })
+    expect(accionesCorte({ estado: "PENDIENTE" }, true, conTodo)).toEqual({
+      ...SIN_ACCIONES,
+      validar: true,
+      rechazoEnDisputa: true,
+    })
+    expect(
+      rechazoMetricaEnDisputa({
+        estadoAsignacion: "EN_DISPUTA",
+        estadoPrevioDisputa: "EVIDENCIA_VALIDADA",
+      })
+    ).toBe(false)
+    expect(
+      accionesCorte(
+        { estado: "PENDIENTE" },
+        true,
+        ficha(OPERACIONES, "EN_DISPUTA", {
+          estadoPrevioDisputa: "EVIDENCIA_VALIDADA",
+        })
+      ).rechazoEnDisputa
+    ).toBe(false)
+    expect(
+      accionesCorte({ estado: "APROBADA" }, true, conTodo).rechazoEnDisputa
+    ).toBe(false)
   })
 })
 

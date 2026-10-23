@@ -235,24 +235,28 @@ function DetallePublicacion({
 }
 
 /**
- * «Reportar un problema» en los estados disputables o «Ver la disputa» con
- * una abierta o con el resultado de la última (ADM-011). El nombre accesible
- * dice de qué medio es: hay uno por tarjeta.
+ * «Reportar un problema» en los estados disputables (con `disputas.abrir`) o
+ * «Ver la disputa» con una abierta o con el resultado de la última (basta con
+ * ver el seguimiento), ADM-011. El nombre accesible dice de qué medio es: hay
+ * uno por tarjeta.
  */
 function AccionDisputa({
   asignacion,
   campanaId,
   ahoraServidor,
+  puedeDisputar,
 }: {
   asignacion: AsignacionSeguimiento
   campanaId: string
   ahoraServidor: number
+  puedeDisputar: boolean
 }) {
   const enlace = enlaceDisputa({
     perspectiva: "anunciante",
     estado: asignacion.estado,
     disputa: asignacion.disputa,
     ahora: new Date(ahoraServidor),
+    puedeAbrir: puedeDisputar,
   })
   if (!enlace) return null
   const Icono = enlace.tipo === "abrir" ? Flag : Scale
@@ -278,8 +282,8 @@ const TEXTO_NOVEDAD: Readonly<Record<Exclude<Novedad, null>, string>> = {
 /**
  * Una asignación de la campaña: el medio (su ficha pública a un toque), la
  * cuenta y el alcance que declaró al aceptar, el estado con su plazo, el valor
- * del cupo, el enlace a cada publicación y, con `disputas.abrir`, reportar un
- * problema o ver su disputa. Al desplegarla: la captura firmada, los cortes
+ * del cupo, el enlace a cada publicación, su disputa si la tiene y, con
+ * `disputas.abrir`, reportar un problema. Al desplegarla: la captura firmada, los cortes
  * aprobados y la línea de tiempo.
  */
 export function TarjetaAsignacion({
@@ -301,7 +305,7 @@ export function TarjetaAsignacion({
   ahoraServidor: number
   /** La campaña, para enlazar la página de la disputa. */
   campanaId?: string
-  /** `disputas.abrir`: reportar un problema y ver la disputa. */
+  /** `disputas.abrir`: reportar un problema (ver la disputa no lo pide). */
   puedeDisputar?: boolean
 }) {
   const { medio, cuenta, publicaciones } = asignacion
@@ -411,11 +415,12 @@ export function TarjetaAsignacion({
 
         <ResumenResultados asignacion={asignacion} />
 
-        {puedeDisputar && campanaId ? (
+        {campanaId ? (
           <AccionDisputa
             asignacion={asignacion}
             campanaId={campanaId}
             ahoraServidor={ahoraServidor}
+            puedeDisputar={puedeDisputar}
           />
         ) : null}
       </div>

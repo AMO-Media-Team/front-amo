@@ -192,6 +192,29 @@ describe("validarEvidencia (ADM-007)", () => {
     })
     expect(estado.revalidadas).toEqual([RUTA_COLA])
   })
+
+  it("en disputa la evidencia se decide al resolverla (hint `en_disputa`)", async () => {
+    estado.respuesta = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        details:
+          "La asignación está en disputa: decide sobre la evidencia al resolverla.",
+        hint: "en_disputa",
+      },
+    }
+    const resultado = await validarEvidencia({
+      aprobar: false,
+      publicacionId: PUBLICACION,
+      observaciones: "La captura no corresponde al post.",
+    })
+    expect(resultado).toEqual({
+      ok: false,
+      error: MENSAJES_VALIDACION.enDisputaEvidencia,
+    })
+    expect(estado.revalidadas).toEqual([RUTA_COLA])
+  })
 })
 
 describe("validarMetrica (ADM-008)", () => {
@@ -238,6 +261,26 @@ describe("validarMetrica (ADM-008)", () => {
         p_actor_id: "u1",
         p_session_id: "s1",
       },
+    })
+  })
+
+  it("rechazar en disputa con todo cargado espera a la disputa", async () => {
+    estado.respuesta = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        hint: "en_disputa",
+      },
+    }
+    const resultado = await validarMetrica({
+      aprobar: false,
+      metricaId: METRICA,
+      observaciones: "Las cifras no coinciden con la captura.",
+    })
+    expect(resultado).toEqual({
+      ok: false,
+      error: MENSAJES_VALIDACION.enDisputaRechazoMetrica,
     })
   })
 })

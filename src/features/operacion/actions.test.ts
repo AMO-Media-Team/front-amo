@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
- * Gestión de una asignación por el equipo AMO (ADM-010, ADM-011) con el DAL,
- * el cliente de sesión y la RPC simulados: autorizan antes que nada, validan
+ * Cancelación de una asignación por el equipo AMO (ADM-010; abrir una
+ * disputa usa la acción de `@/features/disputas`) con el DAL, el cliente de
+ * sesión y la RPC simulados: autorizan antes que nada, validan
  * con el mismo esquema que el diálogo, no cancelan si la asignación cambió de
  * estado mientras se revisaba y traducen los `hint` de la BD.
  */
@@ -13,7 +14,6 @@ import {
 } from "./gestion-asignacion"
 
 const ASIGNACION = "0192f3a4-5b6c-7d8e-9f01-0000000000a1"
-const DISPUTA = "0192f3a4-5b6c-7d8e-9f01-0000000000d1"
 
 const estado = vi.hoisted(() => ({
   orden: [] as string[],
@@ -78,7 +78,7 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }))
 
-const { abrirDisputaAsignacion, cancelarAsignacion } = await import("./actions")
+const { cancelarAsignacion } = await import("./actions")
 
 const GESTION = [
   "asignaciones.ver",
@@ -210,67 +210,6 @@ describe("cancelarAsignacion", () => {
     expect(await cancelarAsignacion(CANCELACION)).toEqual({
       ok: false,
       error: "Indica una causa de cancelación válida.",
-    })
-  })
-})
-
-describe("abrirDisputaAsignacion", () => {
-  const DISPUTA_NUEVA = {
-    asignacionId: ASIGNACION,
-    motivo: "METRICAS",
-    descripcion: "El alcance del corte de 72 h no coincide con la captura.",
-  } as const
-
-  it("autoriza y abre la disputa como equipo AMO", async () => {
-    estado.respuesta = { data: DISPUTA, error: null }
-    const resultado = await abrirDisputaAsignacion(DISPUTA_NUEVA)
-    expect(resultado).toEqual({ ok: true, datos: { disputaId: DISPUTA } })
-    expect(estado.orden).toEqual(["dal:disputas.abrir", "contexto"])
-    expect(estado.rpc).toEqual([
-      {
-        nombre: "abrir_disputa_srv",
-        argumentos: {
-          p_asignacion_id: ASIGNACION,
-          p_motivo: "METRICAS",
-          p_descripcion: DISPUTA_NUEVA.descripcion,
-          p_actor_id: "u1",
-          p_session_id: "s1",
-        },
-      },
-    ])
-    expect(estado.refrescos).toBe(1)
-  })
-
-  it("es la acción del equipo: sin `asignaciones.ver` no sigue", async () => {
-    estado.permisos = ["disputas.abrir"]
-    const resultado = await abrirDisputaAsignacion(DISPUTA_NUEVA)
-    expect(resultado.ok).toBe(false)
-    expect(estado.rpc).toHaveLength(0)
-  })
-
-  it("valida la descripción con el mismo esquema que el diálogo", async () => {
-    const resultado = await abrirDisputaAsignacion({
-      ...DISPUTA_NUEVA,
-      descripcion: "corta",
-    })
-    expect(!resultado.ok && resultado.erroresCampo?.descripcion?.[0]).toMatch(
-      /al menos 10/
-    )
-    expect(estado.rpc).toHaveLength(0)
-  })
-
-  it("otra disputa abierta se explica con la restricción", async () => {
-    estado.respuesta = {
-      data: null,
-      error: {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "disputas_abierta_key"',
-      },
-    }
-    expect(await abrirDisputaAsignacion(DISPUTA_NUEVA)).toEqual({
-      ok: false,
-      error: "Ya hay una disputa abierta para esta asignación.",
     })
   })
 })

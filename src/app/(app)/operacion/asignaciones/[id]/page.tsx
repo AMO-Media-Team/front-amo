@@ -17,6 +17,7 @@ import { ProgresoAsignacion } from "@/features/operacion/components/linea-tiempo
 import { opcionesGestion } from "@/features/operacion/gestion-asignacion"
 import { obtenerAsignacion } from "@/features/operacion/queries/asignaciones"
 import { VerificarAsignacion } from "@/features/validacion/components/verificar-asignacion"
+import { validacionEnFicha } from "@/features/validacion/decision"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 export async function generateMetadata({
@@ -39,10 +40,12 @@ export async function generateMetadata({
  * métricas por corte (con sus alertas de integridad), línea de tiempo (con
  * actor y motivo si el rol ve la bitácora), precio congelado, ejecución,
  * disputas y liquidación. Con los permisos de validación, aprueba o rechaza
- * la evidencia y los cortes desde la ficha (ADM-007/008); con los de gestión,
- * el equipo AMO la cancela con causa (y, por fraude o incumplimiento,
- * suspende al medio) o abre una disputa (ADM-010, ADM-011): arriba desde
- * `sm`, en el pie fijo en el celular. La BD vuelve a comprobarlo todo.
+ * la evidencia y los cortes desde la ficha (ADM-007/008; en disputa, lo que
+ * espera a resolverla se explica y enlaza a ella); con los de gestión, el
+ * equipo AMO la cancela con causa (y, por fraude o incumplimiento, suspende
+ * al medio) o abre una disputa con las reglas de `@/features/disputas`
+ * (ADM-010, ADM-011): arriba desde `sm`, en el pie fijo en el celular. La BD
+ * vuelve a comprobarlo todo.
  */
 export default async function PaginaAsignacion({
   params,
@@ -94,17 +97,14 @@ export default async function PaginaAsignacion({
     />
   )
   // Las decisiones de la validación sobre cada publicación y cada corte
-  // (`evidencias-asignacion.tsx`); sin permiso de validar, solo se consulta.
+  // (`evidencias-asignacion.tsx`), con lo que espera a una disputa abierta;
+  // sin permiso de validar ni de corregir, solo se consulta.
   const validacion: ValidacionFicha = tieneAlgunPermiso(usuario, [
     "evidencias.validar",
     "metricas.validar",
+    "metricas.editar_validadas",
   ])
-    ? {
-        estadoAsignacion: asignacion.estado,
-        evidencias: tieneAlgunPermiso(usuario, ["evidencias.validar"]),
-        metricas: tieneAlgunPermiso(usuario, ["metricas.validar"]),
-        corregir: tieneAlgunPermiso(usuario, ["metricas.editar_validadas"]),
-      }
+    ? validacionEnFicha(usuario.permisos, asignacion)
     : undefined
 
   return (

@@ -14,6 +14,10 @@ import {
   cerrarFrase,
   formatearFechaHoraFija,
 } from "@/features/operacion/formato"
+import {
+  disputaAbierta,
+  type SituacionGestion,
+} from "@/features/operacion/gestion-asignacion"
 import type { PublicacionEvidencia } from "@/features/operacion/tipos"
 import { formatearNumero } from "@/lib/format"
 
@@ -35,19 +39,66 @@ export function enCurso(estado: EstadoAsignacion): boolean {
   return ESTADOS_EN_CURSO.includes(estado)
 }
 
-/** Permisos y estado que necesitan las decisiones de la ficha de la asignación. */
+/**
+ * Permisos y estado que necesitan las decisiones de la ficha de la
+ * asignación; con `disputas.ver`, la disputa abierta a la que enlazar lo que
+ * se decide al resolverla.
+ */
 export function validacionEnFicha(
   permisos: Iterable<string>,
-  estadoAsignacion: EstadoAsignacion
+  asignacion: {
+    estado: EstadoAsignacion
+    estadoPrevioDisputa: EstadoAsignacion | null
+    disputas: SituacionGestion["disputas"]
+  }
 ): ValidacionEnFicha {
   const disponibles = new Set(permisos)
+  const abierta = disputaAbierta(asignacion.disputas)
   return {
-    estadoAsignacion,
+    estadoAsignacion: asignacion.estado,
+    estadoPrevioDisputa: asignacion.estadoPrevioDisputa,
+    disputaId: abierta && disponibles.has("disputas.ver") ? abierta.id : null,
     evidencias: disponibles.has("evidencias.validar"),
     metricas: disponibles.has("metricas.validar"),
     corregir: disponibles.has("metricas.editar_validadas"),
   }
 }
+
+// ── Durante una disputa ──────────────────────────────────────────────────────
+
+/**
+ * La BD no decide la evidencia de una asignación en disputa (aprobarla no la
+ * movería): responde el hint `en_disputa`. Se decide al resolver la disputa.
+ */
+export function evidenciaEnDisputa(
+  estadoAsignacion: EstadoAsignacion
+): boolean {
+  return estadoAsignacion === "EN_DISPUTA"
+}
+
+/**
+ * Rechazar una métrica de una asignación que entró en disputa con todo
+ * cargado la dejaría en «Métricas cargadas» con una rechazada al restaurarla
+ * (D10): la BD responde `en_disputa`. Aprobarla sí se puede.
+ */
+export function rechazoMetricaEnDisputa(asignacion: {
+  estadoAsignacion: EstadoAsignacion
+  estadoPrevioDisputa: EstadoAsignacion | null
+}): boolean {
+  return (
+    asignacion.estadoAsignacion === "EN_DISPUTA" &&
+    asignacion.estadoPrevioDisputa === "METRICAS_CARGADAS"
+  )
+}
+
+export const TEXTO_SE_DECIDE_EN_DISPUTA = "Se decide al resolver la disputa."
+
+/** El porqué, junto a `TEXTO_SE_DECIDE_EN_DISPUTA`. */
+export const DETALLE_EVIDENCIA_EN_DISPUTA =
+  "Mientras la asignación está en disputa, su evidencia no se aprueba ni se rechaza aparte."
+
+export const DETALLE_RECHAZO_EN_DISPUTA =
+  "Entró en disputa con todas sus métricas cargadas: rechazar este corte espera a la resolución. Aprobarlo sí se puede."
 
 /** ¿Se ofrece aprobar o rechazar esta evidencia? */
 export function puedeValidarEvidencia(
@@ -58,7 +109,24 @@ export function puedeValidarEvidencia(
     validacion !== undefined &&
     validacion.evidencias &&
     estado === "PENDIENTE" &&
-    enCurso(validacion.estadoAsignacion)
+    enCurso(validacion.estadoAsignacion) &&
+    !evidenciaEnDisputa(validacion.estadoAsignacion)
+  )
+}
+
+/**
+ * La evidencia está pendiente y quien mira la decidiría, pero espera a la
+ * disputa: en su lugar se explica y se enlaza a la disputa.
+ */
+export function evidenciaEsperaDisputa(
+  estado: EstadoValidacion,
+  validacion: ValidacionEnFicha | undefined
+): boolean {
+  return (
+    validacion !== undefined &&
+    validacion.evidencias &&
+    estado === "PENDIENTE" &&
+    evidenciaEnDisputa(validacion.estadoAsignacion)
   )
 }
 
@@ -70,6 +138,11 @@ export interface AccionesCorte {
   validar: boolean
   /** Por qué no se puede aprobar aunque esté pendiente (rechazar sí). */
   bloqueoAprobar: string | null
+  /**
+   * Rechazar espera a la disputa (`rechazoMetricaEnDisputa`): solo se ofrece
+   * aprobar y se explica por qué.
+   */
+  rechazoEnDisputa: boolean
   /** Corregir las cifras de una métrica aprobada (`metricas.editar_validadas`). */
   corregir: boolean
 }
@@ -81,7 +154,12 @@ export function accionesCorte(
   validacion: ValidacionEnFicha | undefined
 ): AccionesCorte {
   if (!validacion)
-    return { validar: false, bloqueoAprobar: null, corregir: false }
+    return {
+      validar: false,
+      bloqueoAprobar: null,
+      rechazoEnDisputa: false,
+      corregir: false,
+    }
   const validar =
     validacion.metricas &&
     corte.estado === "PENDIENTE" &&
@@ -90,6 +168,7 @@ export function accionesCorte(
     validar,
     bloqueoAprobar:
       validar && !evidenciaAprobada ? BLOQUEO_EVIDENCIA_SIN_APROBAR : null,
+    rechazoEnDisputa: validar && rechazoMetricaEnDisputa(validacion),
     corregir: validacion.corregir && corte.estado === "APROBADA",
   }
 }

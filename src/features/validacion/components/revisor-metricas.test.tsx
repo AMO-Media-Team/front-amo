@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { VALORES_VACIOS } from "@/features/ejecucion/campos-metricas"
 import { formatearNumero } from "@/lib/format"
-import { exito } from "@/lib/result"
+import { leerAlerta, SIN_ALERTA } from "@/features/operacion/alertas"
+import { exito, fallo } from "@/lib/result"
 
-import { leerAlerta, SIN_ALERTA } from "../alertas"
-import { BLOQUEO_EVIDENCIA_SIN_APROBAR } from "../decision"
+import {
+  BLOQUEO_EVIDENCIA_SIN_APROBAR,
+  TEXTO_SE_DECIDE_EN_DISPUTA,
+} from "../decision"
 import { MENSAJES_VALIDACION } from "../errores"
 import type { MetricaEnCola } from "../tipos"
 
@@ -57,6 +60,7 @@ function metrica(
       handle: `medio${numero}`,
     },
     seguidoresAlAceptar: 40000,
+    ofertaId: `0192f3a4-5b6c-7d8e-9f01-0000000000d${numero}`,
     ofertaTitulo: "Post de lanzamiento",
     estadoAsignacion: "EVIDENCIA_VALIDADA",
     ...cambios,
@@ -94,6 +98,28 @@ beforeEach(() => {
   avisos.success.mockReset()
 })
 
+/** El medio la corrigió: hoy no dispara, pero tuvo alerta (pide constancia). */
+const CORREGIDA = metrica(5, {
+  alerta: leerAlerta({
+    alerta_desviacion: false,
+    alerta_multiplo: false,
+    detalle_alertas: {
+      multiplo: 2,
+      seguidores: 40000,
+      alcance: 60000,
+      limite_alcance: 80000,
+      alerta_previa: {
+        multiplo: 2,
+        seguidores: 40000,
+        alcance: 95000,
+        limite_alcance: 80000,
+        desviacion: false,
+        multiplo_superado: true,
+      },
+    },
+  }),
+})
+
 describe("RevisorMetricas (ADM-008)", () => {
   it("la tarjeta con alerta dice por qué en una línea", () => {
     render(<RevisorMetricas metricas={[CON_ALERTA, metrica(2)]} />)
@@ -105,6 +131,69 @@ describe("RevisorMetricas (ADM-008)", () => {
     expect(
       within(primera).getByRole("button", { name: /\(con alerta\)$/ })
     ).toBeInTheDocument()
+  })
+
+  it("una corregida que tuvo alerta cuenta como alerta revisable", async () => {
+    const usuario = userEvent.setup()
+    render(<RevisorMetricas metricas={[CORREGIDA]} />)
+    const tarjeta = screen.getByRole("listitem")
+    expect(tarjeta).toHaveTextContent(
+      "Tuvo alerta antes de corregirse: Alcance sobre el límite por seguidores"
+    )
+    await usuario.click(
+      within(tarjeta).getByRole("button", { name: /\(con alerta\)$/ })
+    )
+    const hoja = await screen.findByRole("dialog")
+    expect(
+      within(hoja).getByRole("region", {
+        name: "Tuvo alerta antes de corregirse",
+      })
+    ).toHaveTextContent(formatearNumero(95000))
+    await usuario.click(within(hoja).getByRole("button", { name: "Aprobar" }))
+    expect(
+      await within(hoja).findByRole("textbox", { name: "Qué revisaste" })
+    ).toHaveAttribute("aria-invalid", "true")
+    expect(acciones.validarMetrica).not.toHaveBeenCalled()
+  })
+
+  it("si el rechazo espera a la disputa, deja de ofrecerlo y lo explica", async () => {
+    acciones.validarMetrica.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.enDisputaRechazoMetrica)
+    )
+    const usuario = userEvent.setup()
+    render(<RevisorMetricas metricas={[metrica(6)]} />)
+    await usuario.click(screen.getByRole("button", { name: /^Revisar/ }))
+    const hoja = await screen.findByRole("dialog")
+    await usuario.click(within(hoja).getByRole("button", { name: "Rechazar" }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Rechazar la métrica?",
+    })
+    await usuario.type(
+      within(dialogo).getByRole("textbox"),
+      "Las cifras no coinciden con la captura."
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Rechazar métrica" })
+    )
+    expect(
+      await within(dialogo).findByText(
+        MENSAJES_VALIDACION.enDisputaRechazoMetrica
+      )
+    ).toBeInTheDocument()
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(dialogo).not.toBeInTheDocument())
+    const nota = within(hoja).getByRole("note")
+    expect(nota).toHaveTextContent(TEXTO_SE_DECIDE_EN_DISPUTA)
+    expect(
+      within(nota).getByRole("link", { name: "Ver la asignación y su disputa" })
+    ).toHaveAttribute(
+      "href",
+      `/operacion/asignaciones/${metrica(6).asignacionId}`
+    )
+    expect(
+      within(hoja).queryByRole("button", { name: "Rechazar" })
+    ).not.toBeInTheDocument()
+    expect(within(hoja).getByRole("button", { name: "Aprobar" })).toBeEnabled()
   })
 
   it("muestra el porqué de la alerta junto a las cifras (ADM-008 c1)", async () => {

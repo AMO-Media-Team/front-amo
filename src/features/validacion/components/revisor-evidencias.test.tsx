@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { exito, fallo } from "@/lib/result"
 
+import { TEXTO_SE_DECIDE_EN_DISPUTA } from "../decision"
 import { MENSAJES_VALIDACION } from "../errores"
 import type { EvidenciaEnCola } from "../tipos"
 
@@ -160,6 +161,60 @@ describe("RevisorEvidencias (ADM-007)", () => {
     expect(await within(hoja).findByRole("alert")).toHaveTextContent(
       MENSAJES_VALIDACION.asignacionCerrada
     )
+  })
+
+  it("si la asignación entró en disputa, la evidencia deja de decidirse y se explica", async () => {
+    acciones.validarEvidencia.mockResolvedValue(
+      fallo(MENSAJES_VALIDACION.enDisputaEvidencia)
+    )
+    const { usuario, hoja } = await abrirPrimera()
+    await usuario.click(
+      within(hoja).getByRole("checkbox", {
+        name: "La etiqueta de publicidad es visible",
+      })
+    )
+    await usuario.click(within(hoja).getByRole("button", { name: "Aprobar" }))
+    const nota = await within(hoja).findByRole("note")
+    expect(nota).toHaveTextContent(TEXTO_SE_DECIDE_EN_DISPUTA)
+    expect(
+      within(nota).getByRole("link", { name: "Ver la asignación y su disputa" })
+    ).toHaveAttribute(
+      "href",
+      `/operacion/asignaciones/${EVIDENCIAS[0].asignacionId}`
+    )
+    for (const nombre of ["Aprobar", "Rechazar"]) {
+      expect(
+        within(hoja).queryByRole("button", { name: nombre })
+      ).not.toBeInTheDocument()
+    }
+    await waitFor(() =>
+      expect(
+        within(hoja).getByRole("heading", { name: "Evidencia de Medio 1" })
+      ).toHaveFocus()
+    )
+  })
+
+  it("una evidencia de una asignación en disputa no ofrece decidirla", async () => {
+    const usuario = userEvent.setup()
+    render(
+      <RevisorEvidencias
+        evidencias={[evidencia(3, { estadoAsignacion: "EN_DISPUTA" })]}
+        plazoRecargaHoras={24}
+      />
+    )
+    await usuario.click(screen.getByRole("button", { name: /^Revisar/ }))
+    const hoja = await screen.findByRole("dialog")
+    expect(within(hoja).getByRole("note")).toHaveTextContent(
+      TEXTO_SE_DECIDE_EN_DISPUTA
+    )
+    expect(
+      within(hoja).queryByRole("checkbox", {
+        name: "La etiqueta de publicidad es visible",
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      within(hoja).getByRole("link", { name: "Ver la asignación" })
+    ).toBeInTheDocument()
   })
 
   it("rechazar pide observaciones con sugerencias y avisa el plazo del medio", async () => {

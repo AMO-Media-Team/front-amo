@@ -16,6 +16,8 @@ import type { ComponentProps, ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { InsigniaEstadoDisputa } from "@/features/disputas/components/estado-disputa"
+import { MOTIVOS, nombreParte } from "@/features/disputas/presentacion"
 import { rutaDisputaInterna } from "@/features/disputas/rutas"
 import {
   formatearCOP,
@@ -26,10 +28,10 @@ import {
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
+import { alertaRevisable } from "../alertas"
 import {
   CORTES,
   ESTADOS_ASIGNACION,
-  ESTADOS_DISPUTA,
   ESTADOS_LIQUIDACION,
   ESTADOS_TERMINALES_CAIDA,
   type EstadoAsignacion,
@@ -45,7 +47,6 @@ import {
 } from "../formato"
 import { ID_AVISO_ESTADO_ASIGNACION } from "../foco"
 import { disputaAbierta } from "../gestion-asignacion"
-import { tieneAlerta } from "../metricas"
 import {
   RUTAS_OPERACION,
   rutaAnunciante,
@@ -91,12 +92,16 @@ function estaCerrada(estado: EstadoAsignacion): boolean {
 
 // ── Cabecera ─────────────────────────────────────────────────────────────────
 
-/** Métricas por validar con alerta de integridad (INT-003/004). */
+/**
+ * Métricas por validar con alerta de integridad (INT-003/004), también la que
+ * la tuvo antes de que el medio la corrigiera: las dos piden constancia.
+ */
 function alertasPorValidar(asignacion: AsignacionDetalle): number {
   return asignacion.publicaciones
     .flatMap((publicacion) => publicacion.cortes)
-    .filter((corte) => corte.estado === "PENDIENTE" && tieneAlerta(corte))
-    .length
+    .filter(
+      (corte) => corte.estado === "PENDIENTE" && alertaRevisable(corte.alerta)
+    ).length
 }
 
 /**
@@ -599,7 +604,8 @@ export function EjecucionAsignacion({
 }
 
 /**
- * Disputas de la asignación, de la más antigua a la más reciente; con
+ * Disputas de la asignación, de la más antigua a la más reciente, con los
+ * textos y el estado de la bandeja del equipo (`@/features/disputas`); con
  * `disputas.ver` cada una enlaza a su ficha interna (hilo y resolución).
  */
 export function DisputasAsignacion({
@@ -621,16 +627,18 @@ export function DisputasAsignacion({
                 permitido={verDisputas}
                 className="text-sm font-medium"
               >
-                Disputa por {disputa.motivo.toLocaleLowerCase("es-CO")}
+                Disputa por{" "}
+                {MOTIVOS[disputa.motivo].etiqueta.toLocaleLowerCase("es-CO")}
               </EnlaceFicha>
-              <InsigniaEstado
-                catalogo={ESTADOS_DISPUTA}
+              <InsigniaEstadoDisputa
                 estado={disputa.estado}
+                perspectiva="interno"
                 className="h-5 px-2 text-[0.6875rem]"
               />
             </span>
             <span className="text-xs text-muted-foreground">
-              Abierta por {disputa.parte} el {formatearFecha(disputa.creadaAt)}
+              Abierta por {nombreParte(disputa.parte, "interno")} el{" "}
+              {formatearFecha(disputa.creadaAt)}
               {disputa.resueltaAt
                 ? ` · cerrada el ${formatearFecha(disputa.resueltaAt)}`
                 : ""}

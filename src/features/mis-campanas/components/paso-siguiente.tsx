@@ -97,8 +97,19 @@ export function PlazoAccion({
   )
 }
 
-/** Aclaración bajo el plazo cuando ya pasó o aún no empieza. */
-function NotaPlazo({ accion, ahora }: { accion: AccionMedio; ahora: Date }) {
+/**
+ * Aclaración bajo el plazo cuando ya pasó o aún no empieza (el reclamo, solo
+ * a quien puede abrirlo).
+ */
+function NotaPlazo({
+  accion,
+  ahora,
+  puedeDisputar,
+}: {
+  accion: AccionMedio
+  ahora: Date
+  puedeDisputar: boolean
+}) {
   const disponibilidad = disponibilidadAccion(accion, ahora)
   if (disponibilidad === "bloqueada" && accion.disponibleDesde) {
     return (
@@ -112,7 +123,9 @@ function NotaPlazo({ accion, ahora }: { accion: AccionMedio; ahora: Date }) {
       <p className="text-xs text-muted-foreground">
         {ES_METRICA.has(accion.tipo)
           ? "Aún puedes cargarlas: el equipo AMO verá que llegaron tarde."
-          : "El plazo ya pasó. Si publicaste a tiempo y no alcanzaste a cargar la evidencia, podrás reclamar desde aquí cuando la campaña aparezca como vencida."}
+          : puedeDisputar
+            ? "El plazo ya pasó. Si publicaste a tiempo y no alcanzaste a cargar la evidencia, podrás reclamar desde aquí cuando la campaña aparezca como vencida."
+            : "El plazo ya pasó."}
       </p>
     )
   }
@@ -125,6 +138,11 @@ export interface PasoSiguienteProps {
   ahoraServidor: number
   /** El rol puede ejecutar (descargar, cargar evidencia y métricas). */
   puedeEjecutar: boolean
+  /**
+   * `disputas.abrir`: reclamar una vencida. Ver la disputa o el reclamo que
+   * ya existe no lo pide (basta con ver la campaña).
+   */
+  puedeDisputar: boolean
   /** `tarjeta`: compacto, en el tablero; `ficha`: con la explicación. */
   variante?: "tarjeta" | "ficha"
   /** Sin el botón (cuando la acción ya está en el pie de la pantalla). */
@@ -141,6 +159,7 @@ export function PasoSiguiente({
   paso,
   ahoraServidor,
   puedeEjecutar,
+  puedeDisputar,
   variante = "tarjeta",
   sinBoton = false,
   className,
@@ -190,7 +209,13 @@ export function PasoSiguiente({
               ahora={ahora}
               ahoraServidor={ahoraServidor}
             />
-            {enFicha ? <NotaPlazo accion={accion} ahora={ahora} /> : null}
+            {enFicha ? (
+              <NotaPlazo
+                accion={accion}
+                ahora={ahora}
+                puedeDisputar={puedeDisputar}
+              />
+            ) : null}
           </div>
           {puedeEjecutar && !sinBoton ? (
             <EnlaceBoton
@@ -214,6 +239,7 @@ export function PasoSiguiente({
         paso={paso}
         ahora={ahora}
         ahoraServidor={ahoraServidor}
+        puedeDisputar={puedeDisputar}
         enFicha={enFicha}
         className={className}
       />
@@ -307,18 +333,21 @@ function EnlaceDisputa({
 /**
  * Una vencida (MED-011 c2): el plazo para reclamar con su cuenta regresiva y
  * el botón que abre el reclamo; si ya lo reclamó, que lo revisamos y su
- * resultado; si el plazo terminó, desde cuándo.
+ * resultado; si el plazo terminó, desde cuándo. Sin `disputas.abrir`, el
+ * plazo sigue a la vista, pero sin el botón y con el porqué.
  */
 function PasoReclamo({
   paso,
   ahora,
   ahoraServidor,
+  puedeDisputar,
   enFicha,
   className,
 }: {
   paso: Extract<PasoMedio, { tipo: "reclamo" }>
   ahora: Date
   ahoraServidor: number
+  puedeDisputar: boolean
   enFicha: boolean
   className?: string
 }) {
@@ -326,9 +355,10 @@ function PasoReclamo({
     !paso.reclamada &&
     paso.hasta !== null &&
     new Date(paso.hasta).getTime() > ahora.getTime()
+  const reclamable = abierto && puedeDisputar
   const titulo = paso.reclamada
     ? "Ya reclamaste esta publicación"
-    : abierto
+    : reclamable
       ? "Puedes reclamar si publicaste a tiempo"
       : "El plazo para publicar se venció"
   return (
@@ -368,9 +398,18 @@ function PasoReclamo({
               venceAt={paso.hasta}
               ahoraServidor={ahoraServidor}
               etiqueta="Plazo para reclamar"
-              textos={{ pendiente: "Reclama en", vencido: "Cerró hace" }}
+              textos={{
+                pendiente: puedeDisputar ? "Reclama en" : "Cierra en",
+                vencido: "Cerró hace",
+              }}
             />
-            {enFicha ? (
+            {!puedeDisputar ? (
+              <p className="text-sm text-pretty text-muted-foreground">
+                Tu rol no permite reclamar. Si publicaste a tiempo, pide a un
+                administrador ese permiso antes del{" "}
+                {formatearFechaHora(paso.hasta)}.
+              </p>
+            ) : enFicha ? (
               <p className="text-sm text-pretty text-muted-foreground">
                 Tienes hasta el {formatearFechaHora(paso.hasta)}. Cuéntanos qué
                 pasó y, si puedes, comparte el enlace o una captura de tu
@@ -385,11 +424,11 @@ function PasoReclamo({
               : "El cupo se liberó para otro medio."}
           </p>
         )}
-        {paso.asignacionId && (abierto || paso.reclamada) ? (
+        {paso.asignacionId && (reclamable || paso.reclamada) ? (
           <EnlaceDisputa
             asignacionId={paso.asignacionId}
             texto={paso.reclamada ? "Ver tu reclamo" : "Reclamar: sí publiqué"}
-            principal={abierto}
+            principal={reclamable}
           />
         ) : null}
       </div>

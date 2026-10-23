@@ -2,13 +2,14 @@ import "server-only"
 
 import { cache } from "react"
 
+import { type AlertaMetrica, leerAlerta } from "@/features/operacion/alertas"
 import {
   clienteSolicitud,
   enLotes,
   fallar,
 } from "@/features/operacion/queries/comun"
 
-import { leerDetalleAlerta, ordenarAlertas } from "./alertas"
+import { ordenarAlertas } from "./alertas"
 import { estaAbierta, ordenarDisputas } from "./disputas"
 import { asignacionEnCurso, type FilaEnCurso, ordenarEnCurso } from "./en-curso"
 import type {
@@ -140,9 +141,7 @@ export interface AlertaCruda {
   metricaId: string
   asignacionId: string
   estado: AlertaDelMedio["estado"]
-  desviacion: boolean
-  multiplo: boolean
-  detalle: unknown
+  alerta: AlertaMetrica
   creadaAt: string
 }
 
@@ -158,9 +157,7 @@ export const alertasCrudasDelMedio = cache(
       metricaId: fila.metrica_id,
       asignacionId: fila.asignacion_id,
       estado: fila.estado_validacion,
-      desviacion: fila.alerta_desviacion,
-      multiplo: fila.alerta_multiplo,
-      detalle: fila.detalle_alertas,
+      alerta: leerAlerta(fila),
       creadaAt: fila.created_at,
     }))
   }
@@ -208,9 +205,7 @@ export async function alertasDelMedio(
         metricaId: alerta.metricaId,
         asignacionId: alerta.asignacionId,
         estado: alerta.estado,
-        desviacion: alerta.desviacion,
-        multiplo: alerta.multiplo,
-        detalle: leerDetalleAlerta(alerta.detalle),
+        alerta: alerta.alerta,
         creadaAt: alerta.creadaAt,
         corte: fila?.corte ?? null,
         plataforma: fila?.plataforma ?? null,

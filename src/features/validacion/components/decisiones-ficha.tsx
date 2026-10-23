@@ -9,6 +9,7 @@ import {
   PencilLine,
   ShieldX,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useId, useRef, useState, useTransition } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
@@ -35,16 +36,13 @@ import {
 } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { alertaRevisable, frasesAlerta } from "@/features/operacion/alertas"
 import { CORTES, type Plataforma } from "@/features/operacion/estados"
 import {
   cerrarFrase,
   formatearFechaHoraFija,
 } from "@/features/operacion/formato"
-import {
-  type CorteMetrica,
-  describirAlertas,
-  tieneAlerta,
-} from "@/features/operacion/metricas"
+import type { CorteMetrica } from "@/features/operacion/metricas"
 import type { PublicacionEvidencia } from "@/features/operacion/tipos"
 import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import { aplicarErroresServidor } from "@/features/usuarios/components/errores-formulario"
@@ -57,6 +55,7 @@ import {
   SUGERENCIAS_RECHAZO_METRICA,
   SUGERENCIAS_REVISION_ALERTA,
 } from "../decision"
+import { type DecisionEnDisputa, esperaDisputa } from "../errores"
 import { CAMPOS_EVIDENCIA, esquemaAprobarEvidencia } from "../schemas"
 
 /** Id del encabezado de una publicación en la ficha (destino del foco). */
@@ -91,6 +90,32 @@ function useFocoTrasDecision(destino: () => HTMLElement | null) {
   }
 }
 
+/**
+ * La asignación entró en disputa mientras se decidía (hint `en_disputa`): el
+ * diálogo muestra el porqué y, al cerrarlo, la ficha se refresca para
+ * cambiar la decisión por la explicación (el foco va al encabezado, que
+ * sigue ahí).
+ */
+function useEsperaDisputa(
+  decision: DecisionEnDisputa,
+  foco: ReturnType<typeof useFocoTrasDecision>
+) {
+  const router = useRouter()
+  const refrescar = useRef(false)
+  return {
+    revisar: (resultado: { ok: boolean; error?: string }) => {
+      if (!esperaDisputa(resultado, decision)) return
+      refrescar.current = true
+      foco.anotar()
+    },
+    alCerrar: () => {
+      if (!refrescar.current) return
+      refrescar.current = false
+      router.refresh()
+    },
+  }
+}
+
 // ── Evidencia ────────────────────────────────────────────────────────────────
 
 /**
@@ -104,12 +129,15 @@ function DialogoAprobarEvidencia({
   publicacion,
   focoAlCerrar,
   onAprobada,
+  onFallo,
 }: {
   abierto: boolean
   onAbiertoChange: (abierto: boolean) => void
   publicacion: PublicacionEvidencia
   focoAlCerrar: () => HTMLElement | null
   onAprobada: () => void
+  /** El resultado de un intento fallido (por si la decisión espera a la disputa). */
+  onFallo: (resultado: { ok: boolean; error?: string }) => void
 }) {
   const idCasilla = useId()
   const idObservaciones = useId()
@@ -140,6 +168,7 @@ function DialogoAprobarEvidencia({
       })
       if (!resultado.ok) {
         aplicarErroresServidor(formulario.setError, resultado, CAMPOS_EVIDENCIA)
+        onFallo(resultado)
         return
       }
       onAprobada()
@@ -289,6 +318,7 @@ export function DecisionEvidencia({
 }) {
   const [dialogo, setDialogo] = useState<"aprobar" | "rechazar" | null>(null)
   const foco = useFocoTrasDecision(porId(idPublicacion(publicacion.id)))
+  const disputa = useEsperaDisputa("evidencia", foco)
 
   function abrir(tipo: "aprobar" | "rechazar") {
     foco.reiniciar()
@@ -296,7 +326,9 @@ export function DecisionEvidencia({
   }
 
   function cerrar(abierto: boolean) {
-    if (!abierto) setDialogo(null)
+    if (abierto) return
+    setDialogo(null)
+    disputa.alCerrar()
   }
 
   return (
@@ -319,6 +351,7 @@ export function DecisionEvidencia({
         publicacion={publicacion}
         focoAlCerrar={foco.focoAlCerrar}
         onAprobada={foco.anotar}
+        onFallo={disputa.revisar}
       />
       <DialogoMotivo
         abierto={dialogo === "rechazar"}
@@ -344,6 +377,7 @@ export function DecisionEvidencia({
             publicacionId: publicacion.id,
             observaciones,
           })
+          disputa.revisar(resultado)
           if (resultado.ok) {
             foco.anotar()
             const plazo = resultado.datos.fechaLimitePublicacion
@@ -364,9 +398,11 @@ export function DecisionEvidencia({
 
 /**
  * Aprobar, rechazar o corregir un corte desde la ficha (ADM-008). Aprobar uno
- * con alerta pide anotar qué se revisó (con sus razones a la vista); uno sin
- * alerta, solo confirmar. «Corregir» (métrica aprobada) lo abre quien monta
- * este control, que tiene la captura firmada.
+ * con alerta —hoy o antes de que el medio lo corrigiera— pide anotar qué se
+ * revisó (con sus razones a la vista); uno sin alerta, solo confirmar. Si el
+ * rechazo espera a la disputa (`rechazoEnDisputa`), solo se ofrece aprobar.
+ * «Corregir» (métrica aprobada) lo abre quien monta este control, que tiene
+ * la captura firmada.
  */
 export function DecisionCorte({
   corte,
@@ -384,9 +420,10 @@ export function DecisionCorte({
 }) {
   const [dialogo, setDialogo] = useState<"aprobar" | "rechazar" | null>(null)
   const foco = useFocoTrasDecision(porId(idCorte(corte.id)))
+  const disputa = useEsperaDisputa("rechazoMetrica", foco)
   const nombre = CORTES[corte.corte].etiqueta
-  const conAlerta = tieneAlerta(corte)
-  const motivos = conAlerta ? describirAlertas(corte, plataforma) : []
+  const conAlerta = alertaRevisable(corte.alerta)
+  const motivos = conAlerta ? frasesAlerta(corte.alerta, plataforma) : []
 
   function abrir(tipo: "aprobar" | "rechazar") {
     foco.reiniciar()
@@ -394,7 +431,9 @@ export function DecisionCorte({
   }
 
   function cerrar(abierto: boolean) {
-    if (!abierto) setDialogo(null)
+    if (abierto) return
+    setDialogo(null)
+    disputa.alCerrar()
   }
 
   async function aprobar(observaciones: string) {
@@ -421,10 +460,16 @@ export function DecisionCorte({
     >
       {acciones.validar ? (
         <>
-          <Button variant="outline" size="sm" onClick={() => abrir("rechazar")}>
-            <ShieldX data-icon="inline-start" aria-hidden />
-            Rechazar
-          </Button>
+          {acciones.rechazoEnDisputa ? null : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => abrir("rechazar")}
+            >
+              <ShieldX data-icon="inline-start" aria-hidden />
+              Rechazar
+            </Button>
+          )}
           <Button
             size="sm"
             disabled={acciones.bloqueoAprobar !== null}
@@ -491,6 +536,7 @@ export function DecisionCorte({
             metricaId: corte.id,
             observaciones,
           })
+          disputa.revisar(resultado)
           if (resultado.ok) {
             foco.anotar()
             toast.success(`Métricas de ${nombre} rechazadas`, {

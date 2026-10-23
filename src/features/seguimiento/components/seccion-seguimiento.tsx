@@ -10,8 +10,8 @@ import { PanelSeguimiento } from "./panel-seguimiento"
  * Pestaña «Seguimiento» de la ficha de campaña (Server Component, en su
  * `<Suspense>`): consulta con la sesión y entrega los datos al panel, que se
  * actualiza solo desde el navegador. La página ya autorizó con el DAL; aquí
- * solo se pregunta si la persona puede disputar (para ofrecer el enlace: su
- * página lo vuelve a exigir).
+ * solo se pregunta si la persona puede abrir disputas (para ofrecer «Reportar
+ * un problema»; ver una no lo pide). Su página y la BD lo vuelven a comprobar.
  */
 export async function SeccionSeguimiento({
   campanaId,

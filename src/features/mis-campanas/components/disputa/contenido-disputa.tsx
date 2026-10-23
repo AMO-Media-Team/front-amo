@@ -1,4 +1,4 @@
-import { Info, Scale } from "lucide-react"
+import { Info, Lock, Scale } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
@@ -7,7 +7,12 @@ import { HiloDisputa } from "@/features/disputas/components/hilo-disputa"
 import type { ContextoDisputa } from "@/features/disputas/presentacion"
 import type { MensajeDisputa } from "@/features/disputas/tipos"
 
-import type { PerspectivaParte, VistaDisputa } from "../../disputa"
+import {
+  type PerspectivaParte,
+  SIN_PERMISO_DISPUTA,
+  tituloSinPermiso,
+  type VistaDisputa,
+} from "../../disputa"
 import { DisputasAnteriores } from "./disputas-anteriores"
 
 export interface ContenidoDisputaProps {
@@ -16,7 +21,10 @@ export interface ContenidoDisputaProps {
   /** Hilo de la disputa vigente (abierta o la última cerrada). */
   mensajes: readonly MensajeDisputa[]
   contexto: ContextoDisputa
-  /** `disputas.abrir`: la parte responde mientras la disputa siga abierta. */
+  /**
+   * `disputas.abrir`: la parte abre una y responde mientras siga abierta. Sin
+   * él, lo lee todo y se le dice por qué no puede escribir.
+   */
   puedeEscribir: boolean
   /** Nombre de la otra parte si fue ella quien la abrió. */
   autorApertura?: string
@@ -31,6 +39,8 @@ export interface ContenidoDisputaProps {
  * que monta `PanelDisputa`): la abierta con su estado y su conversación; la
  * última cerrada con su resultado, el porqué de no poder abrir otra y su hilo
  * en solo lectura; o por qué no admite disputas. Las anteriores van debajo.
+ * Sin `disputas.abrir`, en lugar del formulario dice que su rol no lo permite
+ * y, junto a una abierta, que la conversación es de solo lectura.
  */
 export function ContenidoDisputa({
   vista,
@@ -44,11 +54,26 @@ export function ContenidoDisputa({
 }: ContenidoDisputaProps) {
   switch (vista.tipo) {
     case "abrir":
-      return (
+      return puedeEscribir ? (
         <DisputasAnteriores
           disputas={vista.anteriores}
           perspectiva={perspectiva}
         />
+      ) : (
+        <div className="flex flex-col gap-5">
+          <EstadoVacio
+            icono={Lock}
+            titulo={tituloSinPermiso(vista.modo)}
+            descripcion={SIN_PERMISO_DISPUTA.descripcion}
+            className="flex-none py-12"
+          >
+            {volver}
+          </EstadoVacio>
+          <DisputasAnteriores
+            disputas={vista.anteriores}
+            perspectiva={perspectiva}
+          />
+        </div>
       )
     case "sin_disputa":
       return (
@@ -75,6 +100,12 @@ export function ContenidoDisputa({
             <p className="flex items-start gap-2 text-sm text-pretty text-muted-foreground">
               <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
               {vista.bloqueo}
+            </p>
+          ) : null}
+          {vista.tipo === "abierta" && !puedeEscribir ? (
+            <p className="flex items-start gap-2 text-sm text-pretty text-muted-foreground">
+              <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
+              {SIN_PERMISO_DISPUTA.lectura}
             </p>
           ) : null}
           <HiloDisputa

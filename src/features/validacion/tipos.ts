@@ -4,13 +4,12 @@
  * viajan al navegador: solo `conImagen`, y la captura se firma bajo demanda.
  */
 import type { ValoresMetricas } from "@/features/ejecucion/tipos"
+import type { AlertaMetrica } from "@/features/operacion/alertas"
 import type {
   Corte,
   EstadoAsignacion,
   Plataforma,
 } from "@/features/operacion/estados"
-
-import type { AlertaMetrica } from "./alertas"
 
 export interface PaginaValidacion<T> {
   filas: T[]
@@ -35,7 +34,7 @@ export interface EvidenciaEnCola {
   /** Publicaciones que pide la oferta. */
   publicaciones: number
   plataforma: Plataforma
-  /** Nombre del formato («Reel»); `null` si no se pudo leer. */
+  /** Nombre del formato («Reel»). */
   formato: string | null
   urlPost: string
   fechaPublicacion: string
@@ -76,6 +75,7 @@ export interface MetricaEnCola {
   /** Me gusta + comentarios + compartidos + guardados. */
   interacciones: number | null
   conImagen: boolean
+  /** Alerta de hoy y la previa a una corrección (las dos piden constancia). */
   alerta: AlertaMetrica
   /** La evidencia de la publicación ya está aprobada (requisito para aprobar). */
   evidenciaAprobada: boolean
@@ -84,6 +84,7 @@ export interface MetricaEnCola {
   observaciones: string | null
   medio: MedioEnCola
   seguidoresAlAceptar: number | null
+  ofertaId: string
   ofertaTitulo: string
   estadoAsignacion: EstadoAsignacion
 }
@@ -156,6 +157,13 @@ export interface MetricaParaCorregir {
  */
 export interface ValidacionEnFicha {
   estadoAsignacion: EstadoAsignacion
+  /** Estado en que estaba al abrirse la disputa (`null` fuera de disputa). */
+  estadoPrevioDisputa: EstadoAsignacion | null
+  /**
+   * La disputa abierta, si quien mira puede abrirla (`disputas.ver`): lo que
+   * se decide al resolverla enlaza a ella.
+   */
+  disputaId: string | null
   /** `evidencias.validar`. */
   evidencias: boolean
   /** `metricas.validar`. */

@@ -13,12 +13,15 @@ export function LoQueSigue({
   paso,
   ahoraServidor,
   puedeEjecutar,
+  puedeDisputar,
   conBotonEnPie,
   desistirHasta,
 }: {
   paso: PasoMedio
   ahoraServidor: number
   puedeEjecutar: boolean
+  /** `disputas.abrir`: reclamar una vencida. */
+  puedeDisputar: boolean
   /** La acción ya está en el pie fijo: aquí no se repite el botón. */
   conBotonEnPie: boolean
   /** Hasta cuándo puede desistir, si todavía puede. */
@@ -40,6 +43,7 @@ export function LoQueSigue({
         paso={paso}
         ahoraServidor={ahoraServidor}
         puedeEjecutar={puedeEjecutar}
+        puedeDisputar={puedeDisputar}
         variante="ficha"
         sinBoton={conBotonEnPie}
       />

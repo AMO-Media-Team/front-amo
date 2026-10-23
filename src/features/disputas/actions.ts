@@ -89,7 +89,12 @@ type ClienteUsuario = Awaited<ReturnType<typeof crearClienteServidor>>
 /** Escriben en el hilo las partes (`disputas.abrir`) y quien resuelve. */
 const PERMISOS_HILO = ["disputas.abrir", "disputas.resolver"] as const
 /** Leen un adjunto el equipo (`disputas.ver`) y las partes (`disputas.abrir`). */
-const PERMISOS_LECTURA = ["disputas.ver", "disputas.abrir"] as const
+// Las partes leen su disputa (y sus adjuntos) con ver sus asignaciones; escribir exige `disputas.abrir`.
+const PERMISOS_LECTURA = [
+  "disputas.ver",
+  "disputas.abrir",
+  "asignaciones.ver_propias",
+] as const
 
 /** Log de servidor sin datos personales: operación y código. */
 function informar(operacion: string, error: unknown): void {

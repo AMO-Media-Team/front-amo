@@ -76,7 +76,12 @@ function pintar(
   {
     busqueda,
     alActualizar,
-  }: { busqueda?: string; alActualizar?: OnUrlUpdateFunction } = {}
+    puedeDisputar = true,
+  }: {
+    busqueda?: string
+    alActualizar?: OnUrlUpdateFunction
+    puedeDisputar?: boolean
+  } = {}
 ) {
   return render(
     <NuqsTestingAdapter searchParams={busqueda} onUrlUpdate={alActualizar}>
@@ -85,6 +90,7 @@ function pintar(
         segmentoInicial={segmentoInicial(conteoDelTablero(tablero))}
         ahoraServidor={AHORA.getTime()}
         puedeEjecutar
+        puedeDisputar={puedeDisputar}
         puedeVerOfertas
         completas
       />
@@ -158,6 +164,64 @@ describe("TableroCampanasCliente", () => {
     ).toHaveAttribute("href", `/mis-campanas/${A2}/disputa`)
   })
 
+  it("sin permiso para disputar, la vencida muestra su plazo pero no ofrece reclamar", () => {
+    pintar(tableroDePrueba(), {
+      busqueda: "?segmento=caidas",
+      puedeDisputar: false,
+    })
+    const vencida = screen.getByRole("article", {
+      name: "Historia de Facebook",
+    })
+    expect(
+      within(vencida).getByText("El plazo para publicar se venció")
+    ).toBeVisible()
+    expect(
+      within(vencida).getByText(/^Tu rol no permite reclamar\./)
+    ).toBeVisible()
+    expect(
+      within(vencida).queryByRole("link", { name: "Reclamar: sí publiqué" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("una vencida reclamada con el plazo ya terminado dice que ya reclamó", () => {
+    const tablero = armarTablero(
+      [
+        asignacionDePrueba({
+          id: A2,
+          estado: "VENCIDA_SIN_PUBLICAR",
+          ofertaTitulo: "Historia de Facebook",
+          reclamoHasta: "2026-10-20T12:00:00.000Z",
+          enDisputaAt: "2026-10-19T12:00:00.000Z",
+          disputa: {
+            id: "0199f3a0-0000-7000-8000-0000000000d1",
+            estado: "RESUELTA",
+            parte: "MEDIO",
+            estadoOrigen: "VENCIDA_SIN_PUBLICAR",
+            estadoResultante: "VENCIDA_SIN_PUBLICAR",
+            creadaAt: "2026-10-19T12:00:00.000Z",
+            resueltaAt: "2026-10-21T12:00:00.000Z",
+          },
+        }),
+      ],
+      [],
+      AHORA
+    )
+    pintar(tablero, { puedeDisputar: false })
+    const vencida = screen.getByRole("article", {
+      name: "Historia de Facebook",
+    })
+    expect(
+      within(vencida).getByText("Ya reclamaste esta publicación")
+    ).toBeVisible()
+    expect(
+      within(vencida).queryByText(/El plazo para reclamar terminó/)
+    ).not.toBeInTheDocument()
+    // Leer su resultado no pide `disputas.abrir`.
+    expect(
+      within(vencida).getByRole("link", { name: "Ver tu reclamo" })
+    ).toHaveAttribute("href", `/mis-campanas/${A2}/disputa`)
+  })
+
   it("sin vencidas ni canceladas no da por cumplido lo que sigue pendiente", () => {
     // A1 aún debe las métricas de 72 h: el vacío no felicita.
     pintar(
@@ -194,6 +258,7 @@ function propiedades(tablero: TableroMisCampanas) {
     segmentoInicial: segmentoInicial(conteoDelTablero(tablero)),
     ahoraServidor: AHORA.getTime(),
     puedeEjecutar: true,
+    puedeDisputar: true,
     puedeVerOfertas: true,
     completas: true,
   }

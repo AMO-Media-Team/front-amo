@@ -43,7 +43,7 @@ export function interpretarErrorCuenta(error: ErrorBd): ErrorBdInterpretado {
 
 export const MENSAJES_CUENTAS = {
   sinMedio:
-    "Tu usuario no está vinculado a un medio. Pídele al equipo de AMO que lo revise.",
+    "Tu usuario no está vinculado a un medio: el equipo AMO debe asociarlo antes de que gestiones tus cuentas.",
   cuentaInexistente:
     "No encontramos esa cuenta o ya no está registrada. Actualiza la página.",
   cuentaDesactualizada:

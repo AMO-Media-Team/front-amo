@@ -175,13 +175,18 @@ export function esReclamo(
   return disputa.estadoOrigen === "VENCIDA_SIN_PUBLICAR"
 }
 
-/** Título de la página para la parte. */
+/**
+ * Título de la página para la parte. Sin `disputas.abrir` (`puedeAbrir`), la
+ * vista «abrir» no ofrece el formulario: se titula como lo que consulta.
+ */
 export function tituloDisputa(
   vista: VistaDisputa,
-  perspectiva: PerspectivaParte
+  perspectiva: PerspectivaParte,
+  puedeAbrir = true
 ): string {
   switch (vista.tipo) {
     case "abrir":
+      if (!puedeAbrir) return vista.modo === "reclamo" ? "Reclamo" : "Disputa"
       return vista.modo === "reclamo"
         ? "Reclamar: sí publiqué"
         : "Reportar un problema"
@@ -192,6 +197,28 @@ export function tituloDisputa(
     case "sin_disputa":
       return "Disputa"
   }
+}
+
+// ── Leer sin poder escribir ──────────────────────────────────────────────────
+
+/**
+ * La parte sin `disputas.abrir`: lee las disputas de sus asignaciones (con
+ * `asignaciones.ver_propias`), pero no las abre, no responde ni adjunta.
+ */
+export const SIN_PERMISO_DISPUTA = {
+  /** En lugar del formulario para abrir una. */
+  descripcion:
+    "Puedes consultar las disputas de tus campañas, pero abrirlas, responder y adjuntar pruebas exige otro permiso. Si lo necesitas para tu trabajo, pídeselo a un administrador.",
+  /** Junto a la conversación de una abierta. */
+  lectura:
+    "Solo lectura: tu rol no permite responder ni adjuntar pruebas. Si lo necesitas para tu trabajo, pídeselo a un administrador.",
+} as const
+
+/** Título del aviso que reemplaza al formulario cuando no puede abrirla. */
+export function tituloSinPermiso(modo: ModoApertura): string {
+  return modo === "reclamo"
+    ? "Tu rol no permite reclamar esta publicación"
+    : "Tu rol no permite reportar problemas"
 }
 
 /**
@@ -329,6 +356,13 @@ const CON_CORTES: readonly EstadoAsignacion[] = [
   "METRICAS_CARGADAS",
 ]
 
+/** Lo que queda en pausa mientras dure una disputa sobre la publicación. */
+function pausaDisputa(estadoAsignacion: EstadoAsignacion): string {
+  return estadoAsignacion === "VERIFICADA"
+    ? "Mientras dure la disputa, esta publicación no se liquida."
+    : "Mientras dure la disputa, esta publicación no se verifica ni se liquida."
+}
+
 /**
  * Qué pasa mientras dure la disputa, dicho a quien la abre: el reclamo de una
  * vencida no le devuelve el cupo y, si le dan la razón, tiene un plazo nuevo
@@ -348,10 +382,7 @@ export function efectoApertura({
   if (modo === "reclamo") {
     return `Mientras lo revisamos, el cupo no vuelve a tu cuenta. Si te damos la razón, tendrás ${plazoRecargaHoras} horas para cargar la evidencia.`
   }
-  const pausa =
-    estadoAsignacion === "VERIFICADA"
-      ? "Mientras dure la disputa, esta publicación no se liquida."
-      : "Mientras dure la disputa, esta publicación no se verifica ni se liquida."
+  const pausa = pausaDisputa(estadoAsignacion)
   if (perspectiva === "anunciante") {
     return `${pausa} Lo que escribas lo verán el medio y el equipo AMO.`
   }
@@ -474,12 +505,16 @@ export function contextoEstadoDisputa(
 
 /**
  * El aviso bajo el título de la página del anunciante mientras dure una
- * disputa sobre la publicación: qué queda en pausa y quién verá lo que
- * escriba. `null` sin una abierta o en el reclamo de una vencida (no se le
- * cobra: su estado ya lo explica).
+ * disputa sobre la publicación: qué queda en pausa y, si puede escribir
+ * (`disputas.abrir`), quién verá lo que escriba. `null` sin una abierta o en
+ * el reclamo de una vencida (no se le cobra: su estado ya lo explica).
  */
-export function avisoPaginaAnunciante(vista: VistaDisputa): string | null {
+export function avisoPaginaAnunciante(
+  vista: VistaDisputa,
+  puedeEscribir = true
+): string | null {
   if (vista.tipo !== "abierta" || esReclamo(vista.disputa)) return null
+  if (!puedeEscribir) return pausaDisputa(vista.disputa.estadoOrigen)
   return efectoApertura({
     perspectiva: "anunciante",
     modo: "problema",
@@ -529,7 +564,8 @@ export interface EnlaceDisputa {
  * cerró y no se puede abrir otra), «Reportar un problema» en los estados
  * disputables y, para el medio, «Reclamar: sí publiqué» en una vencida dentro
  * de su plazo. `null` si no hay nada que ver ni abrir. `disputa` es la más
- * reciente (`undefined`: no se consultó; se decide solo por el estado).
+ * reciente (`undefined`: no se consultó; se decide solo por el estado). Sin
+ * `disputas.abrir` (`puedeAbrir`), solo se ofrece ver la que haya.
  */
 export function enlaceDisputa({
   perspectiva,
@@ -537,6 +573,7 @@ export function enlaceDisputa({
   disputa,
   reclamoHasta = null,
   ahora,
+  puedeAbrir = true,
 }: {
   perspectiva: PerspectivaParte
   estado: EstadoAsignacion
@@ -546,6 +583,7 @@ export function enlaceDisputa({
   } | null
   reclamoHasta?: string | null
   ahora: Date
+  puedeAbrir?: boolean
 }): EnlaceDisputa | null {
   const reclamo = disputa ? esReclamo(disputa) : false
   const ver: EnlaceDisputa = {
@@ -559,6 +597,7 @@ export function enlaceDisputa({
   if (estado === "EN_DISPUTA" || (disputa && estaAbierta(disputa.estado))) {
     return ver
   }
+  if (!puedeAbrir) return disputa ? ver : null
   if (ESTADOS_DISPUTABLES.includes(estado)) {
     return { tipo: "abrir", texto: "Reportar un problema" }
   }

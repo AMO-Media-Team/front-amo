@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { aperturaPosible } from "@/features/disputas/presentacion"
+
 import type { EstadoAsignacion } from "./estados"
 import {
   admiteSuspension,
@@ -12,7 +14,6 @@ import {
   MENSAJES_HINT_CANCELACION,
   opcionesGestion,
   ORDEN_CAUSAS,
-  ORDEN_MOTIVOS_DISPUTA,
   type SituacionGestion,
 } from "./gestion-asignacion"
 
@@ -25,6 +26,16 @@ const ADMIN = [
   "disputas.abrir",
   "disputas.resolver",
 ]
+/** El catálogo completo, en el orden en que se ofrece al equipo. */
+const TODOS_LOS_MOTIVOS = [
+  "INCUMPLIMIENTO",
+  "METRICAS",
+  "CONTENIDO",
+  "PERMANENCIA",
+  "PAGO",
+  "OTRO",
+]
+
 /** FINANZAS: consulta, sin gestión. */
 const FINANZAS = ["asignaciones.ver", "disputas.ver"]
 
@@ -128,6 +139,7 @@ describe("opcionesGestion · disputa (ADM-011)", () => {
   ] as const)("%s es disputable por el equipo", (estado) => {
     expect(opcionesGestion(situacion(estado), ADMIN).disputa).toEqual({
       tipo: "abrir",
+      motivos: TODOS_LOS_MOTIVOS,
     })
   })
 
@@ -167,7 +179,10 @@ describe("opcionesGestion · disputa (ADM-011)", () => {
     const resuelta = situacion("VERIFICADA", {
       disputas: [{ id: "d1", estado: "RESUELTA" }],
     })
-    expect(opcionesGestion(resuelta, ADMIN).disputa).toEqual({ tipo: "abrir" })
+    expect(opcionesGestion(resuelta, ADMIN).disputa).toEqual({
+      tipo: "abrir",
+      motivos: TODOS_LOS_MOTIVOS,
+    })
     expect(disputaAbierta(resuelta.disputas)).toBeNull()
   })
 
@@ -181,15 +196,21 @@ describe("opcionesGestion · disputa (ADM-011)", () => {
     )
   })
 
-  it("ofrece los seis motivos del catálogo", () => {
-    expect(ORDEN_MOTIVOS_DISPUTA).toEqual([
-      "INCUMPLIMIENTO",
-      "METRICAS",
-      "CONTENIDO",
-      "PERMANENCIA",
-      "PAGO",
-      "OTRO",
-    ])
+  it("los motivos son los del equipo según `aperturaPosible` (ADMIN)", () => {
+    const opcion = opcionesGestion(situacion("PUBLICADA"), ADMIN).disputa
+    expect(opcion).toEqual({
+      tipo: "abrir",
+      motivos: aperturaPosible({
+        parte: "ADMIN",
+        estadoAsignacion: "PUBLICADA",
+        hayAbierta: false,
+        ahora: new Date(),
+      }).motivos,
+    })
+  })
+
+  it("en disputa sin una abierta visible no ofrece abrir otra", () => {
+    expect(opcionesGestion(situacion("EN_DISPUTA"), ADMIN).disputa).toBeNull()
   })
 })
 

@@ -33,7 +33,16 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { tituloCorte } from "@/features/ejecucion/cortes"
+import {
+  alertaRevisable,
+  camposSenalados,
+  motivosAlerta,
+  motivosAlertaPrevia,
+  resumirMotivo,
+  tieneAlerta,
+} from "@/features/operacion/alertas"
 import { MarcaPlataforma } from "@/features/operacion/components/distintivos"
+import { PorqueAlerta } from "@/features/operacion/components/porque-alerta"
 import { PLATAFORMAS } from "@/features/operacion/estados"
 import {
   cerrarFrase,
@@ -50,20 +59,15 @@ import { formatearNumero } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { validarMetrica } from "../actions"
-import {
-  camposSenalados,
-  motivosAlerta,
-  resumirMotivo,
-  tieneAlerta,
-  tuvoAlerta,
-} from "../alertas"
 import { rutaCola } from "../colas"
 import {
   BLOQUEO_EVIDENCIA_SIN_APROBAR,
   COMPROBACIONES_METRICA,
+  DETALLE_RECHAZO_EN_DISPUTA,
   SUGERENCIAS_RECHAZO_METRICA,
   SUGERENCIAS_REVISION_ALERTA,
 } from "../decision"
+import { esperaDisputa } from "../errores"
 import { CAMPOS_METRICA, esquemaAprobarMetrica } from "../schemas"
 import type { MetricaEnCola } from "../tipos"
 import {
@@ -76,10 +80,10 @@ import {
 } from "./capturas"
 import { CifrasMetrica } from "./cifras-metrica"
 import { CabeceraHoja, CuerpoHoja, MarcoHoja, PieHoja } from "./hoja-validacion"
-import { PorqueAlerta } from "./porque-alerta"
 import {
   Comprobaciones,
   Dato,
+  EsperaDisputa,
   type FilaDato,
   Hace,
   ListaDatosRevision,
@@ -119,6 +123,22 @@ function CifrasClave({ metrica }: { metrica: MetricaEnCola }) {
   )
 }
 
+/**
+ * La alerta en una línea para la tarjeta: las razones de hoy o, si el medio
+ * ya la corrigió, las que tuvo (cuenta igual: pide constancia al aprobar).
+ */
+function resumenAlerta(metrica: MetricaEnCola): string | null {
+  if (!alertaRevisable(metrica.alerta)) return null
+  if (tieneAlerta(metrica.alerta)) {
+    const motivos = motivosAlerta(metrica.alerta, metrica.plataforma)
+    return `Con alerta: ${motivos.map(resumirMotivo).join(" · ")}`
+  }
+  const previos = motivosAlertaPrevia(metrica.alerta, metrica.plataforma)
+  return previos.length > 0
+    ? `Tuvo alerta antes de corregirse: ${previos.map(resumirMotivo).join(" · ")}`
+    : "Tuvo alerta antes de corregirse"
+}
+
 function TarjetaMetrica({
   metrica,
   onRevisar,
@@ -126,10 +146,8 @@ function TarjetaMetrica({
   metrica: MetricaEnCola
   onRevisar: () => void
 }) {
-  const conAlerta = tieneAlerta(metrica.alerta)
-  const motivos = conAlerta
-    ? motivosAlerta(metrica.alerta, metrica.plataforma)
-    : []
+  const alerta = resumenAlerta(metrica)
+  const conAlerta = alerta !== null
   return (
     <article
       className={cn(
@@ -162,10 +180,10 @@ function TarjetaMetrica({
           </p>
           {conAlerta || !metrica.evidenciaAprobada || metrica.observaciones ? (
             <p className="flex flex-wrap items-center gap-2">
-              {conAlerta ? (
+              {alerta ? (
                 <span className="inline-flex min-h-5 items-center gap-1 rounded-full border border-warning/45 bg-warning/10 px-2 py-0.5 text-[0.6875rem] font-medium text-warning">
                   <TriangleAlert aria-hidden className="size-3 shrink-0" />
-                  Con alerta: {motivos.map(resumirMotivo).join(" · ")}
+                  {alerta}
                 </span>
               ) : null}
               {!metrica.evidenciaAprobada ? (
@@ -235,8 +253,10 @@ function datosMetrica(metrica: MetricaEnCola): FilaDato[] {
 
 /**
  * La métrica abierta en la hoja: la captura a un lado y, al otro, las cifras
- * y —si tiene alerta— su porqué (ADM-008 c1). Aprobar una con alerta exige
- * anotar qué se revisó; rechazar pide observaciones para el medio.
+ * y —si tiene alerta, hoy o antes de corregirse— su porqué (ADM-008 c1).
+ * Aprobar una con alerta exige anotar qué se revisó; rechazar pide
+ * observaciones para el medio. Si la asignación entró en disputa con todo
+ * cargado (hint `en_disputa`), el rechazo deja de ofrecerse y se explica.
  */
 function RevisionMetrica({
   metrica,
@@ -252,13 +272,16 @@ function RevisionMetrica({
   const idFormulario = useId()
   const idBloqueo = useId()
   const [rechazando, setRechazando] = useState(false)
+  // El rechazo espera a la disputa: lo dijo la BD al intentarlo.
+  const [rechazoEnDisputa, setRechazoEnDisputa] = useState(false)
   const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
   const firmas = useFirmas(metrica.asignacionId, metrica.conImagen)
   const imagen =
     firmas.estado.tipo === "listo"
       ? firmas.estado.imagenes.metricas[metrica.metricaId]
       : undefined
-  const conAlerta = tieneAlerta(metrica.alerta)
+  // También la que tuvo alerta antes de corregirse: pide constancia igual.
+  const conAlerta = alertaRevisable(metrica.alerta)
   const formulario = useForm({
     resolver: zodResolver(esquemaAprobarMetrica),
     defaultValues: {
@@ -346,7 +369,7 @@ function RevisionMetrica({
             </div>
           }
         >
-          {tuvoAlerta(metrica.alerta) ? (
+          {conAlerta ? (
             <PorqueAlerta
               alerta={metrica.alerta}
               plataforma={metrica.plataforma}
@@ -382,6 +405,15 @@ function RevisionMetrica({
                 </Link>
               </AlertDescription>
             </Alert>
+          ) : null}
+          {rechazoEnDisputa ? (
+            <EsperaDisputa
+              detalle={DETALLE_RECHAZO_EN_DISPUTA}
+              enlace={{
+                href: rutaAsignacion(metrica.asignacionId),
+                etiqueta: "Ver la asignación y su disputa",
+              }}
+            />
           ) : null}
           <form
             id={idFormulario}
@@ -463,16 +495,18 @@ function RevisionMetrica({
         </CuerpoRevision>
       </CuerpoHoja>
       <PieHoja>
-        <Button
-          type="button"
-          variant="destructive"
-          size="lg"
-          disabled={pendiente}
-          onClick={() => setRechazando(true)}
-        >
-          <ShieldX data-icon="inline-start" aria-hidden />
-          Rechazar
-        </Button>
+        {rechazoEnDisputa ? null : (
+          <Button
+            type="button"
+            variant="destructive"
+            size="lg"
+            disabled={pendiente}
+            onClick={() => setRechazando(true)}
+          >
+            <ShieldX data-icon="inline-start" aria-hidden />
+            Rechazar
+          </Button>
+        )}
         <Button
           type="submit"
           form={idFormulario}
@@ -521,6 +555,9 @@ function RevisionMetrica({
             metricaId: metrica.metricaId,
             observaciones,
           })
+          if (esperaDisputa(resultado, "rechazoMetrica")) {
+            setRechazoEnDisputa(true)
+          }
           if (resultado.ok) {
             toast.success("Métrica rechazada", {
               description: `${metrica.medio.nombre} recibió tus observaciones.`,

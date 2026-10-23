@@ -126,7 +126,8 @@ function leerRespuesta(datos: unknown): ResultadoValidacion | null {
 function revalidarSiCambio(error: ErrorBd): void {
   if (
     error.message?.startsWith("AMO_TRANSICION_INVALIDA") ||
-    error.hint === "asignacion_cerrada"
+    error.hint === "asignacion_cerrada" ||
+    error.hint === "en_disputa"
   ) {
     revalidatePath(RUTA_VALIDACION)
   }
@@ -166,7 +167,7 @@ export async function validarEvidencia(
     )
     if (error) {
       revalidarSiCambio(error)
-      return falloBd("validarEvidencia", error)
+      return falloBd("validarEvidencia", error, { enDisputa: "evidencia" })
     }
     const resultado = leerRespuesta(data)
     revalidar(resultado?.asignacionId ?? null)
@@ -184,9 +185,11 @@ export async function validarEvidencia(
 // ── Métricas (ADM-008) ───────────────────────────────────────────────────────
 
 /**
- * Aprueba (si tiene alerta, con la constancia de lo revisado) o rechaza (con
- * observaciones para el medio) un corte de métricas. Rechazar en una
- * asignación con todo cargado la devuelve a EVIDENCIA_VALIDADA.
+ * Aprueba (si tiene alerta, hoy o antes de corregirse, con la constancia de
+ * lo revisado) o rechaza (con observaciones para el medio) un corte de
+ * métricas. Rechazar en una asignación con todo cargado la devuelve a
+ * EVIDENCIA_VALIDADA; en disputa con todo cargado, el rechazo espera a que se
+ * resuelva (hint `en_disputa`).
  */
 export async function validarMetrica(
   entrada: EntradaValidarMetrica
@@ -210,7 +213,7 @@ export async function validarMetrica(
     )
     if (error) {
       revalidarSiCambio(error)
-      return falloBd("validarMetrica", error)
+      return falloBd("validarMetrica", error, { enDisputa: "rechazoMetrica" })
     }
     const resultado = leerRespuesta(data)
     revalidar(resultado?.asignacionId ?? null)

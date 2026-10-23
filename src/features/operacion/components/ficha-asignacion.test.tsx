@@ -10,7 +10,7 @@ vi.mock("./evidencias-asignacion", () => ({ EvidenciasAsignacion: () => null }))
 
 import type { EstadoAsignacion } from "../estados"
 import { ID_AVISO_ESTADO_ASIGNACION } from "../foco"
-import { leerDetalleAlertas } from "../metricas"
+import { leerAlerta } from "../alertas"
 import type { AsignacionDetalle, PublicacionEvidencia } from "../tipos"
 import {
   CabeceraAsignacion,
@@ -123,8 +123,8 @@ describe("CabeceraAsignacion", () => {
         {
           id: DISPUTA,
           estado: "ABIERTA",
-          motivo: "Métricas",
-          parte: "el anunciante",
+          motivo: "METRICAS",
+          parte: "ANUNCIANTE",
           descripcion: "El alcance no cuadra con la captura.",
           resolucion: null,
           creadaAt: "2026-10-15T15:00:00.000Z",
@@ -165,9 +165,11 @@ describe("CabeceraAsignacion", () => {
       interacciones: 3_000,
       clics: 10,
       estado: "PENDIENTE" as const,
-      alertaDesviacion: false,
-      alertaMultiplo: true,
-      detalleAlertas: leerDetalleAlertas({ seguidores: 40_000, multiplo: 2 }),
+      alerta: leerAlerta({
+        alerta_desviacion: false,
+        alerta_multiplo: true,
+        detalle_alertas: { seguidores: 40_000, multiplo: 2 },
+      }),
       observaciones: null,
       validadaAt: null,
       conImagen: true,
@@ -181,6 +183,18 @@ describe("CabeceraAsignacion", () => {
               conAlerta,
               // Aprobada: ya se revisó, no cuenta.
               { ...conAlerta, id: "m2", estado: "APROBADA" },
+              // Corregida por el medio: la alerta previa también cuenta.
+              {
+                ...conAlerta,
+                id: "m3",
+                alerta: leerAlerta({
+                  alerta_desviacion: false,
+                  alerta_multiplo: false,
+                  detalle_alertas: {
+                    alerta_previa: { multiplo_superado: true },
+                  },
+                }),
+              },
             ]),
           ],
         })}
@@ -188,7 +202,7 @@ describe("CabeceraAsignacion", () => {
       />
     )
     expect(screen.getByText("Medio suspendido")).toBeInTheDocument()
-    expect(screen.getByText("1 métrica con alerta")).toBeInTheDocument()
+    expect(screen.getByText("2 métricas con alerta")).toBeInTheDocument()
     // Sin cambio de estado fuera del camino feliz, no hay aviso.
     expect(
       document.getElementById(ID_AVISO_ESTADO_ASIGNACION)
@@ -216,8 +230,8 @@ describe("DisputasAsignacion", () => {
       {
         id: DISPUTA,
         estado: "RESUELTA",
-        motivo: "Métricas",
-        parte: "el medio",
+        motivo: "METRICAS",
+        parte: "MEDIO",
         descripcion: "Las cifras del corte de 24 h estaban bien.",
         resolucion: "Se verificó con la captura original.",
         creadaAt: "2026-10-15T15:00:00.000Z",
@@ -231,6 +245,12 @@ describe("DisputasAsignacion", () => {
     expect(
       screen.getByRole("link", { name: "Disputa por métricas" })
     ).toHaveAttribute("href", `/operacion/disputas/${DISPUTA}`)
+    // Estado y quién la abrió con los textos de la bandeja del equipo.
+    expect(screen.getByText("Resuelta")).toHaveAttribute(
+      "title",
+      "El equipo decidió qué pasa con la asignación."
+    )
+    expect(screen.getByText(/^Abierta por el medio el/)).toBeInTheDocument()
     expect(
       screen.getByText("Se verificó con la captura original.")
     ).toBeInTheDocument()

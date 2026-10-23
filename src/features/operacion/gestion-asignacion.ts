@@ -10,12 +10,15 @@
  *   transacción (`cancelar_asignacion_srv`, que exige además
  *   `medios.suspender` al transicionar el medio). Liquidada o pagada: se
  *   anula antes la liquidación; en disputa: se cancela al resolverla.
- * - Disputa (ADM-011, `disputas.abrir`): en los estados disputables y sin
- *   otra abierta (`abrir_disputa_srv` como ADMIN); si ya hay una abierta, se
- *   enlaza a su ficha (`disputas.ver`).
+ * - Disputa (ADM-011, `disputas.abrir`): lo decide `aperturaPosible` de
+ *   `@/features/disputas` con la parte ADMIN (estados disputables, sin otra
+ *   abierta: el espejo de `abrir_disputa_srv`), con sus motivos; si ya hay una
+ *   abierta, se enlaza a su ficha (`disputas.ver`).
  *
  * Solo decide la interfaz: la BD vuelve a validar permiso, estado y causa.
  */
+import { aperturaPosible, estaAbierta } from "@/features/disputas/presentacion"
+import type { MotivoDisputa } from "@/features/disputas/tipos"
 import type { ClavePermiso } from "@/lib/auth/permisos"
 import { accionesPermitidas } from "@/lib/negocio/acciones"
 import { Constants } from "@/types/database.types"
@@ -25,11 +28,9 @@ import {
   type EstadoAsignacion,
   type EstadoDisputa,
   type EstadoMedio,
-  MOTIVOS_DISPUTA,
 } from "./estados"
 
 export type CausaCancelacion = keyof typeof CAUSAS_CANCELACION
-export type MotivoDisputa = keyof typeof MOTIVOS_DISPUTA
 
 /** En el orden en que se ofrecen: de la más neutra a la más grave. */
 export const ORDEN_CAUSAS: readonly CausaCancelacion[] =
@@ -79,27 +80,6 @@ export const SUGERENCIAS_CANCELACION: Readonly<
   ],
 }
 
-/** Motivos de disputa con lo que significa cada uno (ADM-011). */
-export const AYUDA_MOTIVOS_DISPUTA: Readonly<Record<MotivoDisputa, string>> = {
-  INCUMPLIMIENTO: "El medio no cumplió lo pactado en la oferta.",
-  METRICAS: "Las cifras reportadas no cuadran con la evidencia.",
-  CONTENIDO:
-    "Lo publicado no corresponde al creativo aprobado o a las condiciones.",
-  PERMANENCIA:
-    "La publicación se retiró antes de tiempo: quedará marcada como retirada.",
-  PAGO: "Hay un problema con el pago de la asignación.",
-  OTRO: "Cualquier otra situación: descríbela con detalle.",
-}
-
-export const ORDEN_MOTIVOS_DISPUTA: readonly MotivoDisputa[] =
-  Constants.public.Enums.disputa_motivo
-
-/** Mientras la disputa siga abierta, no se abre otra sobre la misma asignación. */
-export const ESTADOS_DISPUTA_ABIERTA: readonly EstadoDisputa[] = [
-  "ABIERTA",
-  "EN_REVISION",
-]
-
 // ── Bloqueos ─────────────────────────────────────────────────────────────────
 
 export const BLOQUEO_CANCELAR_LIQUIDADA =
@@ -147,7 +127,9 @@ export interface OpcionCancelar {
 }
 
 export type OpcionDisputa =
-  { tipo: "abrir" } | { tipo: "ver"; disputaId: string }
+  /** Los motivos que el equipo puede elegir en el estado actual. */
+  | { tipo: "abrir"; motivos: MotivoDisputa[] }
+  | { tipo: "ver"; disputaId: string }
 
 export interface OpcionesGestion {
   cancelar: OpcionCancelar | null
@@ -158,11 +140,7 @@ export interface OpcionesGestion {
 export function disputaAbierta(
   disputas: SituacionGestion["disputas"]
 ): { id: string; estado: EstadoDisputa } | null {
-  return (
-    disputas.findLast((disputa) =>
-      ESTADOS_DISPUTA_ABIERTA.includes(disputa.estado)
-    ) ?? null
-  )
+  return disputas.findLast((disputa) => estaAbierta(disputa.estado)) ?? null
 }
 
 function opcionCancelar(
@@ -195,7 +173,8 @@ function suspensionMedio(
 
 function opcionDisputa(
   situacion: SituacionGestion,
-  permisos: ReadonlySet<string>
+  permisos: ReadonlySet<string>,
+  ahora: Date
 ): OpcionDisputa | null {
   const abierta = disputaAbierta(situacion.disputas)
   if (abierta) {
@@ -204,26 +183,27 @@ function opcionDisputa(
       : null
   }
   if (!permisos.has(PERMISO_ABRIR_DISPUTA)) return null
-  const disputable = accionesPermitidas(
-    "asignaciones",
-    situacion.estado,
-    "ADMIN",
-    permisos
-  ).some(
-    (accion) =>
-      accion.hacia === "EN_DISPUTA" && accion.permiso === PERMISO_ABRIR_DISPUTA
-  )
-  return disputable ? { tipo: "abrir" } : null
+  // Fuera de los estados disputables no se ofrece (el bloqueo no se explica).
+  const { motivos, bloqueo } = aperturaPosible({
+    parte: "ADMIN",
+    estadoAsignacion: situacion.estado,
+    hayAbierta: false,
+    ahora,
+  })
+  return bloqueo === null && motivos.length > 0
+    ? { tipo: "abrir", motivos }
+    : null
 }
 
 export function opcionesGestion(
   situacion: SituacionGestion,
-  permisos: Iterable<string>
+  permisos: Iterable<string>,
+  ahora: Date = new Date()
 ): OpcionesGestion {
   const conjunto = new Set(permisos)
   return {
     cancelar: opcionCancelar(situacion, conjunto),
-    disputa: opcionDisputa(situacion, conjunto),
+    disputa: opcionDisputa(situacion, conjunto, ahora),
   }
 }
 

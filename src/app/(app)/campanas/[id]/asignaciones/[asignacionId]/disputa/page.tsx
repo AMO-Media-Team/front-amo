@@ -30,7 +30,7 @@ import { formatearHandle } from "@/features/operacion/formato"
 import { seguimientoDeCampana } from "@/features/seguimiento/queries"
 import { rutaSeguimiento } from "@/features/seguimiento/rutas"
 import type { AsignacionSeguimiento } from "@/features/seguimiento/tipos"
-import { requerirPermiso } from "@/lib/auth/dal"
+import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 type Parametros =
   PageProps<"/campanas/[id]/asignaciones/[asignacionId]/disputa">
@@ -53,7 +53,7 @@ async function asignacionDeLaCampana(
 export async function generateMetadata({
   params,
 }: Parametros): Promise<Metadata> {
-  const usuario = await requerirPermiso("disputas.abrir")
+  const usuario = await requerirPermiso("asignaciones.ver_propias")
   const { id, asignacionId } = await params
   const asignacion =
     usuario.anuncianteId && UUID.test(id) && UUID.test(asignacionId)
@@ -72,10 +72,14 @@ export async function generateMetadata({
  * Contenido, Permanencia u Otro) con el aviso de que, mientras dure, no se
  * verifica ni se liquida y que lo escrito lo verán el medio y el equipo AMO;
  * con una abierta, su estado y la conversación; cerrada, el resultado en la
- * voz de la empresa. La BD vuelve a comprobarlo todo al abrir y al escribir.
+ * voz de la empresa. Leerla pide lo mismo que el seguimiento de la campaña
+ * (`asignaciones.ver_propias`: así se llega desde `/ir` sin un 403); abrirla,
+ * responder y adjuntar, además `disputas.abrir` (sin él, la página dice que
+ * no puede escribir). La BD vuelve a comprobarlo todo al abrir y al escribir.
  */
 export default async function PaginaDisputaAnunciante({ params }: Parametros) {
-  const usuario = await requerirPermiso("disputas.abrir")
+  const usuario = await requerirPermiso("asignaciones.ver_propias")
+  const puedeDisputar = tieneAlgunPermiso(usuario, ["disputas.abrir"])
   const { id, asignacionId } = await params
   if (!UUID.test(id) || !UUID.test(asignacionId)) notFound()
   if (!usuario.anuncianteId) {
@@ -107,7 +111,7 @@ export default async function PaginaDisputaAnunciante({ params }: Parametros) {
     ? await mensajesDeDisputa(vigente.id)
     : []
   const apertura: AperturaDisputa | null =
-    vista.tipo === "abrir"
+    vista.tipo === "abrir" && puedeDisputar
       ? {
           perspectiva: "anunciante",
           asignacionId: asignacion.id,
@@ -120,7 +124,7 @@ export default async function PaginaDisputaAnunciante({ params }: Parametros) {
           handle: asignacion.cuenta.handle,
         }
       : null
-  const titulo = tituloDisputa(vista, "anunciante")
+  const titulo = tituloDisputa(vista, "anunciante", puedeDisputar)
   const seguimiento = rutaSeguimiento(id, asignacion.id)
 
   return (
@@ -131,7 +135,7 @@ export default async function PaginaDisputaAnunciante({ params }: Parametros) {
         antetitulo={asignacion.oferta}
         titulo={titulo}
         descripcion={
-          avisoPaginaAnunciante(vista) ??
+          avisoPaginaAnunciante(vista, puedeDisputar) ??
           `Publicación de ${asignacion.medio.nombre}.`
         }
         plataforma={asignacion.plataforma}
@@ -163,7 +167,7 @@ export default async function PaginaDisputaAnunciante({ params }: Parametros) {
                 )
               : { plazoRecargaHoras: plazo }
           }
-          puedeEscribir
+          puedeEscribir={puedeDisputar}
           autorApertura={
             vigente
               ? autorAperturaParte({

@@ -310,7 +310,9 @@ export function HiloDisputa({
         ) : (
           <p className="text-sm text-pretty text-muted-foreground">
             {abierta
-              ? "Consulta en solo lectura: responder es de las partes y del equipo que resuelve disputas."
+              ? perspectiva === "interno"
+                ? "Consulta en solo lectura: responder es de las partes y del equipo que resuelve disputas."
+                : "Consulta en solo lectura: tu rol no permite responder ni adjuntar pruebas."
               : disputa.resueltaAt
                 ? `La disputa se cerró el ${formatearFechaHoraFija(disputa.resueltaAt)}: ya no admite mensajes.`
                 : "La disputa se cerró: ya no admite mensajes."}

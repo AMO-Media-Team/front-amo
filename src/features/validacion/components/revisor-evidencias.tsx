@@ -20,6 +20,7 @@ import {
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -40,6 +41,7 @@ import {
   formatearHandle,
   formatearRangoCompacto,
 } from "@/features/operacion/formato"
+import { rutaAsignacion } from "@/features/operacion/rutas"
 import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import { aplicarErroresServidor } from "@/features/usuarios/components/errores-formulario"
 import { LONGITUD_MAXIMA_MOTIVO } from "@/features/usuarios/schemas"
@@ -49,8 +51,11 @@ import { formatearNumero } from "@/lib/format"
 import { validarEvidencia } from "../actions"
 import {
   COMPROBACIONES_EVIDENCIA,
+  DETALLE_EVIDENCIA_EN_DISPUTA,
+  evidenciaEnDisputa,
   SUGERENCIAS_RECHAZO_EVIDENCIA,
 } from "../decision"
+import { esperaDisputa } from "../errores"
 import { CAMPOS_EVIDENCIA, esquemaAprobarEvidencia } from "../schemas"
 import type { EvidenciaEnCola } from "../tipos"
 import {
@@ -66,6 +71,7 @@ import {
   AbrirPublicacion,
   Comprobaciones,
   Dato,
+  EsperaDisputa,
   type FilaDato,
   Hace,
   ListaDatosRevision,
@@ -213,6 +219,9 @@ function datosEvidencia(evidencia: EvidenciaEnCola): FilaDato[] {
  * La evidencia abierta en la hoja: captura (al lado en escritorio), datos,
  * qué comprobar y la decisión. Aprobar exige marcar que la etiqueta de
  * publicidad es visible; rechazar pide observaciones que el medio recibe.
+ * Si la asignación entró en disputa (hint `en_disputa`), la evidencia se
+ * decide al resolverla: en lugar de la decisión se explica y se enlaza a la
+ * ficha de la asignación, que lleva a la disputa.
  */
 function RevisionEvidencia({
   evidencia,
@@ -230,6 +239,10 @@ function RevisionEvidencia({
   const idFormulario = useId()
   const idEtiqueta = useId()
   const [rechazando, setRechazando] = useState(false)
+  // La BD respondió que la evidencia espera a la disputa (o la cola ya lo sabía).
+  const [enDisputa, setEnDisputa] = useState(() =>
+    evidenciaEnDisputa(evidencia.estadoAsignacion)
+  )
   const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
   const firmas = useFirmas(evidencia.asignacionId, evidencia.conImagen)
   const imagen =
@@ -267,6 +280,12 @@ function RevisionEvidencia({
         ...formulario.getValues(),
       })
       if (!resultado.ok) {
+        if (esperaDisputa(resultado, "evidencia")) {
+          // El botón que se pulsó desaparece: el foco va al título de la hoja.
+          setEnDisputa(true)
+          requestAnimationFrame(() => revisor.focoTrasDialogo()?.focus())
+          return
+        }
         aplicarErroresServidor(formulario.setError, resultado, CAMPOS_EVIDENCIA)
         return
       }
@@ -331,119 +350,146 @@ function RevisionEvidencia({
             </Alert>
           ) : null}
           <ListaDatosRevision filas={datosEvidencia(evidencia)} />
-          <Comprobaciones puntos={COMPROBACIONES_EVIDENCIA} />
-          <form
-            id={idFormulario}
-            noValidate
-            onSubmit={aprobar}
-            aria-busy={pendiente || undefined}
-            className="flex flex-col gap-4"
-          >
-            {errorGeneral ? (
-              <Alert variant="destructive" role="alert">
-                <CircleAlert aria-hidden />
-                <AlertDescription>{errorGeneral}</AlertDescription>
-              </Alert>
-            ) : null}
-            <Controller
-              control={control}
-              name="etiquetaVerificada"
-              render={({ field, fieldState }) => (
-                <Field
-                  orientation="horizontal"
-                  data-invalid={fieldState.invalid || undefined}
-                  className="rounded-xl border bg-card/40 p-3.5"
-                >
-                  <Checkbox
-                    id={idEtiqueta}
-                    ref={field.ref}
-                    checked={field.value === true}
-                    onCheckedChange={(valor) => {
-                      field.onChange(valor === true)
-                      field.onBlur()
-                    }}
-                    disabled={pendiente}
-                    aria-invalid={fieldState.invalid || undefined}
-                    aria-describedby={
-                      fieldState.error
-                        ? `${idEtiqueta}-ayuda ${idEtiqueta}-error`
-                        : `${idEtiqueta}-ayuda`
-                    }
-                    className="mt-0.5"
-                  />
-                  <FieldContent className="gap-1">
-                    <FieldLabel htmlFor={idEtiqueta} className="leading-snug">
-                      La etiqueta de publicidad es visible
-                    </FieldLabel>
-                    <FieldDescription id={`${idEtiqueta}-ayuda`}>
-                      Márcala solo si la viste en la publicación o en la
-                      captura. Es obligatoria para aprobar.
-                    </FieldDescription>
-                    <FieldError
-                      id={`${idEtiqueta}-error`}
-                      errors={[fieldState.error]}
-                    />
-                  </FieldContent>
-                </Field>
-              )}
+          {enDisputa ? (
+            <EsperaDisputa
+              detalle={DETALLE_EVIDENCIA_EN_DISPUTA}
+              enlace={{
+                href: rutaAsignacion(evidencia.asignacionId),
+                etiqueta: "Ver la asignación y su disputa",
+              }}
+              className="text-sm"
             />
-            <Field
-              data-invalid={formState.errors.observaciones ? true : undefined}
+          ) : (
+            <Comprobaciones puntos={COMPROBACIONES_EVIDENCIA} />
+          )}
+          {enDisputa ? null : (
+            <form
+              id={idFormulario}
+              noValidate
+              onSubmit={aprobar}
+              aria-busy={pendiente || undefined}
+              className="flex flex-col gap-4"
             >
-              <FieldLabel htmlFor={`${idFormulario}-observaciones`}>
-                Observaciones{" "}
-                <span className="font-normal text-muted-foreground">
-                  (opcional)
-                </span>
-              </FieldLabel>
-              <Textarea
-                id={`${idFormulario}-observaciones`}
-                rows={2}
-                maxLength={LONGITUD_MAXIMA_MOTIVO}
-                disabled={pendiente}
-                aria-invalid={formState.errors.observaciones ? true : undefined}
-                aria-describedby={`${idFormulario}-observaciones-ayuda${
-                  formState.errors.observaciones
-                    ? ` ${idFormulario}-observaciones-error`
-                    : ""
-                }`}
-                {...register("observaciones")}
+              {errorGeneral ? (
+                <Alert variant="destructive" role="alert">
+                  <CircleAlert aria-hidden />
+                  <AlertDescription>{errorGeneral}</AlertDescription>
+                </Alert>
+              ) : null}
+              <Controller
+                control={control}
+                name="etiquetaVerificada"
+                render={({ field, fieldState }) => (
+                  <Field
+                    orientation="horizontal"
+                    data-invalid={fieldState.invalid || undefined}
+                    className="rounded-xl border bg-card/40 p-3.5"
+                  >
+                    <Checkbox
+                      id={idEtiqueta}
+                      ref={field.ref}
+                      checked={field.value === true}
+                      onCheckedChange={(valor) => {
+                        field.onChange(valor === true)
+                        field.onBlur()
+                      }}
+                      disabled={pendiente}
+                      aria-invalid={fieldState.invalid || undefined}
+                      aria-describedby={
+                        fieldState.error
+                          ? `${idEtiqueta}-ayuda ${idEtiqueta}-error`
+                          : `${idEtiqueta}-ayuda`
+                      }
+                      className="mt-0.5"
+                    />
+                    <FieldContent className="gap-1">
+                      <FieldLabel htmlFor={idEtiqueta} className="leading-snug">
+                        La etiqueta de publicidad es visible
+                      </FieldLabel>
+                      <FieldDescription id={`${idEtiqueta}-ayuda`}>
+                        Márcala solo si la viste en la publicación o en la
+                        captura. Es obligatoria para aprobar.
+                      </FieldDescription>
+                      <FieldError
+                        id={`${idEtiqueta}-error`}
+                        errors={[fieldState.error]}
+                      />
+                    </FieldContent>
+                  </Field>
+                )}
               />
-              <FieldDescription id={`${idFormulario}-observaciones-ayuda`}>
-                Quedan con la evidencia aprobada y en la bitácora.
-              </FieldDescription>
-              <FieldError
-                id={`${idFormulario}-observaciones-error`}
-                errors={[formState.errors.observaciones]}
-              />
-            </Field>
-          </form>
+              <Field
+                data-invalid={formState.errors.observaciones ? true : undefined}
+              >
+                <FieldLabel htmlFor={`${idFormulario}-observaciones`}>
+                  Observaciones{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (opcional)
+                  </span>
+                </FieldLabel>
+                <Textarea
+                  id={`${idFormulario}-observaciones`}
+                  rows={2}
+                  maxLength={LONGITUD_MAXIMA_MOTIVO}
+                  disabled={pendiente}
+                  aria-invalid={
+                    formState.errors.observaciones ? true : undefined
+                  }
+                  aria-describedby={`${idFormulario}-observaciones-ayuda${
+                    formState.errors.observaciones
+                      ? ` ${idFormulario}-observaciones-error`
+                      : ""
+                  }`}
+                  {...register("observaciones")}
+                />
+                <FieldDescription id={`${idFormulario}-observaciones-ayuda`}>
+                  Quedan con la evidencia aprobada y en la bitácora.
+                </FieldDescription>
+                <FieldError
+                  id={`${idFormulario}-observaciones-error`}
+                  errors={[formState.errors.observaciones]}
+                />
+              </Field>
+            </form>
+          )}
         </CuerpoRevision>
       </CuerpoHoja>
       <PieHoja>
-        <Button
-          type="button"
-          variant="destructive"
-          size="lg"
-          disabled={pendiente}
-          onClick={() => setRechazando(true)}
-        >
-          <ShieldX data-icon="inline-start" aria-hidden />
-          Rechazar
-        </Button>
-        <Button
-          type="submit"
-          form={idFormulario}
-          size="lg"
-          disabled={pendiente}
-        >
-          {pendiente ? (
-            <Spinner aria-label="Aprobando" data-icon="inline-start" />
-          ) : (
-            <CircleCheck data-icon="inline-start" aria-hidden />
-          )}
-          Aprobar
-        </Button>
+        {enDisputa ? (
+          <EnlaceBoton
+            href={rutaAsignacion(evidencia.asignacionId)}
+            variant="outline"
+            size="lg"
+          >
+            Ver la asignación
+          </EnlaceBoton>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="destructive"
+              size="lg"
+              disabled={pendiente}
+              onClick={() => setRechazando(true)}
+            >
+              <ShieldX data-icon="inline-start" aria-hidden />
+              Rechazar
+            </Button>
+            <Button
+              type="submit"
+              form={idFormulario}
+              size="lg"
+              disabled={pendiente}
+            >
+              {pendiente ? (
+                <Spinner aria-label="Aprobando" data-icon="inline-start" />
+              ) : (
+                <CircleCheck data-icon="inline-start" aria-hidden />
+              )}
+              Aprobar
+            </Button>
+          </>
+        )}
       </PieHoja>
 
       <VisorCaptura
@@ -477,6 +523,7 @@ function RevisionEvidencia({
             publicacionId: evidencia.publicacionId,
             observaciones,
           })
+          if (esperaDisputa(resultado, "evidencia")) setEnDisputa(true)
           if (resultado.ok) {
             const plazo = resultado.datos.fechaLimitePublicacion
             toast.success("Evidencia rechazada", {

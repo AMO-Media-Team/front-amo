@@ -2,8 +2,9 @@
  * Errores de la validación en voz del equipo AMO (módulo puro). La BD explica
  * casi todo en el `detail` de sus `AMO_*`; aquí se da texto propio a los
  * `hint` de la fase (`asignacion_cerrada`, `alerta_sin_revision`,
- * `metricas_pendientes`), se decide en qué campo mostrar cada error y se
- * traducen las restricciones de `metricas` que puede tocar una corrección.
+ * `metricas_pendientes`, `en_disputa`), se decide en qué campo mostrar cada
+ * error y se traducen las restricciones de `metricas` que puede tocar una
+ * corrección.
  */
 import {
   codigoNegocio,
@@ -18,6 +19,7 @@ import { frasePermanenciaPendiente } from "./decision"
 export const HINT_ASIGNACION_CERRADA = "asignacion_cerrada"
 export const HINT_ALERTA_SIN_REVISION = "alerta_sin_revision"
 export const HINT_METRICAS_PENDIENTES = "metricas_pendientes"
+export const HINT_EN_DISPUTA = "en_disputa"
 
 export const MENSAJES_VALIDACION = {
   asignacionCerrada:
@@ -26,6 +28,10 @@ export const MENSAJES_VALIDACION = {
     "Esta métrica tiene alertas: anota qué revisaste antes de aprobarla.",
   metricasPendientes:
     "Hay métricas pendientes de revisión en esta asignación: apruébalas o recházalas antes de verificar.",
+  enDisputaEvidencia:
+    "La asignación está en disputa: esta evidencia se decide al resolver la disputa, no desde aquí.",
+  enDisputaRechazoMetrica:
+    "La asignación entró en disputa con todas sus métricas cargadas: el rechazo de esta métrica se decide al resolver la disputa. Aprobarla sí se puede.",
   permanenciaPendiente:
     "Aún no se cumple la permanencia mínima de la publicación.",
   etiquetaRequerida:
@@ -66,9 +72,30 @@ const RESTRICCIONES: Restricciones = {
   },
 }
 
+/** Qué se intentaba decidir cuando la BD respondió `en_disputa`. */
+export type DecisionEnDisputa = "evidencia" | "rechazoMetrica"
+
+const MENSAJES_EN_DISPUTA: Readonly<Record<DecisionEnDisputa, string>> = {
+  evidencia: MENSAJES_VALIDACION.enDisputaEvidencia,
+  rechazoMetrica: MENSAJES_VALIDACION.enDisputaRechazoMetrica,
+}
+
+/**
+ * La decisión espera a la disputa (hint `en_disputa`): la cola deja de
+ * ofrecerla y lo explica en su lugar.
+ */
+export function esperaDisputa(
+  resultado: { ok: boolean; error?: string },
+  decision: DecisionEnDisputa
+): boolean {
+  return !resultado.ok && resultado.error === MENSAJES_EN_DISPUTA[decision]
+}
+
 export interface ContextoErrorValidacion {
   /** Campo donde se escribe el motivo u observación de esta decisión. */
   campoMotivo?: "observaciones" | "motivo"
+  /** Qué se decidía, para explicar el hint `en_disputa`. */
+  enDisputa?: DecisionEnDisputa
   /** Fin de la permanencia pendiente, para decir hasta cuándo esperar. */
   permanenciaHasta?: string | null
 }
@@ -83,6 +110,7 @@ export function interpretarErrorValidacion(
   {
     campoMotivo = "observaciones",
     permanenciaHasta,
+    enDisputa = "evidencia",
   }: ContextoErrorValidacion = {}
 ): ErrorBdInterpretado {
   const codigo = codigoNegocio(error)
@@ -105,6 +133,12 @@ export function interpretarErrorValidacion(
         codigo,
         esperado: true,
         mensaje: MENSAJES_VALIDACION.metricasPendientes,
+      }
+    case HINT_EN_DISPUTA:
+      return {
+        codigo,
+        esperado: true,
+        mensaje: MENSAJES_EN_DISPUTA[enDisputa],
       }
   }
   if (codigo === "AMO_PERMANENCIA_PENDIENTE") {

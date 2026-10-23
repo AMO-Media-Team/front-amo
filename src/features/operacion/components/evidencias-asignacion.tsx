@@ -2,7 +2,6 @@
 
 import {
   BadgeCheck,
-  CircleAlert,
   ExternalLink,
   History,
   ScanEye,
@@ -11,6 +10,7 @@ import {
 import { useId, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { rutaDisputaInterna } from "@/features/disputas/rutas"
 import {
   type CapturaAbierta,
   ErrorFirmas,
@@ -26,9 +26,13 @@ import {
   idCorte,
   idPublicacion,
 } from "@/features/validacion/components/decisiones-ficha"
+import { EsperaDisputa } from "@/features/validacion/components/piezas"
 import {
   type AccionesCorte,
   accionesCorte,
+  DETALLE_EVIDENCIA_EN_DISPUTA,
+  DETALLE_RECHAZO_EN_DISPUTA,
+  evidenciaEsperaDisputa,
   puedeValidarEvidencia,
 } from "@/features/validacion/decision"
 import type { ValidacionEnFicha } from "@/features/validacion/tipos"
@@ -50,15 +54,11 @@ import {
   formatearDiaMes,
   formatearFechaHoraFija,
 } from "../formato"
-import {
-  type CorteMetrica,
-  describirAlertas,
-  engagement,
-  nombresColumnas,
-  tieneAlerta,
-} from "../metricas"
+import { alertaRevisable, tieneAlerta } from "../alertas"
+import { type CorteMetrica, engagement, nombresColumnas } from "../metricas"
 import type { PublicacionEvidencia } from "../tipos"
 import { InsigniaEstado } from "./distintivos"
+import { PorqueAlerta } from "./porque-alerta"
 
 /** Cifra exacta: quien valida compara contra la captura del panel. */
 function Cifra({ valor }: { valor: number | null }) {
@@ -72,22 +72,34 @@ function Cifra({ valor }: { valor: number | null }) {
 const CELDA_CIFRA = "px-3 py-2.5 text-right whitespace-nowrap cifras"
 const COLUMNAS_TABLA = 6
 
+/** Lo que espera a la disputa enlaza a ella (con `disputas.ver`). */
+function enlaceDisputa(validacion: ValidacionEnFicha | undefined) {
+  return validacion?.disputaId
+    ? {
+        href: rutaDisputaInterna(validacion.disputaId),
+        etiqueta: "Ver la disputa",
+      }
+    : null
+}
+
 function FilaCorte({
   corte,
   plataforma,
   acciones,
+  validacion,
   onVerCaptura,
   onCorregir,
 }: {
   corte: CorteMetrica
   plataforma: Plataforma
   acciones: AccionesCorte
+  validacion: ValidacionEnFicha | undefined
   onVerCaptura: (() => void) | null
   onCorregir: () => void
 }) {
   const idBloqueo = useId()
-  const alerta = tieneAlerta(corte)
-  const motivos = alerta ? describirAlertas(corte, plataforma) : []
+  // También la que tuvo alerta antes de corregirse: pide constancia igual.
+  const alerta = alertaRevisable(corte.alerta)
   const tasa = engagement(corte.interacciones, corte.alcance)
   const conAcciones = acciones.validar || acciones.corregir
   const nombre = CORTES[corte.corte].etiqueta
@@ -104,7 +116,11 @@ function FilaCorte({
             {alerta ? (
               <TriangleAlert
                 role="img"
-                aria-label="Con alerta de integridad"
+                aria-label={
+                  tieneAlerta(corte.alerta)
+                    ? "Con alerta de integridad"
+                    : "Tuvo alerta antes de corregirse"
+                }
                 className="size-3.5 shrink-0 text-warning"
               />
             ) : null}
@@ -159,36 +175,38 @@ function FilaCorte({
           )}
         </td>
       </tr>
-      {motivos.length > 0 || corte.observaciones || conAcciones ? (
+      {alerta || corte.observaciones || conAcciones ? (
         <tr className={cn(alerta && "bg-warning/6")}>
           <td colSpan={COLUMNAS_TABLA} className="px-4 pb-2.5 sm:px-5">
             {/* Fijo al borde visible y con su ancho (`cqw` de la región): el texto
                 y los botones se leen completos aunque la tabla se desplace en
                 pantallas angostas. */}
             <div className="sticky left-4 flex w-[calc(100cqw-2rem)] flex-col gap-2 text-xs text-pretty text-muted-foreground sm:left-5 sm:w-[calc(100cqw-2.5rem)]">
-              {motivos.length > 0 || corte.observaciones ? (
-                <div>
-                  {motivos.map((motivo) => (
-                    <span key={motivo} className="flex gap-1.5 text-warning">
-                      <CircleAlert
-                        aria-hidden
-                        className="mt-0.5 size-3 shrink-0"
-                      />
-                      {motivo}
-                    </span>
-                  ))}
-                  {corte.observaciones ? (
-                    <span className="mt-1 block">
-                      <span className="font-medium text-foreground/80">
-                        Observaciones:
-                      </span>{" "}
-                      {corte.observaciones}
-                    </span>
-                  ) : null}
-                </div>
+              {alerta ? (
+                <PorqueAlerta
+                  alerta={corte.alerta}
+                  plataforma={plataforma}
+                  nivelTitulo={4}
+                  className="bg-card text-foreground"
+                />
+              ) : null}
+              {corte.observaciones ? (
+                <p>
+                  <span className="font-medium text-foreground/80">
+                    Observaciones:
+                  </span>{" "}
+                  {corte.observaciones}
+                </p>
               ) : null}
               {acciones.bloqueoAprobar ? (
                 <p id={idBloqueo}>{acciones.bloqueoAprobar}</p>
+              ) : null}
+              {acciones.rechazoEnDisputa ? (
+                <EsperaDisputa
+                  detalle={DETALLE_RECHAZO_EN_DISPUTA}
+                  enlace={enlaceDisputa(validacion)}
+                  className="w-fit max-w-full text-foreground"
+                />
               ) : null}
               {conAcciones ? (
                 <DecisionCorte
@@ -271,6 +289,7 @@ function TablaCortes({
               corte={corte}
               plataforma={plataforma}
               acciones={accionesCorte(corte, evidenciaAprobada, validacion)}
+              validacion={validacion}
               onVerCaptura={capturaDe(corte)}
               onCorregir={() => onCorregir(corte)}
             />
@@ -353,13 +372,16 @@ function DatosPublicacion({
 /**
  * Evidencia de la asignación: cada publicación con su captura (miniatura con
  * URL firmada de corta duración, nunca la ruta), su validación y sus métricas
- * por corte con las alertas de integridad explicadas.
+ * por corte con las alertas de integridad explicadas (`PorqueAlerta`, la
+ * misma explicación que la cola), también la que tuvo antes de corregirse.
  *
  * Con `validacion` (permisos de quien la ve y estado de la asignación), ofrece
  * las mismas decisiones que la cola de validación (ADM-007, ADM-008): aprobar
  * o rechazar la evidencia de cada publicación y cada corte pendiente, y, con
  * `metricas.editar_validadas`, «Corregir» un corte aprobado (formulario con
- * motivo obligatorio). Sin ella, solo se consulta.
+ * motivo obligatorio). En disputa, lo que la BD no deja decidir (la
+ * evidencia; rechazar un corte si entró con todo cargado) se explica y enlaza
+ * a la disputa. Sin `validacion`, solo se consulta.
  */
 export function EvidenciasAsignacion({
   asignacionId,
@@ -515,6 +537,12 @@ export function EvidenciasAsignacion({
                 ) : null}
                 {puedeValidarEvidencia(publicacion.estado, validacion) ? (
                   <DecisionEvidencia publicacion={publicacion} />
+                ) : evidenciaEsperaDisputa(publicacion.estado, validacion) ? (
+                  <EsperaDisputa
+                    detalle={DETALLE_EVIDENCIA_EN_DISPUTA}
+                    enlace={enlaceDisputa(validacion)}
+                    className="w-fit max-w-full"
+                  />
                 ) : null}
               </div>
             </div>

@@ -3,6 +3,8 @@
  * Son DTO planos (serializables en RSC): solo lo que cada vista muestra,
  * nunca columnas sensibles (rutas de documentos, datos `_privado`).
  */
+import type { MotivoDisputa, ParteDisputa } from "@/features/disputas/tipos"
+
 import type {
   IndicadoresAsignaciones,
   PuntoMensual,
@@ -449,8 +451,9 @@ export interface PublicacionEvidencia {
 export interface DisputaResumen {
   id: string
   estado: EstadoDisputa
-  motivo: string
-  parte: string
+  motivo: MotivoDisputa
+  /** Quién la abrió. */
+  parte: ParteDisputa
   descripcion: string
   resolucion: string | null
   creadaAt: string

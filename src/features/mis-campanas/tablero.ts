@@ -20,6 +20,9 @@ import type {
 /** Lo más que devuelve `mis_asignaciones_medio` por llamada (el tablero). */
 export const LIMITE_TABLERO = 200
 
+/** Vencidas cuyas disputas se leen de una vez (el `in (...)` viaja en la URL). */
+export const LIMITE_VENCIDAS_POR_LEER = 100
+
 export interface TarjetaAsignacion {
   id: string
   estado: EstadoAsignacion
@@ -71,6 +74,49 @@ export function ultimaActividad(asignacion: AsignacionMedio): string {
     if (valor && milisegundos(valor) > milisegundos(ultima)) ultima = valor
   }
   return ultima
+}
+
+/** Una vencida que todavía se puede reclamar (el plazo sigue abierto). */
+export function esReclamable(
+  asignacion: Pick<AsignacionMedio, "estado" | "reclamoHasta">,
+  ahora: number
+): boolean {
+  return (
+    asignacion.estado === "VENCIDA_SIN_PUBLICAR" &&
+    asignacion.reclamoHasta !== null &&
+    Date.parse(asignacion.reclamoHasta) >= ahora
+  )
+}
+
+/**
+ * Las vencidas del tablero cuya disputa hay que leer para saber si ya se
+ * reclamaron: las que aún se pueden reclamar (no se ofrece otro reclamo) y,
+ * con el plazo terminado, las que pasaron por una disputa (`enDisputaAt`:
+ * abrirla siempre lleva la asignación a EN_DISPUTA), para decir «Ya
+ * reclamaste…» y no «El plazo para reclamar terminó…». Si hay que recortar,
+ * primero las que siguen en plazo y luego las más recientes (el orden de
+ * `asignaciones`).
+ */
+export function vencidasPorLeer(
+  asignaciones: readonly Pick<
+    AsignacionMedio,
+    "id" | "estado" | "reclamoHasta" | "enDisputaAt"
+  >[],
+  ahora: number,
+  limite = LIMITE_VENCIDAS_POR_LEER
+): string[] {
+  const enPlazo: string[] = []
+  const reclamadas: string[] = []
+  for (const asignacion of asignaciones) {
+    if (esReclamable(asignacion, ahora)) enPlazo.push(asignacion.id)
+    else if (
+      asignacion.estado === "VENCIDA_SIN_PUBLICAR" &&
+      asignacion.enDisputaAt !== null
+    ) {
+      reclamadas.push(asignacion.id)
+    }
+  }
+  return [...enPlazo, ...reclamadas].slice(0, limite)
 }
 
 export function tarjetaDe(

@@ -1,10 +1,4 @@
-import {
-  ArrowRight,
-  History,
-  ShieldAlert,
-  ShieldCheck,
-  TriangleAlert,
-} from "lucide-react"
+import { ArrowRight, ShieldAlert, ShieldCheck } from "lucide-react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
@@ -12,22 +6,14 @@ import {
   InsigniaEstado,
   MarcaPlataforma,
 } from "@/features/operacion/components/distintivos"
+import { PorqueAlerta } from "@/features/operacion/components/porque-alerta"
 import { CORTES, ESTADOS_VALIDACION } from "@/features/operacion/estados"
 import { contar, formatearHandle } from "@/features/operacion/formato"
 import { rutaAsignacion } from "@/features/operacion/rutas"
 import { TarjetaFicha } from "@/features/usuarios/components/tarjeta-ficha"
 import { formatearFechaHora, formatearNumero } from "@/lib/format"
-import { cn } from "@/lib/utils"
 
-import {
-  type Comparacion,
-  type MotivoAlerta,
-  motivosAlerta,
-  notaValidacion,
-  resumirAlertas,
-  textoAlertaPrevia,
-  textoEsperado,
-} from "../alertas"
+import { notaValidacion, resumirAlertas } from "../alertas"
 import type { AlertaDelMedio } from "../tipos"
 
 function tituloAlerta(alerta: AlertaDelMedio): string {
@@ -41,89 +27,8 @@ function tituloAlerta(alerta: AlertaDelMedio): string {
     : corte
 }
 
-/** La cifra reportada al lado de lo esperable para la cuenta (ADM-008 c1). */
-function TablaComparaciones({
-  motivo,
-  comparaciones,
-}: {
-  motivo: string
-  comparaciones: readonly Comparacion[]
-}) {
-  return (
-    <table className="w-full text-left text-xs">
-      <caption className="sr-only">Cifras de «{motivo}»</caption>
-      <thead className="text-muted-foreground">
-        <tr>
-          <th scope="col" className="py-1 pr-3 font-medium">
-            Cifra
-          </th>
-          <th scope="col" className="py-1 pr-3 font-medium">
-            Reportado
-          </th>
-          <th scope="col" className="py-1 font-medium">
-            Esperado
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y">
-        {comparaciones.map((comparacion) => (
-          <tr key={comparacion.cifra} className="align-top">
-            <th scope="row" className="py-1.5 pr-3 font-normal">
-              {comparacion.cifra}
-            </th>
-            <td
-              className={cn(
-                "py-1.5 pr-3 font-medium cifras",
-                comparacion.fuera && "text-destructive"
-              )}
-            >
-              <span className="inline-flex items-center gap-1">
-                {comparacion.fuera ? (
-                  <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
-                ) : null}
-                {formatearNumero(comparacion.reportado)}
-              </span>
-              {comparacion.fuera ? (
-                <span className="sr-only"> (fuera de lo esperado)</span>
-              ) : null}
-            </td>
-            <td className="py-1.5">
-              <span className="flex flex-col">
-                <span className="cifras">{textoEsperado(comparacion)}</span>
-                <span className="text-muted-foreground">
-                  {comparacion.referencia}
-                </span>
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-function Motivo({ motivo }: { motivo: MotivoAlerta }) {
-  return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2.5">
-      <h4 className="flex items-center gap-1.5 text-xs font-semibold">
-        <ShieldAlert aria-hidden className="size-3.5 shrink-0 text-warning" />
-        {motivo.titulo}
-      </h4>
-      <p className="text-xs text-pretty">{motivo.explicacion}</p>
-      {motivo.comparaciones.length > 0 ? (
-        <TablaComparaciones
-          motivo={motivo.titulo}
-          comparaciones={motivo.comparaciones}
-        />
-      ) : null}
-    </div>
-  )
-}
-
 function Alerta({ alerta }: { alerta: AlertaDelMedio }) {
   const idTitulo = `alerta-${alerta.metricaId}`
-  const motivos = motivosAlerta(alerta)
-  const previa = textoAlertaPrevia(alerta.detalle.previa, alerta.plataforma)
   const nota = notaValidacion(alerta)
   const oferta = alerta.oferta ?? "Oferta sin título"
   const contexto = [
@@ -166,18 +71,11 @@ function Alerta({ alerta }: { alerta: AlertaDelMedio }) {
           />
         </header>
 
-        <div className="flex flex-col gap-2">
-          {motivos.map((motivo) => (
-            <Motivo key={motivo.clave} motivo={motivo} />
-          ))}
-        </div>
-
-        {previa ? (
-          <p className="flex items-start gap-1.5 text-xs text-pretty text-muted-foreground">
-            <History aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-            {previa}
-          </p>
-        ) : null}
+        <PorqueAlerta
+          alerta={alerta.alerta}
+          plataforma={alerta.plataforma}
+          nivelTitulo={4}
+        />
 
         <p className="text-xs text-pretty break-words">
           <span className="font-medium">{nota.etiqueta}:</span> {nota.texto}
@@ -201,8 +99,9 @@ function Alerta({ alerta }: { alerta: AlertaDelMedio }) {
 /**
  * Pestaña «Alertas» de la ficha del medio (INT-003, INT-004, ADM-002): sus
  * métricas que se salieron de lo esperable para su cuenta, las que esperan
- * validación primero, con el porqué y las cifras lado a lado, lo que anotó
- * quien las validó y el enlace a la asignación.
+ * validación primero, con el porqué y las cifras lado a lado (`PorqueAlerta`,
+ * la misma explicación de la cola y de la ficha de la asignación), lo que
+ * anotó quien las validó y el enlace a la asignación.
  */
 export function AlertasMedio({
   alertas,

@@ -31,12 +31,10 @@ import { type DatoRevelado, grupoPrivado, presentarRevelados } from "./privados"
 import { configuracionOperacion } from "./queries/comun"
 import {
   type EntidadExportable,
-  type EntradaAbrirDisputa,
   type EntradaCancelarAsignacion,
   type EntradaEvidencias,
   type EntradaExportacion,
   type EntradaRevelar,
-  esquemaAbrirDisputa,
   esquemaCancelarAsignacion,
   esquemaEvidencias,
   esquemaExportacion,
@@ -320,7 +318,8 @@ export async function registrarExportacionOperacion(
   }
 }
 
-// ── Gestión de la asignación (ADM-010, ADM-011) ──────────────────────────────
+// ── Gestión de la asignación (ADM-010) ───────────────────────────────────────
+// Abrir una disputa (ADM-011) usa `abrirDisputa` de `@/features/disputas`.
 
 /** Errores de la BD con texto propio para los `hint` que la interfaz explica. */
 function falloGestion(
@@ -414,42 +413,6 @@ export async function cancelarAsignacion(
     return exito({ medioSuspendido: medioSuspendidoDe(data) })
   } catch (error) {
     informar("cancelarAsignacion", error)
-    return fallo(MENSAJE_INESPERADO)
-  }
-}
-
-/**
- * El equipo AMO abre una disputa sobre la asignación (ADM-011) con motivo y
- * descripción, que es lo primero que leen el medio y el anunciante.
- * `abrir_disputa_srv` revalida el permiso, el estado (disputable y sin otra
- * abierta) y deja la asignación EN_DISPUTA. Exige además ver las
- * asignaciones: es la acción del equipo, no la de las partes.
- */
-export async function abrirDisputaAsignacion(
-  entrada: EntradaAbrirDisputa
-): Promise<ResultadoAccion<{ disputaId: string }>> {
-  const actor = await requerirPermiso("disputas.abrir")
-  if (!tieneAlgunPermiso(actor, ["asignaciones.ver"])) {
-    return fallo("No tienes permiso para gestionar esta asignación.")
-  }
-  const validacion = esquemaAbrirDisputa.safeParse(entrada)
-  if (!validacion.success) return desdeErrorZod(validacion.error)
-  const { asignacionId, motivo, descripcion } = validacion.data
-
-  try {
-    const contexto = await contextoDelActor(actor)
-    const { data, error } = await contexto.admin.rpc("abrir_disputa_srv", {
-      p_asignacion_id: asignacionId,
-      p_motivo: motivo,
-      p_descripcion: descripcion,
-      p_actor_id: contexto.actorId,
-      p_session_id: contexto.sessionId,
-    })
-    if (error) return falloGestion("abrirDisputaAsignacion", error)
-    refresh()
-    return exito({ disputaId: data })
-  } catch (error) {
-    informar("abrirDisputaAsignacion", error)
     return fallo(MENSAJE_INESPERADO)
   }
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  esquemaAbrirDisputa,
   esquemaCancelarAsignacion,
   esquemaEvidencias,
   esquemaExportacion,
@@ -123,41 +122,5 @@ describe("esquemaCancelarAsignacion", () => {
         }).success
       ).toBe(true)
     }
-  })
-})
-
-describe("esquemaAbrirDisputa", () => {
-  it("motivo del catálogo y una descripción de 10 a 4.000 caracteres", () => {
-    expect(
-      esquemaAbrirDisputa.parse({
-        asignacionId: ID,
-        motivo: "METRICAS",
-        descripcion: " El alcance no coincide con la captura. ",
-      })
-    ).toEqual({
-      asignacionId: ID,
-      motivo: "METRICAS",
-      descripcion: "El alcance no coincide con la captura.",
-    })
-    const corta = esquemaAbrirDisputa.safeParse({
-      asignacionId: ID,
-      motivo: "OTRO",
-      descripcion: "Revisar",
-    })
-    expect(corta.error?.issues[0]?.message).toMatch(/al menos 10/)
-    expect(
-      esquemaAbrirDisputa.safeParse({
-        asignacionId: ID,
-        motivo: "FRAUDE",
-        descripcion: "Una descripción suficiente.",
-      }).success
-    ).toBe(false)
-    expect(
-      esquemaAbrirDisputa.safeParse({
-        asignacionId: ID,
-        motivo: "OTRO",
-        descripcion: "x".repeat(4_001),
-      }).error?.issues[0]?.message
-    ).toBe("Máximo 4.000 caracteres.")
   })
 })

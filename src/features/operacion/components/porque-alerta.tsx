@@ -1,40 +1,23 @@
 import { History, TriangleAlert } from "lucide-react"
 import { useId } from "react"
 
-import type { Plataforma } from "@/features/operacion/estados"
-import { formatearNumero } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import {
   type AlertaMetrica,
+  datosMotivo,
+  type DatoMotivo,
   explicarMotivo,
   type MotivoAlerta,
   motivosAlerta,
   motivosAlertaPrevia,
   textoHistorial,
+  TITULOS_ALERTA,
+  tituloMotivo,
 } from "../alertas"
+import type { Plataforma } from "../estados"
 
-const TITULOS: Readonly<Record<MotivoAlerta["tipo"], string>> = {
-  multiplo: "Alcance excesivo frente a los seguidores",
-  desviacion: "Desviación frente al histórico de la cuenta",
-  "desviacion-sin-detalle": "Desviación frente al histórico de la cuenta",
-}
-
-function cifra(valor: number | null, decimales = 0): string {
-  return valor === null ? "—" : formatearNumero(valor, decimales)
-}
-
-function factor(valor: number | null): string {
-  return valor === null
-    ? "—"
-    : `${formatearNumero(valor, valor % 1 === 0 ? 0 : 1)} ×`
-}
-
-function Comparacion({
-  datos,
-}: {
-  datos: readonly { etiqueta: string; valor: string; destacado?: boolean }[]
-}) {
+function Comparacion({ datos }: { datos: readonly DatoMotivo[] }) {
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 @lg:grid-cols-4">
       {datos.map((dato) => (
@@ -54,46 +37,14 @@ function Comparacion({
   )
 }
 
-function datosDe(motivo: MotivoAlerta) {
-  switch (motivo.tipo) {
-    case "multiplo":
-      return [
-        {
-          etiqueta: `${motivo.nombre} reportado`,
-          valor: cifra(motivo.reportado),
-          destacado: true,
-        },
-        { etiqueta: "Seguidores al aceptar", valor: cifra(motivo.seguidores) },
-        { etiqueta: "Múltiplo permitido", valor: factor(motivo.multiplo) },
-        { etiqueta: "Límite", valor: cifra(motivo.limite) },
-      ]
-    case "desviacion":
-      return [
-        {
-          etiqueta: `${motivo.nombre} reportado`,
-          valor: cifra(motivo.reportado),
-          destacado: true,
-        },
-        { etiqueta: "Mediana histórica", valor: cifra(motivo.mediana) },
-        { etiqueta: "Factor", valor: factor(motivo.factor) },
-        {
-          etiqueta: "Rango sin alerta",
-          valor: `${cifra(Math.ceil(motivo.minimo))} – ${cifra(Math.floor(motivo.maximo))}`,
-        },
-      ]
-    case "desviacion-sin-detalle":
-      return []
-  }
-}
-
 function ListaMotivos({ motivos }: { motivos: readonly MotivoAlerta[] }) {
   return (
     <ul className="flex flex-col gap-4">
       {motivos.map((motivo, indice) => {
-        const datos = datosDe(motivo)
+        const datos = datosMotivo(motivo)
         return (
           <li key={`${motivo.tipo}-${indice}`} className="flex flex-col gap-2">
-            <p className="text-sm font-medium">{TITULOS[motivo.tipo]}</p>
+            <p className="text-sm font-medium">{tituloMotivo(motivo)}</p>
             <p className="text-sm text-pretty">{explicarMotivo(motivo)}</p>
             {datos.length > 0 ? <Comparacion datos={datos} /> : null}
           </li>
@@ -106,16 +57,22 @@ function ListaMotivos({ motivos }: { motivos: readonly MotivoAlerta[] }) {
 /**
  * Por qué la métrica tiene alerta (ADM-008 c1): cada razón explicada con sus
  * cifras —reportado, mediana histórica, factor, seguidores, múltiplo y
- * límite— para compararlas con la captura que se ve al lado. Si el medio
- * corrigió las cifras, también la alerta que tuvo antes.
+ * límite— para compararlas con la captura. Si el medio corrigió las cifras,
+ * también la alerta que tuvo antes. La misma explicación en la cola de
+ * validación, la ficha de la asignación y la ficha del medio; nada si no hay
+ * razones que explicar.
  */
 export function PorqueAlerta({
   alerta,
   plataforma,
+  nivelTitulo = 3,
   className,
 }: {
   alerta: AlertaMetrica
-  plataforma: Plataforma
+  /** `null` si no se ve: se habla de alcance e impresiones. */
+  plataforma: Plataforma | null
+  /** Nivel del encabezado según dónde se monta (3 por omisión). */
+  nivelTitulo?: 3 | 4
   className?: string
 }) {
   const idTitulo = useId()
@@ -125,6 +82,7 @@ export function PorqueAlerta({
   const historial = textoHistorial(
     alerta.cifras.nHistorial ?? alerta.previa?.cifras.nHistorial ?? null
   )
+  const Titulo = nivelTitulo === 4 ? "h4" : "h3"
   return (
     <section
       aria-labelledby={idTitulo}
@@ -133,21 +91,19 @@ export function PorqueAlerta({
         className
       )}
     >
-      <h3
+      <Titulo
         id={idTitulo}
         className="flex items-center gap-2 text-sm font-semibold"
       >
         <TriangleAlert aria-hidden className="size-4 shrink-0 text-warning" />
-        {motivos.length > 0
-          ? "Por qué tiene alerta"
-          : "Tuvo alerta antes de corregirse"}
-      </h3>
+        {motivos.length > 0 ? TITULOS_ALERTA.actual : TITULOS_ALERTA.previa}
+      </Titulo>
       {motivos.length > 0 ? <ListaMotivos motivos={motivos} /> : null}
       {motivos.length > 0 && previos.length > 0 ? (
         <div className="flex flex-col gap-3 border-t border-warning/30 pt-3">
           <p className="flex items-center gap-2 text-sm font-medium">
             <History aria-hidden className="size-4 shrink-0 text-warning" />
-            Antes de corregirse también tenía alerta
+            {TITULOS_ALERTA.previaTambien}
           </p>
           <ListaMotivos motivos={previos} />
         </div>

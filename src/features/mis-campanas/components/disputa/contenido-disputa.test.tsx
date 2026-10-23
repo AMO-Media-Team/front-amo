@@ -119,6 +119,69 @@ describe("ContenidoDisputa", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
   })
 
+  it("sin permiso para escribir: lee la abierta y se le dice por qué no responde", () => {
+    render(
+      <ContenidoDisputa
+        vista={{ tipo: "abierta", disputa: disputa(), anteriores: [] }}
+        perspectiva="medio"
+        mensajes={[MENSAJE]}
+        contexto={{ plazoRecargaHoras: 24 }}
+        puedeEscribir={false}
+      />
+    )
+    expect(
+      screen.getByRole("region", { name: "Recibimos tu reclamo" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Conversación" })
+    ).toHaveTextContent(MENSAJE.mensaje)
+    expect(
+      screen.getByText(/^Solo lectura: tu rol no permite responder/)
+    ).toBeVisible()
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+  })
+
+  it("sin permiso para abrir: no hay formulario, el porqué, cómo volver y las anteriores", () => {
+    render(
+      <ContenidoDisputa
+        vista={{
+          tipo: "abrir",
+          modo: "problema",
+          motivos: ["METRICAS"],
+          anteriores: [
+            disputa({
+              parte: "ANUNCIANTE",
+              motivo: "METRICAS",
+              estadoOrigen: "METRICAS_CARGADAS",
+              estado: "DESCARTADA",
+              estadoResultante: "METRICAS_CARGADAS",
+              resueltaAt: "2026-10-23T10:00:00.000Z",
+            }),
+          ],
+        }}
+        perspectiva="anunciante"
+        mensajes={[]}
+        contexto={{}}
+        puedeEscribir={false}
+        volver={<button type="button">Volver al seguimiento</button>}
+      />
+    )
+    expect(
+      screen.getByText("Tu rol no permite reportar problemas")
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        /abrirlas, responder y adjuntar pruebas exige otro permiso/
+      )
+    ).toBeVisible()
+    expect(
+      screen.getByRole("button", { name: "Volver al seguimiento" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Disputas anteriores" })
+    ).toHaveTextContent("Se descartó tu disputa")
+  })
+
   it("sin disputa posible: por qué y cómo volver", () => {
     render(
       <ContenidoDisputa

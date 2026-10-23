@@ -109,6 +109,28 @@ describe("interpretarErrorEjecucion", () => {
     })
   })
 
+  it("la evidencia fuera de plazo remite al reclamo, no a escribirle a nadie (D74)", () => {
+    const resultado = interpretarErrorEjecucion(
+      negocio(
+        "AMO_FUERA_DE_VENTANA",
+        "Venció el plazo para cargar la evidencia."
+      )
+    )
+    expect(resultado.mensaje).toBe(
+      "Venció el plazo para cargar la evidencia. Si publicaste a tiempo, podrás reclamar desde la campaña cuando aparezca como vencida."
+    )
+    expect(resultado.campo).toBeUndefined()
+  })
+
+  it("sin medio vinculado dice qué falta sin pedir que escriba sin un canal (D74)", () => {
+    expect(MENSAJES_EJECUCION.sinMedio).toBe(
+      "Tu usuario no está vinculado a un medio: el equipo AMO debe asociarlo antes de que cargues evidencias o métricas."
+    )
+    for (const mensaje of Object.values(MENSAJES_EJECUCION)) {
+      expect(mensaje).not.toMatch(/escr[ií]bel|escr[ií]benos|ayudarte/i)
+    }
+  })
+
   it("un error desconocido no es esperado y no muestra el texto técnico", () => {
     const resultado = interpretarErrorEjecucion({
       code: "42501",

@@ -16,9 +16,15 @@ import {
 // Las Server Actions no se ejecutan en jsdom: se sustituyen por espías.
 const acciones = vi.hoisted(() => ({
   cancelarAsignacion: vi.fn(),
-  abrirDisputaAsignacion: vi.fn(),
+  abrirDisputa: vi.fn(),
 }))
-vi.mock("../actions", () => acciones)
+vi.mock("../actions", () => ({
+  cancelarAsignacion: acciones.cancelarAsignacion,
+}))
+// «Abrir disputa» usa la acción de `@/features/disputas` (la misma de las partes).
+vi.mock("@/features/disputas/actions", () => ({
+  abrirDisputa: acciones.abrirDisputa,
+}))
 const navegacion = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => navegacion }))
 const avisos = vi.hoisted(() => ({ success: vi.fn() }))
@@ -82,7 +88,7 @@ beforeEach(() => {
   acciones.cancelarAsignacion
     .mockReset()
     .mockResolvedValue(exito({ medioSuspendido: false }))
-  acciones.abrirDisputaAsignacion
+  acciones.abrirDisputa
     .mockReset()
     .mockResolvedValue(exito({ disputaId: DISPUTA }))
   navegacion.push.mockReset()
@@ -341,7 +347,14 @@ describe("AccionesAsignacion · disputa (ADM-011)", () => {
     )
     expect(
       within(dialogo).getByRole("radiogroup", { name: "Motivo" })
-    ).toHaveAccessibleDescription("Elige el motivo de la disputa.")
+    ).toHaveAccessibleDescription("Elige el motivo.")
+    // Los motivos del equipo, con su ayuda en la voz interna.
+    expect(within(dialogo).getAllByRole("radio")).toHaveLength(6)
+    expect(
+      within(dialogo).getByRole("radio", { name: "Otro motivo" })
+    ).toHaveAccessibleDescription(
+      "Algo distinto de lo anterior: la descripción lo explica."
+    )
 
     await usuario.click(
       within(dialogo).getByRole("radio", { name: "Permanencia" })
@@ -364,7 +377,7 @@ describe("AccionesAsignacion · disputa (ADM-011)", () => {
       within(dialogo).getByRole("button", { name: "Abrir disputa" })
     )
     await waitFor(() =>
-      expect(acciones.abrirDisputaAsignacion).toHaveBeenCalledWith({
+      expect(acciones.abrirDisputa).toHaveBeenCalledWith({
         asignacionId: ASIGNACION,
         motivo: "PERMANENCIA",
         descripcion: "Se borró el post al segundo día.",

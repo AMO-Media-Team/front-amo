@@ -127,7 +127,7 @@ test.describe("ficha de la asignación · solo lectura", () => {
       await dialogo.getByRole("button", { name: "Abrir disputa" }).click()
       await expect(
         dialogo.getByRole("radiogroup", { name: "Motivo" })
-      ).toHaveAccessibleDescription("Elige el motivo de la disputa.")
+      ).toHaveAccessibleDescription("Elige el motivo.")
       await dialogo.getByRole("button", { name: "Volver" }).click()
       await expect(dialogo).toBeHidden()
     })

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { rutaDisputaInterna } from "@/features/disputas/rutas"
+import type { MotivoDisputa } from "@/features/disputas/tipos"
 
 import { CAUSAS_CANCELACION, type EstadoAsignacion } from "../estados"
 import { avisoEstadoAsignacion } from "../foco"
@@ -116,8 +117,11 @@ export function AccionesAsignacion({
   const [dialogo, setDialogo] = useState<Dialogo>(null)
   // Lo que mostraba la ficha al abrir: la acción no cancela si cambió.
   const [estadoVisto, setEstadoVisto] = useState(asignacion.estado)
-  // La opción con que se abrió el diálogo, por si el refresco la retira.
+  // Las opciones con que se abrió el diálogo, por si el refresco las retira.
   const [cancelacion, setCancelacion] = useState(gestion.cancelar)
+  const [motivosDisputa, setMotivosDisputa] = useState<
+    readonly MotivoDisputa[]
+  >(() => (gestion.disputa?.tipo === "abrir" ? gestion.disputa.motivos : []))
   const cambio = useRef(false)
   const idBloqueo = useId()
   const { cancelar, disputa } = gestion
@@ -131,6 +135,9 @@ export function AccionesAsignacion({
     cambio.current = false
     setEstadoVisto(asignacion.estado)
     setCancelacion(gestion.cancelar)
+    if (gestion.disputa?.tipo === "abrir") {
+      setMotivosDisputa(gestion.disputa.motivos)
+    }
     setDialogo(nuevo)
   }
 
@@ -253,6 +260,7 @@ export function AccionesAsignacion({
         abierto={dialogo === "disputa"}
         onAbiertoChange={cerrar}
         asignacion={resumen}
+        motivos={motivosDisputa}
         focoAlCerrar={focoAlCerrar}
         onAbierta={alAbrirDisputa}
       />

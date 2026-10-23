@@ -51,6 +51,7 @@ const ATIPICAS = {
   total: 5,
   desviacion: 3,
   multiplo: 2,
+  corregidas: 0,
   masAntiguaAt: "2026-09-29T15:00:00Z",
 }
 

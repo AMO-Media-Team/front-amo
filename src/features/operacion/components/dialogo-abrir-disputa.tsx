@@ -17,22 +17,18 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { formatearNumero } from "@/lib/format"
-import { desdeErrorZod } from "@/lib/result"
-
-import { abrirDisputaAsignacion } from "../actions"
-import { MOTIVOS_DISPUTA } from "../estados"
-import {
-  AYUDA_MOTIVOS_DISPUTA,
-  efectosDisputa,
-  type MotivoDisputa,
-  ORDEN_MOTIVOS_DISPUTA,
-} from "../gestion-asignacion"
+import { abrirDisputa } from "@/features/disputas/actions"
+import { MOTIVOS } from "@/features/disputas/presentacion"
 import {
   type EntradaAbrirDisputa,
   esquemaAbrirDisputa,
-  LONGITUD_DESCRIPCION_DISPUTA,
-} from "../schemas"
+  LONGITUD_MAXIMA_DESCRIPCION,
+} from "@/features/disputas/schemas"
+import type { MotivoDisputa } from "@/features/disputas/tipos"
+import { formatearNumero } from "@/lib/format"
+import { desdeErrorZod } from "@/lib/result"
+
+import { efectosDisputa } from "../gestion-asignacion"
 
 type Campo = "motivo" | "descripcion"
 
@@ -54,21 +50,25 @@ export interface DialogoAbrirDisputaProps {
   abierto: boolean
   onAbiertoChange: (abierto: boolean) => void
   asignacion: { id: string; titulo: string; medio: string }
+  /** Los que admite el estado (`aperturaPosible` con la parte ADMIN). */
+  motivos: readonly MotivoDisputa[]
   /** A dónde va el foco al cerrar (`finalFocus`); `null`: el botón que lo abrió. */
   focoAlCerrar?: () => HTMLElement | null
   onAbierta: (disputaId: string) => void
 }
 
 /**
- * El equipo AMO abre una disputa sobre la asignación (ADM-011): motivo del
- * catálogo con lo que significa, descripción (la leen el medio y el
- * anunciante) y qué pasa al abrirla. Mismo esquema que la acción; un fallo
- * queda dentro del diálogo, asociado a su campo.
+ * El equipo AMO abre una disputa sobre la asignación (ADM-011) con la acción,
+ * el esquema y los textos de `@/features/disputas` (los mismos de la bandeja
+ * y de las partes): motivo con lo que significa para el equipo, descripción
+ * (la leen el medio y el anunciante) y qué pasa al abrirla. Un fallo queda
+ * dentro del diálogo, asociado a su campo.
  */
 export function DialogoAbrirDisputa({
   abierto,
   onAbiertoChange,
   asignacion,
+  motivos,
   focoAlCerrar,
   onAbierta,
 }: DialogoAbrirDisputaProps) {
@@ -120,7 +120,7 @@ export function DialogoAbrirDisputa({
   function confirmar() {
     const entrada: EntradaAbrirDisputa = {
       asignacionId: asignacion.id,
-      // Sin elegir, el esquema responde «Elige el motivo de la disputa».
+      // Sin elegir, el esquema responde «Elige el motivo.».
       motivo: motivo as MotivoDisputa,
       descripcion,
     }
@@ -133,7 +133,7 @@ export function DialogoAbrirDisputa({
     setErrores({})
     setErrorGeneral(null)
     iniciar(async () => {
-      const resultado = await abrirDisputaAsignacion(entrada)
+      const resultado = await abrirDisputa(entrada)
       if (!resultado.ok) {
         if (!mostrarErrores(resultado.erroresCampo)) {
           setErrorGeneral(resultado.error)
@@ -199,9 +199,9 @@ export function DialogoAbrirDisputa({
               ref={grupoMotivos}
               value={motivo ?? ""}
               onValueChange={(valor) => {
-                if (typeof valor !== "string" || !(valor in MOTIVOS_DISPUTA))
-                  return
-                setMotivo(valor as MotivoDisputa)
+                const elegido = motivos.find((clave) => clave === valor)
+                if (!elegido) return
+                setMotivo(elegido)
                 setErrores(({ motivo: _, ...resto }) => resto)
               }}
               disabled={pendiente}
@@ -210,7 +210,7 @@ export function DialogoAbrirDisputa({
               aria-describedby={errores.motivo ? ids.errorMotivo : undefined}
               className="gap-2 sm:grid-cols-2"
             >
-              {ORDEN_MOTIVOS_DISPUTA.map((clave) => (
+              {motivos.map((clave) => (
                 <label
                   key={clave}
                   className="flex cursor-pointer gap-3 rounded-xl border bg-background/60 p-3 transition-colors hover:bg-muted/50 has-data-checked:border-primary has-data-checked:bg-primary/6 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 dark:bg-input/20"
@@ -226,13 +226,13 @@ export function DialogoAbrirDisputa({
                       id={`${ids.prefijo}-${clave}`}
                       className="text-sm font-medium"
                     >
-                      {MOTIVOS_DISPUTA[clave]}
+                      {MOTIVOS[clave].etiqueta}
                     </span>
                     <span
                       id={`${ids.prefijo}-${clave}-ayuda`}
                       className="text-xs text-pretty text-muted-foreground"
                     >
-                      {AYUDA_MOTIVOS_DISPUTA[clave]}
+                      {MOTIVOS[clave].ayuda.interno}
                     </span>
                   </span>
                 </label>
@@ -261,7 +261,7 @@ export function DialogoAbrirDisputa({
                   setErrores(({ descripcion: _, ...resto }) => resto)
                 }
               }}
-              maxLength={LONGITUD_DESCRIPCION_DISPUTA.maxima}
+              maxLength={LONGITUD_MAXIMA_DESCRIPCION}
               rows={4}
               disabled={pendiente}
               placeholder={PLACEHOLDERS[motivo ?? "OTRO"]}
@@ -277,7 +277,7 @@ export function DialogoAbrirDisputa({
               </p>
               <span className="shrink-0 cifras" aria-hidden>
                 {formatearNumero(descripcion.length)}/
-                {formatearNumero(LONGITUD_DESCRIPCION_DISPUTA.maxima)}
+                {formatearNumero(LONGITUD_MAXIMA_DESCRIPCION)}
               </span>
             </div>
             {errores.descripcion ? (

@@ -4,6 +4,7 @@
  * métricas con alerta. Solo datos que el equipo puede ver (asignaciones.ver,
  * disputas.ver); nada de documentos, datos bancarios ni contacto.
  */
+import type { AlertaMetrica } from "@/features/operacion/alertas"
 import type {
   Corte,
   EstadoAsignacion,
@@ -74,43 +75,13 @@ export interface DisputaDelMedio {
   }
 }
 
-/** Alerta anterior a una corrección del medio (`detalle_alertas.alerta_previa`). */
-export interface AlertaPrevia {
-  desviacion: boolean
-  multiploSuperado: boolean
-  alcance: number | null
-  impresiones: number | null
-}
-
-/**
- * `detalle_alertas` de una métrica: lo que calculó la BD al marcarla (las
- * cifras reportadas, las medianas de la misma cuenta y corte, el factor, los
- * seguidores al aceptar y el múltiplo por plataforma).
- */
-export interface DetalleAlerta {
-  /** Alcance o, en TikTok, espectadores únicos. */
-  alcance: number | null
-  /** Impresiones o, en TikTok, reproducciones. */
-  impresiones: number | null
-  medianaAlcance: number | null
-  medianaImpresiones: number | null
-  /** Métricas aprobadas de la misma cuenta y corte con que se calcularon las medianas. */
-  nHistorial: number | null
-  factor: number | null
-  seguidores: number | null
-  multiplo: number | null
-  limiteAlcance: number | null
-  previa: AlertaPrevia | null
-}
-
 /** Métrica del medio con alerta de integridad (pestaña «Alertas»). */
 export interface AlertaDelMedio {
   metricaId: string
   asignacionId: string
   estado: EstadoValidacion
-  desviacion: boolean
-  multiplo: boolean
-  detalle: DetalleAlerta
+  /** Lo que calculó la BD, con la alerta previa a una corrección (`@/features/operacion/alertas`). */
+  alerta: AlertaMetrica
   creadaAt: string
   corte: Corte | null
   plataforma: Plataforma | null

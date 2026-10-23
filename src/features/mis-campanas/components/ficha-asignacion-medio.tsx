@@ -49,15 +49,18 @@ import { AvisoAsignacionMedio } from "./aviso-asignacion-medio"
 
 /**
  * El enlace a la disputa en la cabecera: «Reportar un problema» en los
- * estados disputables, «Ver la disputa» con una abierta o con el resultado de
- * la última. El reclamo de una vencida ya va en «Lo que sigue».
+ * estados disputables (con `disputas.abrir`), «Ver la disputa» con una
+ * abierta o con el resultado de la última (basta con ver la campaña). El
+ * reclamo de una vencida ya va en «Lo que sigue».
  */
 function AccionDisputaMedio({
   asignacion,
   ahora,
+  puedeDisputar,
 }: {
   asignacion: AsignacionMedio
   ahora: Date
+  puedeDisputar: boolean
 }) {
   const enlace = enlaceDisputa({
     perspectiva: "medio",
@@ -65,6 +68,7 @@ function AccionDisputaMedio({
     disputa: asignacion.disputa,
     reclamoHasta: asignacion.reclamoHasta,
     ahora,
+    puedeAbrir: puedeDisputar,
   })
   if (!enlace) return null
   if (enlace.tipo === "abrir" && asignacion.estado === "VENCIDA_SIN_PUBLICAR") {
@@ -98,7 +102,6 @@ export async function CabeceraAsignacionMedio({
     medioSuspendido(usuario.medioId),
     correoSoporte().catch(() => null),
   ])
-  const puedeDisputar = tieneAlgunPermiso(usuario, ["disputas.abrir"])
   const { marca, anuncianteNombre } = asignacion
   return (
     <CabeceraFicha
@@ -131,9 +134,11 @@ export async function CabeceraAsignacionMedio({
         />
       }
       acciones={
-        puedeDisputar ? (
-          <AccionDisputaMedio asignacion={asignacion} ahora={new Date()} />
-        ) : null
+        <AccionDisputaMedio
+          asignacion={asignacion}
+          ahora={new Date()}
+          puedeDisputar={tieneAlgunPermiso(usuario, ["disputas.abrir"])}
+        />
       }
       lateral={
         asignacion.aceptadaAt ? (
