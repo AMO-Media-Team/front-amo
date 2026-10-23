@@ -28,15 +28,20 @@ export class ErrorOrganizacion extends Error {
 /**
  * Columnas de organización del perfil según el rol. Un MEDIO necesita saber a
  * qué medio pertenece: no hay uno «de pruebas» fijo, lo indica quien crea la
- * cuenta (un medio de los datos demo).
+ * cuenta (un medio de los datos demo). Un ANUNCIANTE va a la empresa indicada
+ * o, sin ella, a la organización E2E.
  */
 export function organizacionDe(cuenta: {
   rol: RolCuentaPrueba
   medioId?: string | null
+  anuncianteId?: string | null
 }): OrganizacionPerfil {
   switch (cuenta.rol) {
     case "ANUNCIANTE":
-      return { anunciante_id: ANUNCIANTE_E2E_ID, medio_id: null }
+      return {
+        anunciante_id: cuenta.anuncianteId ?? ANUNCIANTE_E2E_ID,
+        medio_id: null,
+      }
     case "MEDIO":
       if (!cuenta.medioId) {
         throw new ErrorOrganizacion(

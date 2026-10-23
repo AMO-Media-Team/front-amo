@@ -17,6 +17,7 @@
     "brand:build": "tsx scripts/brand/build-brand.ts",
     "db:types": "tsx scripts/db/generar-tipos.ts",
     "db:push": "tsx scripts/db/push.ts",
+    "db:respaldo": "tsx scripts/db/respaldo.ts",
     "db:suites": "tsx scripts/db/suites.ts",
     "db:vault": "tsx scripts/db/vault.ts",
     "db:local": "tsx scripts/db/local.ts",

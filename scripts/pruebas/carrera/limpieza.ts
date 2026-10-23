@@ -5,6 +5,7 @@
  * La bitácora no se toca: es inmutable para la API (solo la purga del owner
  * la borra) y conserva el rastro de la prueba marcado como demo.
  */
+import { listarArchivos } from "../../bootstrap/aprovisionar-medios"
 import type { ClienteSupabase } from "../../bootstrap/supabase"
 import { borrarUsuario, PREFIJO_EMAIL, SUFIJO_OPERADOR } from "./cuentas"
 import { PREFIJO_NOMBRE, type Registro, registroVacio } from "./datos"
@@ -105,6 +106,36 @@ export async function buscarRestos(
   return restos
 }
 
+/**
+ * Objetos de Storage de la corrida: las piezas de los creativos
+ * (`creativos/oferta/{oferta}/…`) y los documentos de los anunciantes
+ * (`documentos/anunciante/{anunciante}/…`). Devuelve cuántos borró.
+ */
+async function borrarArchivos(
+  servicio: ClienteSupabase,
+  ofertas: readonly string[],
+  anunciantes: readonly string[]
+): Promise<number> {
+  const carpetas = [
+    ...ofertas.map((id) => ["creativos", `oferta/${id}`] as const),
+    ...anunciantes.map((id) => ["documentos", `anunciante/${id}`] as const),
+  ]
+  let borrados = 0
+  for (const [bucket, carpeta] of carpetas) {
+    const rutas = await listarArchivos(servicio, bucket, carpeta)
+    for (const trozo of trozos(rutas)) {
+      const { error } = await servicio.storage.from(bucket).remove(trozo)
+      if (error) {
+        throw new Error(
+          `No se pudieron borrar los archivos de ${carpeta}: ${error.message}`
+        )
+      }
+      borrados += trozo.length
+    }
+  }
+  return borrados
+}
+
 export function hayDatos(registro: Registro): boolean {
   return Object.values(registro).some((ids: string[]) => ids.length > 0)
 }
@@ -151,6 +182,7 @@ export async function limpiar(
   ]
 
   await borrarDonde(servicio, "asignaciones", "id", asignaciones)
+  await borrarArchivos(servicio, ofertas, registro.anunciantes)
   await borrarDonde(servicio, "creativos", "oferta_id", ofertas)
   await borrarDonde(servicio, "ofertas", "id", ofertas)
   await borrarDonde(servicio, "campanas", "id", campanas)
