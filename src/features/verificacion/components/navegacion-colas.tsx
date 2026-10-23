@@ -1,4 +1,5 @@
 import {
+  Building2,
   FileCheck2,
   type LucideIcon,
   MailPlus,
@@ -16,6 +17,7 @@ import {
   type Cola,
   COLAS,
   COLAS_VERIFICACION,
+  colasVisibles,
   rutaCola,
 } from "../colas"
 import { contadoresColas } from "../queries"
@@ -25,6 +27,20 @@ const ICONOS: Readonly<Record<Cola, LucideIcon>> = {
   cuentas: UsersRound,
   documentos: FileCheck2,
   solicitudes: MailPlus,
+  anunciantes: Building2,
+}
+
+/**
+ * Rejilla según cuántas colas ve la persona: dos por fila en el teléfono (la
+ * última, si queda sola, ocupa la fila) y todas en una fila desde escritorio.
+ */
+function clasesRejilla(cantidad: number): string {
+  return cn(
+    "grid grid-cols-2 gap-2 sm:gap-3 [&>*:last-child:nth-child(odd)]:col-span-2",
+    cantidad >= 5
+      ? "sm:grid-cols-3 lg:grid-cols-5 sm:[&>*:last-child:nth-child(odd)]:col-span-1"
+      : "sm:grid-cols-4 sm:[&>*:last-child:nth-child(odd)]:col-span-1"
+  )
 }
 
 function textoPendientes(cantidad: number | null): string {
@@ -108,10 +124,11 @@ export async function NavegacionColas({
   acceso: AccesoColas
 }) {
   const contadores = await contadoresColas(acceso)
+  const colas = colasVisibles(acceso)
   return (
     <nav aria-label="Colas de verificación">
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        {COLAS.map((cola) => (
+      <ul className={clasesRejilla(colas.length)}>
+        {colas.map((cola) => (
           <li key={cola} className="min-w-0">
             <EnlaceCola
               cola={cola}
@@ -125,17 +142,17 @@ export async function NavegacionColas({
   )
 }
 
-export function EsqueletoNavegacionColas() {
+/** Mientras llegan los contadores; sin `acceso` (p. ej. `loading.tsx`), todas. */
+export function EsqueletoNavegacionColas({ acceso }: { acceso?: AccesoColas }) {
+  const colas = acceso ? colasVisibles(acceso) : COLAS
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3"
-    >
+    <div role="status" aria-busy="true">
       <span className="sr-only">Cargando las colas…</span>
-      {COLAS.map((cola) => (
-        <Esqueleto key={cola} className="h-16 rounded-xl sm:h-20" />
-      ))}
+      <div aria-hidden className={clasesRejilla(colas.length)}>
+        {colas.map((cola) => (
+          <Esqueleto key={cola} className="h-16 rounded-xl sm:h-20" />
+        ))}
+      </div>
     </div>
   )
 }

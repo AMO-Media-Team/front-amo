@@ -1,17 +1,24 @@
 /**
- * Colas de trabajo de la verificación (ADM-001), módulo puro: qué colas hay,
- * cómo viajan en la URL (`?cola=…&pagina=…`, mismos parsers en servidor y
- * cliente) y quién ve cada una. Los parámetros son contrato: el resolvedor
- * `/ir/[entidad]/[id]` enlaza a `?cola=documentos|cuentas|solicitudes`.
+ * Colas de trabajo de la verificación (ADM-001 y ADM-003), módulo puro: qué
+ * colas hay, cómo viajan en la URL (`?cola=…&pagina=…`, mismos parsers en
+ * servidor y cliente) y quién ve cada una. Los parámetros son contrato: el
+ * resolvedor `/ir/[entidad]/[id]` enlaza a `?cola=documentos|cuentas|solicitudes`.
  *
  * Quién ve qué lo decide la BD (RLS): las colas de medios, cuentas y
  * solicitudes exigen `medios.verificar`; la de documentos, además,
- * `datos_sensibles.ver` (la política de `documentos_medio` pide ambos).
+ * `datos_sensibles.ver` (la política de `documentos_medio` pide ambos); la de
+ * anunciantes, `anunciantes.verificar`.
  */
 import type { Route } from "next"
 import { createLoader, parseAsInteger, parseAsStringLiteral } from "nuqs/server"
 
-export const COLAS = ["medios", "cuentas", "documentos", "solicitudes"] as const
+export const COLAS = [
+  "medios",
+  "cuentas",
+  "documentos",
+  "solicitudes",
+  "anunciantes",
+] as const
 
 export type Cola = (typeof COLAS)[number]
 
@@ -27,6 +34,14 @@ export const parsersVerificacion = {
 
 /** Servidor: `await cargarParametrosVerificacion(searchParams)`. */
 export const cargarParametrosVerificacion = createLoader(parsersVerificacion)
+
+/**
+ * La cola tal como viene en la URL: `null` si no viene (o no existe), para
+ * elegir la de cada rol con `colaPorDefecto`.
+ */
+export const cargarColaPedida = createLoader({
+  cola: parseAsStringLiteral(COLAS),
+})
 
 export interface PresentacionCola {
   titulo: string
@@ -57,6 +72,12 @@ export const COLAS_VERIFICACION: Readonly<Record<Cola, PresentacionCola>> = {
     descripcion: "Medios que pidieron unirse desde el formulario público.",
     vacia: "No hay solicitudes de vinculación pendientes.",
   },
+  anunciantes: {
+    titulo: "Anunciantes",
+    descripcion:
+      "Empresas enviadas a verificación y documentos por revisar, lo más antiguo primero.",
+    vacia: "Ninguna empresa espera verificación.",
+  },
 }
 
 export interface AccesoColas {
@@ -64,6 +85,8 @@ export interface AccesoColas {
   verificarMedios: boolean
   /** `medios.verificar` + `datos_sensibles.ver`: cola de documentos. */
   verDocumentos: boolean
+  /** `anunciantes.verificar`: cola de anunciantes. */
+  verificarAnunciantes: boolean
 }
 
 export function accesoColas(permisos: readonly string[]): AccesoColas {
@@ -71,7 +94,50 @@ export function accesoColas(permisos: readonly string[]): AccesoColas {
   return {
     verificarMedios,
     verDocumentos: verificarMedios && permisos.includes("datos_sensibles.ver"),
+    verificarAnunciantes: permisos.includes("anunciantes.verificar"),
   }
+}
+
+/** ¿La persona puede atender esa cola? (lo que no, no se consulta). */
+export function tieneAccesoCola(cola: Cola, acceso: AccesoColas): boolean {
+  switch (cola) {
+    case "documentos":
+      return acceso.verDocumentos
+    case "anunciantes":
+      return acceso.verificarAnunciantes
+    default:
+      return acceso.verificarMedios
+  }
+}
+
+/**
+ * Colas que se ofrecen en la navegación: las de medios a quien verifica
+ * medios (la de documentos aparece aunque le falte el permiso de datos
+ * sensibles, para explicarlo) y la de anunciantes a quien verifica empresas.
+ */
+export function colasVisibles(acceso: AccesoColas): Cola[] {
+  return COLAS.filter((cola) =>
+    cola === "anunciantes"
+      ? acceso.verificarAnunciantes
+      : acceso.verificarMedios
+  )
+}
+
+/** Descripción de la página según las colas que la persona atiende. */
+export function descripcionVerificacion(acceso: AccesoColas): string {
+  if (!acceso.verificarMedios) {
+    return "Empresas anunciantes que enviaron sus documentos y esperan la revisión del equipo AMO."
+  }
+  return acceso.verificarAnunciantes
+    ? "Lo que espera la revisión del equipo AMO: medios que enviaron su perfil, cuentas sociales, documentos, solicitudes para unirse y empresas anunciantes."
+    : "Lo que espera la revisión del equipo AMO: medios que enviaron su perfil, cuentas sociales, documentos y solicitudes para unirse."
+}
+
+/** Sin `?cola=`: la de medios; un rol que solo verifica empresas cae en la suya. */
+export function colaPorDefecto(acceso: AccesoColas): Cola {
+  return !acceso.verificarMedios && acceso.verificarAnunciantes
+    ? "anunciantes"
+    : COLA_POR_DEFECTO
 }
 
 /** Página dentro de [1, última]; con 0 elementos, la 1. */
@@ -120,7 +186,10 @@ export function rutaCola(cola: Cola, pagina = 1): Route {
   ) as Route
 }
 
-/** Pestaña de verificación de la ficha del medio (expediente y decisión). */
+/**
+ * Pestaña de verificación de la ficha del medio y de la del anunciante
+ * (expediente y decisión).
+ */
 export const PESTANA_VERIFICACION = "verificacion"
 
 /** Pestaña de pertinencia geográfica de la ficha del medio (ADM-006). */
