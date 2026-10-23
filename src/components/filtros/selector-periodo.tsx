@@ -253,8 +253,9 @@ export function SelectorPeriodo<T extends string>({
         // El popover es un `dialog`: sin nombre, el lector solo dice «diálogo».
         aria-label={tituloPanel}
         // En el teléfono, al menos tan ancho como su botón (que suele ocupar
-        // todo el ancho): el panel no queda descolgado a un lado.
-        className="w-auto max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0 max-sm:min-w-(--anchor-width)"
+        // todo el ancho): el panel no queda descolgado a un lado. Nunca más alto
+        // que el espacio libre: si no cabe, se desplaza por dentro.
+        className="max-h-(--available-height) w-auto max-w-[calc(100vw-2rem)] gap-0 overflow-x-hidden overflow-y-auto p-0 max-sm:min-w-(--anchor-width)"
       >
         <div className="flex flex-col md:flex-row">
           <div
