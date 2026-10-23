@@ -29,7 +29,7 @@ import {
 import { clienteComoSuperadmin } from "../../scripts/bootstrap/provision-e2e"
 import { crearClienteServicio } from "../../scripts/bootstrap/supabase"
 import { type Credenciales, credenciales, entorno } from "./cuentas"
-import { expect, type Page } from "./prueba"
+import { esperarStreaming, expect, type Page } from "./prueba"
 
 export type CuentaAnunciante = "ANUNCIANTE" | "ANUNCIANTE_NUEVO"
 
@@ -106,6 +106,7 @@ export async function ingresarComoAnunciante(
   await page.getByRole("button", { name: "Ingresar" }).click()
   const esperada = new URL(destino, "http://amo.local").pathname
   await expect(page).toHaveURL((url) => url.pathname === esperada)
+  await esperarStreaming(page)
 }
 
 /** Perfil (id) y contraseña de la cuenta de la empresa, para las fábricas. */

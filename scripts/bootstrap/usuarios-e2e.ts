@@ -6,7 +6,8 @@
  * - ANUNCIANTE con cambio de contraseña obligatorio.
  * - MEDIO del «Medio E2E»: VERIFICADO nivel 1, con una cuenta de Instagram
  *   verificada (40.000 seguidores), datos de pago cifrados y los documentos
- *   del nivel aprobados y vigentes (`aprovisionar-medios.ts`).
+ *   del nivel aprobados y vigentes (`aprovisionar-medios.ts`), y sin la pauta
+ *   de corridas anteriores (`fabricas-pauta.ts`).
  * - MEDIO del «Medio Nuevo E2E»: PENDIENTE recién registrado, sin cuentas,
  *   documentos ni pago. Cada corrida lo reinicia a ese estado.
  * - ANUNCIANTE (y la del cambio obligatorio) del «Anunciante E2E»: VERIFICADO
@@ -36,7 +37,9 @@ import {
 } from "./aprovisionar-medios"
 import { agregarVariables } from "./archivo-env"
 import { generarContrasena } from "./contrasena"
-import { describirAccionMedioNuevo } from "./medios-e2e"
+import { restablecerPautaMedio } from "./fabricas-pauta"
+import { describirAccionMedioNuevo, MEDIO_E2E_ID } from "./medios-e2e"
+import { describirLimpieza } from "./pauta-e2e"
 import {
   asegurarTotp,
   clienteComoSuperadmin,
@@ -92,6 +95,23 @@ async function completarCuenta(
   }
   if (cuenta.clave === "MEDIO") {
     hechos.push(...(await completarMedioVerificado(entorno, servicio, lista)))
+    // Sin la pauta de corridas anteriores: ni asignaciones ni campañas «Pauta E2E…».
+    const pauta = await restablecerPautaMedio(entorno, servicio, {
+      id: MEDIO_E2E_ID,
+      credenciales: lista,
+    })
+    if (
+      pauta.asignaciones + pauta.campanas + pauta.archivadas > 0 ||
+      pauta.plan.liberar.length > 0
+    ) {
+      hechos.push(
+        describirLimpieza({
+          plan: pauta.plan,
+          campanasBorradas: pauta.campanas,
+          campanasArchivadas: pauta.archivadas,
+        })
+      )
+    }
   }
   if (cuenta.clave === "ANUNCIANTE") {
     hechos.push(

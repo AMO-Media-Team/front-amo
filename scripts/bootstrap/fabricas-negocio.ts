@@ -45,6 +45,7 @@ import {
   sufijoUnico,
 } from "./negocio-e2e"
 import { conOperadorTemporal } from "./operador-temporal"
+import { calendarioPauta } from "./pauta-e2e"
 import { exigirFueraDeProduccion } from "./produccion"
 import { clienteComoSuperadmin } from "./provision-e2e"
 import {
@@ -163,12 +164,18 @@ export interface OpcionesCampana {
   nombre?: string
   /** Días de calendario desde hoy (30 por omisión). */
   dias?: number
+  /**
+   * La campaña empezó hace estos días (0 por omisión): lo necesita una oferta
+   * cuya ventana de publicación abrió en el pasado (`ventanaDesdeHoy`).
+   */
+  diasAtras?: number
 }
 
 /**
  * Campaña de la empresa con nombre único («Campaña E2E <sufijo>»), desde hoy
- * y por `dias`. ACTIVA la activa la empresa con su sesión (exige estar
- * verificada: con el Anunciante Nuevo E2E falla con el mensaje de la BD).
+ * (o desde hace `diasAtras` días) y por `dias`. ACTIVA la activa la empresa
+ * con su sesión (exige estar verificada: con el Anunciante Nuevo E2E falla con
+ * el mensaje de la BD).
  */
 export async function crearCampana(
   entorno: EntornoBootstrap,
@@ -179,7 +186,7 @@ export async function crearCampana(
   const estado = opciones.estado ?? "ACTIVA"
   const presupuesto = opciones.presupuesto ?? PRESUPUESTO_CAMPANA
   const nombre = opciones.nombre ?? `${PREFIJO_CAMPANA} ${sufijoUnico()}`
-  const fechas = fechasCampana(new Date(), opciones.dias)
+  const fechas = fechasCampana(new Date(), opciones.dias, opciones.diasAtras)
   const comoEmpresa = crearClienteServicio(entorno, usuario.id)
   const { data, error } = await comoEmpresa
     .from("campanas")
@@ -253,10 +260,43 @@ export interface OfertaCreada {
   archivos: ArchivoCreado[]
 }
 
+/** Segmentación de la oferta (vacía: todos los medios elegibles del país). */
+export interface SegmentacionOferta {
+  /** Códigos DANE de departamento (2 dígitos). */
+  departamentos?: string[]
+  /** Códigos DIVIPOLA de municipio (5 dígitos). */
+  municipios?: string[]
+  /** Ids de `categorias`. */
+  categorias?: string[]
+  seguidoresMinimos?: number
+  /** Medios que no deben verla. */
+  mediosExcluidos?: string[]
+}
+
 export interface OpcionesOferta {
   campanaId: string
   estado: EstadoOfertaE2E
   formato?: FormatoE2E
+  /**
+   * La ventana de publicación ya abrió: desde las 00:00 (Bogotá) de hoy, o de
+   * hace `diasAtras` días para publicar con fecha pasada y cargar cortes
+   * (`diasAtrasParaCorte`). La campaña debe haber empezado ese día o antes.
+   * Sin esta opción la ventana empieza el día siguiente a la fecha límite.
+   */
+  ventanaDesdeHoy?: boolean | { diasAtras: number }
+  /**
+   * Segmentación explícita, o `{ paraMedio }`: el municipio y las categorías
+   * de ese medio (la oferta le llega a él, como a un medio real de la zona).
+   */
+  segmentacion?: SegmentacionOferta | { paraMedio: string }
+  /** Cortes de métricas que pide (por omisión, los de `metricas.cortes_requeridos`). */
+  cortes?: Enums["corte_metrica"][]
+  /** Publicaciones por medio (1 por omisión). */
+  publicacionesPorMedio?: number
+  permiteMultiplesCupos?: boolean
+  /** Días que la publicación debe seguir en línea (el valor de la BD por omisión). */
+  permanenciaMinimaDias?: number
+  exclusividadDias?: number
   /**
    * Fecha límite de aceptación. Si ya pasó (o faltan menos de 30 s) y la
    * oferta se envía, se envía con la límite unos segundos adelante y se
@@ -345,6 +385,37 @@ async function leerCampana(servicio: ClienteSupabase, campanaId: string) {
 }
 
 /**
+ * Segmentación que le llega a un medio como a uno real de su zona: su
+ * municipio y sus categorías temáticas (si tiene).
+ */
+async function segmentacionParaMedio(
+  servicio: ClienteSupabase,
+  medioId: string
+): Promise<SegmentacionOferta> {
+  const [medio, categorias] = await Promise.all([
+    servicio
+      .from("medios")
+      .select("municipio_codigo")
+      .eq("id", medioId)
+      .maybeSingle(),
+    servicio
+      .from("medio_categorias")
+      .select("categoria_id")
+      .eq("medio_id", medioId),
+  ])
+  if (medio.error) fallo("No se pudo leer el medio", medio.error)
+  if (categorias.error)
+    fallo("No se pudieron leer las categorías del medio", categorias.error)
+  if (!medio.data) {
+    throw new ErrorBootstrap(`El medio ${medioId} no existe.`)
+  }
+  return {
+    municipios: [medio.data.municipio_codigo],
+    categorias: categorias.data.map((fila) => fila.categoria_id),
+  }
+}
+
+/**
  * Sube el archivo a `creativos/oferta/{oferta}/{creativo}/…` (ruta construida
  * como en la app) y registra la fila con su huella y medidas. Si la fila no
  * entra (la BD revalida el formato), borra el objeto.
@@ -392,12 +463,18 @@ async function subirArchivoCreativo(
   return creado
 }
 
-/** Creativo vigente con los archivos que pide el formato (`planCreativo`). */
+/**
+ * Creativo con los archivos que pide el formato (`planCreativo`). En una
+ * oferta en borrador queda vigente; en una publicada, pendiente hasta que se
+ * active. `variante` (la versión que se espera crear) cambia el copy y los
+ * archivos, para que cada versión tenga otra huella.
+ */
 async function crearCreativo(
   servicio: ClienteSupabase,
   ofertaId: string,
   clave: string,
-  catalogo: Catalogo
+  catalogo: Catalogo,
+  variante = 1
 ): Promise<{ creativoId: string; archivos: ArchivoCreado[] }> {
   const plan = planCreativo(clave, catalogo.requisitos)
   const { data, error } = await servicio
@@ -406,7 +483,9 @@ async function crearCreativo(
       oferta_id: ofertaId,
       tipo: plan.tipo,
       copy_sugerido:
-        "Creativo de prueba de AMO: descubre la marca E2E en tu ciudad. #Publicidad",
+        variante === 1
+          ? "Creativo de prueba de AMO: descubre la marca E2E en tu ciudad. #Publicidad"
+          : `Versión ${variante} del creativo de prueba de AMO: la marca E2E se renueva. #Publicidad`,
       hashtags: ["#AMOe2e", "#Publicidad"],
       menciones: ["@amo.e2e"],
       enlace_destino: "https://amo.test/e2e",
@@ -417,18 +496,24 @@ async function crearCreativo(
   const rutas = rutasStorage()
   const archivos: ArchivoCreado[] = []
   for (const [orden, archivo] of plan.archivos.entries()) {
+    // Otra duración en cada versión (dentro del máximo del formato).
+    const segundos =
+      archivo.segundos === null
+        ? null
+        : Math.max(1, archivo.segundos - ((variante - 1) % 2))
     const generado =
       archivo.clase === "video"
         ? videoPrueba({
             ancho: archivo.ancho,
             alto: archivo.alto,
-            segundos: archivo.segundos ?? undefined,
+            segundos: segundos ?? undefined,
           })
-        : // Las piezas de un carrusel se distinguen: colores invertidos en la 2.ª.
+        : // Las piezas de un carrusel se distinguen (colores invertidos en la
+          // 2.ª), y cada versión invierte la anterior.
           imagenPrueba({
             ancho: archivo.ancho,
             alto: archivo.alto,
-            ...(orden % 2 === 1
+            ...((orden + variante - 1) % 2 === 1
               ? { fondo: FRANJA_MUESTRA, franja: FONDO_MUESTRA }
               : {}),
           })
@@ -441,7 +526,7 @@ async function crearCreativo(
         {
           ancho: archivo.ancho,
           alto: archivo.alto,
-          duracionSegundos: archivo.segundos,
+          duracionSegundos: segundos,
         }
       )
     )
@@ -521,6 +606,12 @@ async function enviarOferta(
  * cumplen el formato. EN_REVISION la envía la empresa con su sesión;
  * PUBLICADA, además, la publica un operador temporal.
  *
+ * Para la pauta del medio: `ventanaDesdeHoy` abre la ventana de publicación
+ * hoy (o hace unos días, en una campaña que empezó antes) y
+ * `segmentacion: { paraMedio }` la dirige al municipio y las categorías del
+ * medio; `cortes`, `publicacionesPorMedio` y las demás condiciones se fijan
+ * como en el asistente.
+ *
  * Con una `fechaLimite` pasada y estado EN_REVISION o PUBLICADA la llamada
  * puede tardar hasta ~1 minuto: espera a que el cron de estados no vaya a
  * correr en los próximos 45 s (la devolvería o vencería) y a que la límite
@@ -562,7 +653,7 @@ export async function crearOferta(
     opciones.fechaLimite !== undefined &&
     opciones.fechaLimite.getTime() <
       ahora.getTime() + catalogo.anticipacionHoras * 3_600_000
-  const calendario = calendarioOferta({
+  const parametrosCalendario = {
     ahora,
     anticipacionHoras: catalogo.anticipacionHoras,
     // La límite de una vencida se fija justo antes del envío.
@@ -571,7 +662,18 @@ export async function crearOferta(
       fechaInicio: campana.fecha_inicio,
       fechaFin: campana.fecha_fin,
     }),
-  })
+  }
+  const { ventanaDesdeHoy } = opciones
+  const calendario = ventanaDesdeHoy
+    ? calendarioPauta({
+        ...parametrosCalendario,
+        diasAtras: ventanaDesdeHoy === true ? 0 : ventanaDesdeHoy.diasAtras,
+      })
+    : calendarioOferta(parametrosCalendario)
+  const segmentacion =
+    opciones.segmentacion && "paraMedio" in opciones.segmentacion
+      ? await segmentacionParaMedio(superadmin, opciones.segmentacion.paraMedio)
+      : (opciones.segmentacion ?? {})
   const disponible = disponibleCampana(
     Number(campana.presupuesto_total),
     campana.ofertas
@@ -597,10 +699,19 @@ export async function crearOferta(
       plataforma: formato.plataforma,
       presupuesto_maximo: presupuesto,
       tope_porcentaje_por_medio: catalogo.tope,
-      cortes_requeridos: catalogo.cortes,
+      cortes_requeridos: opciones.cortes ?? catalogo.cortes,
       fecha_limite_aceptacion: calendario.fechaLimite.toISOString(),
       ventana_inicio: calendario.ventanaInicio.toISOString(),
       ventana_fin: calendario.ventanaFin.toISOString(),
+      publicaciones_por_medio: opciones.publicacionesPorMedio,
+      permite_multiples_cupos: opciones.permiteMultiplesCupos,
+      permanencia_minima_dias: opciones.permanenciaMinimaDias,
+      exclusividad_dias: opciones.exclusividadDias,
+      departamentos_objetivo: segmentacion.departamentos,
+      municipios_objetivo: segmentacion.municipios,
+      categorias_objetivo: segmentacion.categorias,
+      seguidores_minimos: segmentacion.seguidoresMinimos,
+      medios_excluidos: segmentacion.mediosExcluidos,
       instrucciones:
         "Publica el creativo tal cual, con el copy sugerido y la etiqueta de publicidad.",
       restricciones: "No edites el video ni cambies el enlace de destino.",
@@ -646,6 +757,73 @@ export async function crearOferta(
   }
 }
 
+export interface VersionCreativoCreada {
+  creativoId: string
+  version: number
+  archivos: ArchivoCreado[]
+}
+
+/**
+ * Versión nueva del creativo de una oferta publicada, activada por la empresa
+ * con su sesión (`activar_creativo_srv`): queda vigente y avisa a los medios
+ * que aún no publican (NOT-006). Sus archivos y su copy cambian frente a la
+ * versión anterior.
+ */
+export async function publicarNuevaVersionCreativo(
+  entorno: EntornoBootstrap,
+  usuario: UsuarioAnunciante,
+  { ofertaId }: { ofertaId: string }
+): Promise<VersionCreativoCreada> {
+  exigirFueraDeProduccion(entorno.url, "Las fábricas de ofertas E2E")
+  const servicio = crearClienteServicio(entorno)
+  const comoEmpresa = crearClienteServicio(entorno, usuario.id)
+  const { data: oferta, error } = await servicio
+    .from("ofertas")
+    .select("plataforma, formato:formatos ( clave ), creativos ( version )")
+    .eq("id", ofertaId)
+    .single()
+  if (error) fallo("No se pudo leer la oferta", error)
+  if (!oferta.formato) {
+    throw new ErrorBootstrap(`La oferta ${ofertaId} no tiene formato.`)
+  }
+  const catalogo = await leerCatalogo(servicio, {
+    plataforma: oferta.plataforma,
+    clave: oferta.formato.clave,
+  })
+  const version =
+    Math.max(0, ...oferta.creativos.map((creativo) => creativo.version)) + 1
+  const creado = await crearCreativo(
+    comoEmpresa,
+    ofertaId,
+    oferta.formato.clave,
+    catalogo,
+    version
+  )
+  try {
+    await conSesionDeUsuario(entorno, usuario, async (actor) => {
+      const { error: errorActivar } = await comoEmpresa.rpc(
+        "activar_creativo_srv",
+        {
+          p_creativo_id: creado.creativoId,
+          p_actor_id: actor.usuarioId,
+          p_session_id: actor.sesionId,
+        }
+      )
+      if (errorActivar) {
+        fallo("No se pudo activar la versión nueva", errorActivar)
+      }
+    })
+  } catch (falla) {
+    // Una versión pendiente impide crear otra: no se deja a medias.
+    await servicio.storage
+      .from("creativos")
+      .remove(creado.archivos.map((archivo) => archivo.ruta))
+    await servicio.from("creativos").delete().eq("id", creado.creativoId)
+    throw falla
+  }
+  return { ...creado, version }
+}
+
 // ── Limpieza ─────────────────────────────────────────────────────────────────
 
 /**
@@ -670,14 +848,10 @@ export async function borrarNegocioDeAnunciante(
   if (campanas.length === 0) return 0
   const campanaIds = campanas.map((campana) => campana.id)
 
-  const [ofertas, asignaciones] = await Promise.all([
-    servicio.from("ofertas").select("id").in("campana_id", campanaIds),
-    servicio
-      .from("asignaciones")
-      .select("id", { count: "exact", head: true })
-      .in("campana_id", campanaIds),
-  ])
-  if (ofertas.error) fallo("No se pudieron leer las ofertas", ofertas.error)
+  const asignaciones = await servicio
+    .from("asignaciones")
+    .select("id", { count: "exact", head: true })
+    .in("campana_id", campanaIds)
   if (asignaciones.error)
     fallo("No se pudieron leer las asignaciones", asignaciones.error)
   if ((asignaciones.count ?? 0) > 0) {
@@ -685,6 +859,24 @@ export async function borrarNegocioDeAnunciante(
       "Hay campañas con asignaciones: no son de una fábrica E2E y no se borran."
     )
   }
+  return borrarCampanasPorId(servicio, campanaIds)
+}
+
+/**
+ * Borra esas campañas con sus ofertas, creativos, archivos en Storage y avisos.
+ * Quien llama ya borró sus asignaciones (si no, la BD lo impide). Devuelve
+ * cuántas campañas borró.
+ */
+export async function borrarCampanasPorId(
+  servicio: ClienteSupabase,
+  campanaIds: readonly string[]
+): Promise<number> {
+  if (campanaIds.length === 0) return 0
+  const ofertas = await servicio
+    .from("ofertas")
+    .select("id")
+    .in("campana_id", campanaIds)
+  if (ofertas.error) fallo("No se pudieron leer las ofertas", ofertas.error)
   const ofertaIds = ofertas.data.map((oferta) => oferta.id)
   for (const ofertaId of ofertaIds) {
     const rutas = await listarArchivos(
@@ -709,7 +901,7 @@ export async function borrarNegocioDeAnunciante(
         ? servicio.from("ofertas").delete().in("id", ofertaIds)
         : null,
     () => servicio.from("campanas").delete().in("id", campanaIds),
-    // Avisos a otras personas (moderación) sobre esas ofertas y campañas.
+    // Avisos a otras personas (moderación, medios) sobre esas ofertas y campañas.
     () =>
       servicio
         .from("notificaciones")

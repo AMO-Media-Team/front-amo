@@ -20,6 +20,7 @@ import {
   type IntentoReserva,
   resumirRafaga,
   type ResumenRafaga,
+  vecesError,
   verificarInvariantes,
 } from "./invariantes"
 import {
@@ -125,7 +126,13 @@ async function evaluar(
   }
 }
 
-/** (1) 20 medios contra 3 cupos de la misma franja, con el presupuesto justo para 3 ⇒ exactamente 3. */
+/**
+ * (1) 20 medios contra 3 cupos de la misma franja, con el presupuesto justo
+ * para 3 ⇒ exactamente 3. La reserva ganadora llena la oferta
+ * (CUPOS_COMPLETOS) y quien llega tarde recibe «No quedan cupos en tu franja»
+ * (AMO_SIN_CUPO, nunca «oferta no disponible»); un ganador que reintenta oye
+ * antes «Ya aceptaste esta oferta» (AMO_YA_ACEPTADA) que «sin cupo».
+ */
 export async function cuposEscasos(
   entorno: Entorno,
   repeticion: number
@@ -155,7 +162,7 @@ export async function cuposEscasos(
       (medio) => () => reservar(prep.servicio, reservaDe(medio, ofertaId))
     )
   )
-  return evaluar(
+  const resultado = await evaluar(
     entorno,
     `20 medios vs 3 cupos (#${repeticion})`,
     [campanaId],
@@ -163,16 +170,32 @@ export async function cuposEscasos(
     duracionMs,
     {
       exitos: 3,
-      rechazosPermitidos: ["AMO_SIN_CUPO", "AMO_OFERTA_NO_DISPONIBLE"],
+      rechazosPermitidos: ["AMO_SIN_CUPO"],
       montoBruto: precio,
     }
   )
+  const ganadores = medios.filter((_, i) => resultados[i].asignacionId !== null)
+  const reintentos = await rafaga(
+    ganadores.map(
+      (medio) => () => reservar(prep.servicio, reservaDe(medio, ofertaId))
+    )
+  )
+  const resumenReintentos = resumirRafaga(reintentos.resultados)
+  if (vecesError(resumenReintentos, "AMO_YA_ACEPTADA") !== ganadores.length) {
+    resultado.fallas.push(
+      `al reintentar, los ${ganadores.length} ganadores recibieron ${JSON.stringify(resumenReintentos.errores)} y ${resumenReintentos.exitos} éxitos; se esperaba AMO_YA_ACEPTADA`
+    )
+    resultado.ok = false
+  }
+  return resultado
 }
 
 /**
- * Variante: dos ofertas de la misma campaña compiten por su presupuesto. Se
- * publican con presupuesto para ambas y luego la campaña baja a 3 precios
- * (lo permite §3.6 mientras no quede por debajo de lo comprometido) ⇒ 3 en total.
+ * Variante: dos ofertas de la misma campaña a la vez (bloqueo ordenado
+ * campaña → oferta, en ambos órdenes de llamada) ⇒ exactamente sus 6 cupos y
+ * la campaña comprometida al céntimo. Desde E2 la campaña reserva el máximo de
+ * cada oferta publicada y su presupuesto no puede bajar de ahí (se comprueba:
+ * AMO_PRESUPUESTO_CAMPANA), así que la carrera ya no puede desbordarla.
  */
 export async function presupuestoCompartido(
   entorno: Entorno,
@@ -200,8 +223,6 @@ export async function presupuestoCompartido(
     .from("campanas")
     .update({ presupuesto_total: 3 * precio })
     .eq("id", campanaId)
-  if (recorte.error)
-    throw new Error(`No se pudo recortar la campaña: ${recorte.error.message}`)
   const llamadas = medios.flatMap((medio, i) => {
     const orden = i % 2 === 0 ? ofertas : [...ofertas].reverse()
     return orden.map(
@@ -209,22 +230,25 @@ export async function presupuestoCompartido(
     )
   })
   const { resultados, duracionMs } = await rafaga(llamadas)
-  return evaluar(
+  const resultado = await evaluar(
     entorno,
-    `2 ofertas vs presupuesto de campaña (#${repeticion})`,
+    `2 ofertas de la misma campaña (#${repeticion})`,
     [campanaId],
     resultados,
     duracionMs,
     {
-      exitos: 3,
-      rechazosPermitidos: [
-        "AMO_PRESUPUESTO_CAMPANA",
-        "AMO_TOPE_MEDIO",
-        "AMO_SIN_CUPO",
-        "AMO_OFERTA_NO_DISPONIBLE",
-      ],
+      exitos: 6,
+      rechazosPermitidos: ["AMO_SIN_CUPO"],
+      montoBruto: precio,
     }
   )
+  if (recorte.error?.message !== "AMO_PRESUPUESTO_CAMPANA") {
+    resultado.fallas.push(
+      `bajar la campaña por debajo de lo que reservan sus ofertas dio ${recorte.error?.message ?? "éxito"}, se esperaba AMO_PRESUPUESTO_CAMPANA`
+    )
+    resultado.ok = false
+  }
+  return resultado
 }
 
 /** (2) Presupuesto máximo de 2,5 precios con 10 cupos ⇒ exactamente 2. */
@@ -343,15 +367,21 @@ export async function aceptarYDesistir(
       tope: 0.34,
     }
   )
-  const titulares = medios.slice(0, 3)
-  for (const medio of titulares) {
+  const titulares: { medio: MedioConActor; asignacionId: string }[] = []
+  for (const medio of medios.slice(0, 3)) {
     const previo = await reservar(prep.servicio, reservaDe(medio, ofertaId))
-    if (previo.error)
-      throw new Error(`No se pudo llenar la oferta: ${previo.error.message}`)
+    if (previo.error || !previo.asignacionId) {
+      throw new Error(
+        `No se pudo llenar la oferta: ${previo.error?.message ?? "sin asignación"}`
+      )
+    }
+    titulares.push({ medio, asignacionId: previo.asignacionId })
   }
   const aspirantes = medios.slice(3, 13)
   const desistimientos = titulares.map(
-    (medio) => () => desistir(prep.servicio, { ofertaId, actor: medio.actor })
+    ({ medio, asignacionId }) =>
+      () =>
+        desistir(prep.servicio, { asignacionId, actor: medio.actor })
   )
   const reservas = aspirantes.map(
     (medio) => () => reservar(prep.servicio, reservaDe(medio, ofertaId))
@@ -368,7 +398,7 @@ export async function aceptarYDesistir(
     {
       exitos: (exitos) =>
         exitos >= titulares.length && exitos <= titulares.length + 3,
-      rechazosPermitidos: ["AMO_OFERTA_NO_DISPONIBLE", "AMO_SIN_CUPO"],
+      rechazosPermitidos: ["AMO_SIN_CUPO"],
     }
   )
   const desistidos = resultados.filter(
@@ -393,7 +423,13 @@ function intercalar<T>(a: readonly T[], b: readonly T[]): T[] {
   return salida
 }
 
-/** (6) Doble envío (x5) con la misma clave de idempotencia ⇒ una sola asignación, el mismo id para todos. */
+/**
+ * (6) Idempotencia de un solo uso: el doble envío (x5) con la misma clave
+ * crea una sola asignación y devuelve el mismo id a los cinco; tras desistir,
+ * esa clave ya no sirve (AMO_IDEMPOTENCIA_INVALIDA en esa oferta y en otra, en
+ * lugar de un éxito falso con la asignación desistida) y una clave nueva
+ * vuelve a aceptar.
+ */
 export async function idempotencia(
   entorno: Entorno
 ): Promise<ResultadoEscenario> {
@@ -403,44 +439,82 @@ export async function idempotencia(
     prep,
     anuncianteId,
     "idempotencia",
-    3 * precio
+    6 * precio
   )
-  const ofertaId = await publicarOferta(
-    prep,
-    catalogo,
-    campanaId,
-    anuncianteId,
-    {
-      titulo: "idempotencia",
-      cupos: 3,
-      presupuestoMaximo: 3 * precio,
-      tope: 0.34,
-    }
+  const [ofertaId, otraOfertaId] = await Promise.all(
+    ["", " B"].map((sufijo) =>
+      publicarOferta(prep, catalogo, campanaId, anuncianteId, {
+        titulo: `idempotencia${sufijo}`,
+        cupos: 3,
+        presupuestoMaximo: 3 * precio,
+        tope: 0.34,
+      })
+    )
   )
+  const medio = medios[0]
   const clave = randomUUID()
-  const { resultados, duracionMs } = await rafaga(
+  const dobleEnvio = await rafaga(
     Array.from(
       { length: 5 },
-      () => () => reservar(prep.servicio, reservaDe(medios[0], ofertaId, clave))
+      () => () => reservar(prep.servicio, reservaDe(medio, ofertaId, clave))
     )
+  )
+  const primera =
+    dobleEnvio.resultados.find((r) => r.asignacionId !== null)?.asignacionId ??
+    null
+  const desistimiento = primera
+    ? await desistir(prep.servicio, {
+        asignacionId: primera,
+        actor: medio.actor,
+      })
+    : null
+  const reusos = await rafaga([
+    ...Array.from(
+      { length: 3 },
+      () => () => reservar(prep.servicio, reservaDe(medio, ofertaId, clave))
+    ),
+    () => reservar(prep.servicio, reservaDe(medio, otraOfertaId, clave)),
+  ])
+  const nueva = await reservar(
+    prep.servicio,
+    reservaDe(medio, ofertaId, randomUUID())
   )
   const resultado = await evaluar(
     entorno,
-    "idempotencia (misma clave x5)",
+    "idempotencia (misma clave x5; reusada tras desistir)",
     [campanaId],
-    resultados,
-    duracionMs,
+    [...dobleEnvio.resultados, ...reusos.resultados, nueva],
+    dobleEnvio.duracionMs + reusos.duracionMs,
     {
-      exitos: 5,
-      rechazosPermitidos: [],
+      exitos: dobleEnvio.resultados.length + 1,
+      rechazosPermitidos: ["AMO_IDEMPOTENCIA_INVALIDA"],
     }
   )
-  if (resultado.resumen.asignaciones.length !== 1) {
+  const idsDobleEnvio = new Set(
+    dobleEnvio.resultados.map((r) => r.asignacionId)
+  )
+  if (primera === null || idsDobleEnvio.size !== 1) {
     resultado.fallas.push(
-      `${resultado.resumen.asignaciones.length} asignaciones distintas, se esperaba 1`
+      `el doble envío devolvió ${idsDobleEnvio.size} ids distintos, se esperaba 1`
     )
-    resultado.ok = false
   }
+  if (!desistimiento || desistimiento.error) {
+    resultado.fallas.push(
+      `no se pudo desistir: ${desistimiento?.error?.message ?? "sin asignación"}`
+    )
+  }
+  const invalidas = vecesError(resultado.resumen, "AMO_IDEMPOTENCIA_INVALIDA")
+  if (invalidas !== reusos.resultados.length) {
+    resultado.fallas.push(
+      `la clave reusada tras desistir dio ${invalidas} AMO_IDEMPOTENCIA_INVALIDA de ${reusos.resultados.length}`
+    )
+  }
+  if (nueva.error || nueva.asignacionId === primera) {
+    resultado.fallas.push(
+      `una clave nueva no volvió a aceptar: ${nueva.error?.message ?? "devolvió la asignación desistida"}`
+    )
+  }
+  resultado.ok = resultado.fallas.length === 0
   return resultado
 }
 

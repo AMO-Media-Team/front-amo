@@ -62,14 +62,27 @@ export interface FechasCampana {
   fechaFin: string
 }
 
-/** Desde hoy (Bogotá) y por `dias` días de calendario. */
-export function fechasCampana(ahora: Date, dias = DIAS_CAMPANA): FechasCampana {
+/**
+ * Desde hoy (Bogotá) y por `dias` días de calendario. Con `diasAtras`, la
+ * campaña empezó hace esos días (el fin no cambia): así cabe una oferta cuya
+ * ventana de publicación ya abrió, para publicar con fecha pasada y cargar
+ * cortes de métricas (la BD no exige que el inicio sea futuro).
+ */
+export function fechasCampana(
+  ahora: Date,
+  dias = DIAS_CAMPANA,
+  diasAtras = 0
+): FechasCampana {
   if (!Number.isInteger(dias) || dias < 1) {
     throw new RangeError("La campaña dura al menos un día.")
   }
+  if (!Number.isInteger(diasAtras) || diasAtras < 0) {
+    throw new RangeError("diasAtras es un entero mayor o igual que 0.")
+  }
+  const hoy = inicioDelDia(ahora)
   return {
-    fechaInicio: serializarFecha(ahora),
-    fechaFin: serializarFecha(addDays(inicioDelDia(ahora), dias)),
+    fechaInicio: serializarFecha(addDays(hoy, -diasAtras)),
+    fechaFin: serializarFecha(addDays(hoy, dias)),
   }
 }
 

@@ -9,6 +9,7 @@ import type { Json } from "../../src/types/database.types"
 import {
   type ClienteSupabase,
   crearClientePublico,
+  crearClienteUsuario,
   type EntornoBootstrap,
   ErrorBootstrap,
 } from "./supabase"
@@ -32,16 +33,11 @@ export function errorDeApi(accion: string, error: ErrorApi): ErrorBootstrap {
   return new ErrorBootstrap(`${accion}: ${error.message}${detalle}${pista}`)
 }
 
-/**
- * Ingresa con la contraseña de la persona, ejecuta `accion` con su sesión y
- * la cierra (solo esa: `scope: "local"`), también si la acción falla.
- */
-export async function conSesionDeUsuario<T>(
-  entorno: EntornoBootstrap,
+async function conIngreso<T>(
+  cliente: ClienteSupabase,
   credenciales: { email: string; password: string },
-  accion: (actor: ActorConSesion) => Promise<T>
+  accion: (cliente: ClienteSupabase, actor: ActorConSesion) => Promise<T>
 ): Promise<T> {
-  const cliente = crearClientePublico(entorno)
   const ingreso = await cliente.auth.signInWithPassword(credenciales)
   if (ingreso.error) {
     throw new ErrorBootstrap(
@@ -55,13 +51,40 @@ export async function conSesionDeUsuario<T>(
         `No se pudo leer la sesión de ${credenciales.email}.`
       )
     }
-    return await accion({
+    return await accion(cliente, {
       usuarioId: data.claims.sub,
       sesionId: data.claims.session_id,
     })
   } finally {
     await cliente.auth.signOut({ scope: "local" })
   }
+}
+
+/**
+ * Ingresa con la contraseña de la persona, ejecuta `accion` con su sesión y
+ * la cierra (solo esa: `scope: "local"`), también si la acción falla.
+ */
+export async function conSesionDeUsuario<T>(
+  entorno: EntornoBootstrap,
+  credenciales: { email: string; password: string },
+  accion: (actor: ActorConSesion) => Promise<T>
+): Promise<T> {
+  return conIngreso(crearClientePublico(entorno), credenciales, (_, actor) =>
+    accion(actor)
+  )
+}
+
+/**
+ * Como `conSesionDeUsuario`, pero `accion` recibe además el cliente con la
+ * sesión de la persona (`crearClienteUsuario`): para escribir como la app con
+ * la RLS de su rol (p. ej. las métricas del medio).
+ */
+export async function conClienteDeUsuario<T>(
+  entorno: EntornoBootstrap,
+  credenciales: { email: string; password: string },
+  accion: (cliente: ClienteSupabase, actor: ActorConSesion) => Promise<T>
+): Promise<T> {
+  return conIngreso(crearClienteUsuario(entorno), credenciales, accion)
 }
 
 /** `transicionar_srv` a nombre de `actor` (su permiso y su propiedad cuentan). */

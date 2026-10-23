@@ -96,8 +96,17 @@ test.describe("mi medio · medio verificado", () => {
         name: "Pago y condición tributaria",
       })
     ).toBeVisible()
-    await expect(page.getByText(/^Registrado: .+ •••• \w{4}\./)).toBeVisible()
-    await expect(page.getByLabel("Número de documento nuevo")).toHaveValue("")
+    // Dentro del formulario visible: mientras termina el streaming, la copia
+    // del servidor sigue un instante oculta en el DOM.
+    const formularioPago = page.getByRole("form", {
+      name: "Datos de pago y condición tributaria",
+    })
+    await expect(
+      formularioPago.getByText(/^Registrado: .+ •••• \w{4}\./)
+    ).toBeVisible()
+    await expect(
+      formularioPago.getByRole("textbox", { name: "Número de documento nuevo" })
+    ).toHaveValue("")
     await expect(
       page.getByRole("button", { name: "Cambiar de cuenta" })
     ).toBeVisible()
@@ -221,12 +230,15 @@ test.describe("mi medio · alta de un medio nuevo", () => {
     })
     await expect(formulario.getByText("Tus datos van cifrados")).toBeVisible()
 
-    await page.getByLabel("Nombre del titular").fill("Titular Medio Nuevo E2E")
+    // Dentro del formulario visible: la copia del streaming queda un instante oculta fuera de él.
+    await formulario
+      .getByLabel("Nombre del titular")
+      .fill("Titular Medio Nuevo E2E")
     await elegirOpcion(page, "Tipo de documento", "Cédula de ciudadanía")
-    await page.getByLabel("Número de documento").fill(cedula)
+    await formulario.getByLabel("Número de documento").fill(cedula)
     await page.getByRole("radio", { name: /Billetera digital/ }).click()
     await elegirOpcion(page, "Billetera", "Nequi")
-    await page.getByLabel("Celular de la billetera").fill(celular)
+    await formulario.getByLabel("Celular de la billetera").fill(celular)
     await page.getByRole("switch", { name: /Declaro renta/ }).click()
     await esperarSinDesbordeHorizontal(page)
 

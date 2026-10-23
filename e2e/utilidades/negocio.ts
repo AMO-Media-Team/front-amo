@@ -15,12 +15,17 @@ import {
   crearCampana,
   crearOferta,
   type EstadoOfertaE2E,
+  type SegmentacionOferta,
 } from "../../scripts/bootstrap/fabricas-negocio"
 import {
   type FormatoE2E,
   PREFIJO_CAMPANA,
 } from "../../scripts/bootstrap/negocio-e2e"
-import { clienteComoSuperadmin } from "../../scripts/bootstrap/provision-e2e"
+import type { CorteMetrica } from "../../scripts/bootstrap/pauta-e2e"
+import {
+  clienteComoSuperadmin,
+  MEDIO_E2E_ID,
+} from "../../scripts/bootstrap/provision-e2e"
 import { crearClienteServicio } from "../../scripts/bootstrap/supabase"
 import type { Database } from "../../src/types/database.types"
 import {
@@ -32,7 +37,13 @@ import {
 } from "./anunciantes"
 import { entorno } from "./cuentas"
 
-export type { ArchivoCreado, EstadoOfertaE2E, FormatoE2E }
+export type {
+  ArchivoCreado,
+  CorteMetrica,
+  EstadoOfertaE2E,
+  FormatoE2E,
+  SegmentacionOferta,
+}
 
 export type PlataformaE2E = "INSTAGRAM" | "FACEBOOK" | "TIKTOK"
 
@@ -96,6 +107,11 @@ export async function crearCampanaE2E(
     cuenta?: CuentaAnunciante
     nombre?: string
     dias?: number
+    /**
+     * Empezó hace estos días: para una oferta cuya ventana ya abrió
+     * (`ventanaDesdeHoy: { diasAtras }`, con el mismo número o menos).
+     */
+    diasAtras?: number
   } = {}
 ): Promise<CampanaE2E> {
   const cuenta = opciones.cuenta ?? "ANUNCIANTE"
@@ -105,6 +121,7 @@ export async function crearCampanaE2E(
     presupuesto: opciones.presupuesto,
     nombre: opciones.nombre,
     dias: opciones.dias,
+    diasAtras: opciones.diasAtras,
   })
 }
 
@@ -121,6 +138,9 @@ export async function crearCampanaE2E(
  * puede tardar hasta ~1 minuto (súbele el tiempo a la prueba, p. ej.
  * `test.setTimeout(120_000)`), y la prueba tiene al menos ~30 s para usarla
  * antes de que el cron la devuelva (EN_REVISION) o la venza (PUBLICADA).
+ *
+ * Para la pauta del medio usa `crearOfertaPautaE2E` (`pauta.ts`): campaña
+ * propia, ventana abierta y dirigida al «Medio E2E».
  */
 export async function crearOfertaE2E(opciones: {
   campanaId: string
@@ -132,6 +152,24 @@ export async function crearOfertaE2E(opciones: {
   titulo?: string
   /** `false`: borrador sin creativo (por omisión lleva uno). */
   conCreativo?: boolean
+  /**
+   * La ventana de publicación ya abrió: hoy desde las 00:00 (Bogotá) o hace
+   * `diasAtras` días (para publicar con fecha pasada y cargar cortes; la
+   * campaña debe haber empezado antes: `crearCampanaE2E({ diasAtras })`).
+   */
+  ventanaDesdeHoy?: boolean | { diasAtras: number }
+  /**
+   * `"MEDIO_E2E"`: dirigida al municipio y las categorías del «Medio E2E»
+   * (le llega como a un medio real de la zona); o una segmentación explícita.
+   * Sin ella, la ven todos los medios elegibles.
+   */
+  segmentacion?: "MEDIO_E2E" | SegmentacionOferta
+  /** Cortes de métricas que pide (por omisión, los de la configuración: H24, H72 y D7). */
+  cortes?: CorteMetrica[]
+  publicacionesPorMedio?: number
+  permiteMultiplesCupos?: boolean
+  permanenciaMinimaDias?: number
+  exclusividadDias?: number
 }): Promise<OfertaE2E> {
   const { data, error } = await crearClienteServicio(entorno)
     .from("campanas")
@@ -146,7 +184,13 @@ export async function crearOfertaE2E(opciones: {
   const usuario = await usuarioAnunciante(
     cuentaDeAnunciante(data.anunciante_id)
   )
-  const oferta = await crearOferta(entorno, usuario, opciones)
+  const oferta = await crearOferta(entorno, usuario, {
+    ...opciones,
+    segmentacion:
+      opciones.segmentacion === "MEDIO_E2E"
+        ? { paraMedio: MEDIO_E2E_ID }
+        : opciones.segmentacion,
+  })
   return {
     ...oferta,
     formato: oferta.formato as OfertaE2E["formato"],

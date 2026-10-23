@@ -43,6 +43,16 @@ describe("fechas de campaña", () => {
     expect(() => fechasCampana(AHORA, 0)).toThrow(RangeError)
   })
 
+  it("pueden empezar días atrás sin mover el fin (ventanas que ya abrieron)", () => {
+    expect(fechasCampana(AHORA, 30, 8)).toEqual({
+      fechaInicio: "2026-10-14",
+      fechaFin: "2026-11-21",
+    })
+    expect(fechasCampana(AHORA, 30, 0)).toEqual(fechasCampana(AHORA))
+    expect(() => fechasCampana(AHORA, 30, -1)).toThrow(RangeError)
+    expect(() => fechasCampana(AHORA, 30, 1.5)).toThrow(RangeError)
+  })
+
   it("limitan la ventana desde las 00:00 del inicio hasta las 00:00 del día siguiente al fin", () => {
     expect(
       limitesCampana({ fechaInicio: "2026-10-22", fechaFin: "2026-10-30" })

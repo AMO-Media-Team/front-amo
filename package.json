@@ -28,6 +28,8 @@
     "bootstrap:e2e": "tsx scripts/bootstrap/usuarios-e2e.ts",
     "demo:generar": "tsx scripts/demo/generar.ts",
     "demo:purgar": "tsx scripts/demo/purgar.ts",
+    "pruebas:carrera": "tsx --env-file=.env.local scripts/pruebas/carrera-cupos.ts",
+    "pruebas:pauta-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-pauta-e2e.ts",
     "prod:config-pruebas": "tsx scripts/produccion/configuracion-pruebas.ts"
   },
   "engines": {
