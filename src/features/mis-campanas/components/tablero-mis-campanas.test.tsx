@@ -14,7 +14,22 @@ import {
   conteoDelTablero,
   type TableroMisCampanas,
 } from "../tablero"
+import { TableroCampanasCliente } from "./tablero-cliente"
 import { TableroMisCampanasMedio } from "./tablero-mis-campanas"
+
+const suspension = vi.hoisted(() => ({
+  suspendido: false,
+  medioId: "0199f3a0-0000-7000-8000-0000000000e1" as string | null,
+}))
+
+vi.mock("server-only", () => ({}))
+vi.mock("@/lib/auth/dal", () => ({
+  requerirUsuario: vi.fn(async () => ({ medioId: suspension.medioId })),
+}))
+// La consulta real usa la sesión: aquí solo importa lo que responde.
+vi.mock("../queries", () => ({
+  medioSuspendido: vi.fn(async () => suspension.suspendido),
+}))
 
 const AHORA = new Date("2026-10-26T12:00:00.000Z")
 const A1 = "0199f3a0-0000-7000-8000-00000000a501"
@@ -65,7 +80,7 @@ function pintar(
 ) {
   return render(
     <NuqsTestingAdapter searchParams={busqueda} onUrlUpdate={alActualizar}>
-      <TableroMisCampanasMedio
+      <TableroCampanasCliente
         tablero={tablero}
         segmentoInicial={segmentoInicial(conteoDelTablero(tablero))}
         ahoraServidor={AHORA.getTime()}
@@ -77,7 +92,7 @@ function pintar(
   )
 }
 
-describe("TableroMisCampanasMedio", () => {
+describe("TableroCampanasCliente", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(AHORA)
@@ -130,7 +145,7 @@ describe("TableroMisCampanasMedio", () => {
     expect(alActualizar).toHaveBeenLastCalledWith(
       expect.objectContaining({ queryString: "?segmento=caidas" })
     )
-    // MED-011: la vencida ofrece reclamar dentro del plazo.
+    // MED-011 c2: la vencida ofrece reclamar dentro del plazo, con su enlace.
     const vencida = screen.getByRole("article", {
       name: "Historia de Facebook",
     })
@@ -138,6 +153,9 @@ describe("TableroMisCampanasMedio", () => {
       within(vencida).getByText("Puedes reclamar si publicaste a tiempo")
     ).toBeVisible()
     expect(within(vencida).getByText("Vencida")).toBeVisible()
+    expect(
+      within(vencida).getByRole("link", { name: "Reclamar: sí publiqué" })
+    ).toHaveAttribute("href", `/mis-campanas/${A2}/disputa`)
   })
 
   it("sin vencidas ni canceladas no da por cumplido lo que sigue pendiente", () => {
@@ -166,5 +184,68 @@ describe("TableroMisCampanasMedio", () => {
     expect(screen.getByText("Aún no tienes campañas")).toBeVisible()
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Ver ofertas" })).toBeVisible()
+  })
+})
+
+/** Un tablero con una campaña en curso (A1) o solo con las ya cerradas. */
+function propiedades(tablero: TableroMisCampanas) {
+  return {
+    tablero,
+    segmentoInicial: segmentoInicial(conteoDelTablero(tablero)),
+    ahoraServidor: AHORA.getTime(),
+    puedeEjecutar: true,
+    puedeVerOfertas: true,
+    completas: true,
+  }
+}
+
+async function pintarConAvisos(tablero: TableroMisCampanas) {
+  const contenido = await TableroMisCampanasMedio(propiedades(tablero))
+  return render(<NuqsTestingAdapter>{contenido}</NuqsTestingAdapter>)
+}
+
+describe("TableroMisCampanasMedio (con la suspensión del medio)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(AHORA)
+    suspension.suspendido = false
+    suspension.medioId = "0199f3a0-0000-7000-8000-0000000000e1"
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("un medio activo ve su tablero sin avisos", async () => {
+    await pintarConAvisos(tableroDePrueba())
+    expect(screen.getByRole("tablist")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Tu medio está suspendido")
+    ).not.toBeInTheDocument()
+  })
+
+  it("suspendido con campañas en curso: puede seguir cumpliéndolas (D73)", async () => {
+    suspension.suspendido = true
+    await pintarConAvisos(tableroDePrueba())
+    expect(screen.getByText("Tu medio está suspendido")).toBeVisible()
+    expect(
+      screen.getByText(
+        "El equipo AMO revisa tus campañas en curso; mientras no te avisemos que se cancelan, puedes seguir cumpliéndolas."
+      )
+    ).toBeVisible()
+    // El tablero sigue debajo del aviso.
+    expect(screen.getByRole("tablist")).toBeInTheDocument()
+  })
+
+  it("suspendido sin nada en curso: solo dice qué implica", async () => {
+    suspension.suspendido = true
+    const tablero = tableroDePrueba()
+    await pintarConAvisos({ ...tablero, pendiente_metricas: [] })
+    expect(screen.getByText("Tu medio está suspendido")).toBeVisible()
+    expect(
+      screen.getByText(/no verás ofertas nuevas ni podrás aceptarlas/)
+    ).toBeVisible()
+    expect(
+      screen.queryByText(/puedes seguir cumpliéndolas/)
+    ).not.toBeInTheDocument()
   })
 })

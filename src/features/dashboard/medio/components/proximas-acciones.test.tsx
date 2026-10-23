@@ -165,4 +165,47 @@ describe("ProximasAcciones", () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole("link")).not.toBeInTheDocument()
   })
+
+  it("reclamar una vencida lleva a su disputa (o a la ficha sin permiso)", () => {
+    const [reclamo] = accionesDelInicio(
+      [
+        {
+          asignacionId: "a9",
+          ofertaTitulo: "Historia de Halloween",
+          accion: "RECLAMAR",
+          venceAt: new Date(
+            AHORA_MEDIO.getTime() + 30 * 3_600_000
+          ).toISOString(),
+          numero: null,
+          corte: null,
+        },
+      ],
+      { ahora: AHORA_MEDIO, plazoCargaHoras: 48 }
+    )
+    if (!reclamo) throw new Error("sin acción")
+    const { rerender } = render(
+      <ProximasAcciones
+        acciones={[reclamo]}
+        ahoraServidor={AHORA_MEDIO.getTime()}
+        puedeReclamar
+      />
+    )
+    const enlace = screen.getByRole("link", {
+      name: "Reclama la publicación: Historia de Halloween",
+    })
+    expect(enlace).toHaveAttribute("href", "/mis-campanas/a9/disputa")
+    expect(filas()[0]).toHaveTextContent(/Vence en 1 día 6 h/)
+
+    rerender(
+      <ProximasAcciones
+        acciones={[reclamo]}
+        ahoraServidor={AHORA_MEDIO.getTime()}
+      />
+    )
+    expect(
+      screen.getByRole("link", {
+        name: "Reclama la publicación: Historia de Halloween",
+      })
+    ).toHaveAttribute("href", "/mis-campanas/a9")
+  })
 })

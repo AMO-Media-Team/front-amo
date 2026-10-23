@@ -96,6 +96,8 @@ interface PropsPeriodo {
 interface Enlaces {
   /** Pantalla de cada acción, la ficha de la asignación o ninguna. */
   acciones: DestinoAcciones
+  /** Reclamar una vencida desde su disputa (`disputas.abrir`). */
+  reclamar: boolean
   /** «Mis campañas» (`asignaciones.ver_propias`). */
   misCampanas: boolean
   /** «Ofertas» (`ofertas.marketplace`). */
@@ -112,6 +114,7 @@ function enlacesDe(usuario: UsuarioSesion): Enlaces {
       : misCampanas
         ? "ficha"
         : null,
+    reclamar: tieneAlgunPermiso(usuario, ["disputas.abrir"]),
     misCampanas,
     ofertas: tieneAlgunPermiso(usuario, ["ofertas.marketplace"]),
     miMedio: tieneAlgunPermiso(usuario, ["medios.editar_propio"]),
@@ -285,6 +288,7 @@ async function BloqueAcciones({
       acciones={visibles}
       ahoraServidor={ahora.getTime()}
       destino={enlaces.acciones}
+      puedeReclamar={enlaces.reclamar}
       restantes={
         filas.length >= CONSULTA_ACCIONES
           ? null

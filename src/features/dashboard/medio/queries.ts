@@ -10,7 +10,8 @@ import { filasKpi } from "../kpi"
 import { clientePanel, fallar } from "../servidor"
 import {
   type AccionPendiente,
-  ESTADOS_EN_CURSO,
+  esNegocioEnCurso,
+  ESTADOS_CONSULTA_EN_CURSO,
   type GranularidadGanancias,
   type NegocioEnCurso,
   type PuntoGanancias,
@@ -89,27 +90,33 @@ export const proximasAcciones = cache(
 /**
  * Asignaciones en curso, de la más reciente a la más antigua (`id` es un
  * UUID v7), con su oferta: `mis_asignaciones_medio` trae el título y la marca
- * (exige `asignaciones.ver_propias`; sin él no devuelve filas).
+ * (exige `asignaciones.ver_propias`; sin él no devuelve filas). Las que están
+ * en disputa siguen en curso (salvo el reclamo de una vencida).
  */
 export const asignacionesEnCurso = cache(
   async (limite: number): Promise<NegocioEnCurso[]> => {
     const supabase = await clientePanel()
     const { data, error } = await supabase.rpc("mis_asignaciones_medio", {
-      p_estados: [...ESTADOS_EN_CURSO],
+      p_estados: [...ESTADOS_CONSULTA_EN_CURSO],
       p_limite: limite,
     })
     if (error) fallar("consultar tus negocios en curso", error)
-    return data.map((fila) => ({
-      id: fila.id,
-      ofertaId: fila.oferta_id,
-      estado: fila.estado,
-      plataforma: fila.plataforma,
-      montoMedio: numero(fila.monto_medio),
-      titulo: fila.oferta_titulo?.trim() || null,
-      marca: fila.marca?.trim() || null,
-      handle: fila.handle ?? null,
-      publicaciones: fila.publicaciones,
-    }))
+    return data
+      .filter((fila) =>
+        esNegocioEnCurso(fila.estado, fila.estado_previo_disputa ?? null)
+      )
+      .map((fila) => ({
+        id: fila.id,
+        ofertaId: fila.oferta_id,
+        estado: fila.estado,
+        plataforma: fila.plataforma,
+        montoMedio: numero(fila.monto_medio),
+        titulo: fila.oferta_titulo?.trim() || null,
+        marca: fila.marca?.trim() || null,
+        handle: fila.handle ?? null,
+        publicaciones: fila.publicaciones,
+        estadoPrevioDisputa: fila.estado_previo_disputa ?? null,
+      }))
   }
 )
 

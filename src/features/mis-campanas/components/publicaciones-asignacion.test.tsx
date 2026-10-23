@@ -203,4 +203,25 @@ describe("PublicacionesAsignacion", () => {
       screen.queryByRole("link", { name: /Cargar|Agregar|Corregir|Editar/ })
     ).not.toBeInTheDocument()
   })
+
+  it("en disputa sigue cargando sus cortes con el estado que tenía (D72)", () => {
+    pintar(
+      asignacionDePrueba({
+        estado: "EN_DISPUTA",
+        estadoPrevioDisputa: "EVIDENCIA_VALIDADA",
+      }),
+      {
+        publicaciones: [publicacionDePrueba({ estado: "APROBADA" })],
+        metricas: [],
+      }
+    )
+    expect(
+      within(fila("24 horas")).getByRole("link", {
+        name: "Cargar las métricas de 24 horas",
+      })
+    ).toHaveAttribute(
+      "href",
+      `/mis-campanas/${ASIGNACION_ID}/metricas?numero=1&corte=H24`
+    )
+  })
 })

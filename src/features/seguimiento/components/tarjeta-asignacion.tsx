@@ -3,10 +3,14 @@
 import {
   ChevronDown,
   ExternalLink,
+  Flag,
   ImageOff,
+  Scale,
   TriangleAlert,
 } from "lucide-react"
 import type { ReactNode } from "react"
+
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
 
 import {
   Collapsible,
@@ -14,6 +18,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { CuentaRegresiva } from "@/components/tiempo/cuenta-regresiva"
+import { rutaDisputaAnunciante } from "@/features/disputas/rutas"
+import { enlaceDisputa } from "@/features/mis-campanas/disputa"
 import {
   InsigniaEstado,
   InsigniaNivel,
@@ -228,6 +234,42 @@ function DetallePublicacion({
   )
 }
 
+/**
+ * «Reportar un problema» en los estados disputables o «Ver la disputa» con
+ * una abierta o con el resultado de la última (ADM-011). El nombre accesible
+ * dice de qué medio es: hay uno por tarjeta.
+ */
+function AccionDisputa({
+  asignacion,
+  campanaId,
+  ahoraServidor,
+}: {
+  asignacion: AsignacionSeguimiento
+  campanaId: string
+  ahoraServidor: number
+}) {
+  const enlace = enlaceDisputa({
+    perspectiva: "anunciante",
+    estado: asignacion.estado,
+    disputa: asignacion.disputa,
+    ahora: new Date(ahoraServidor),
+  })
+  if (!enlace) return null
+  const Icono = enlace.tipo === "abrir" ? Flag : Scale
+  return (
+    <EnlaceBoton
+      href={rutaDisputaAnunciante(campanaId, asignacion.id)}
+      variant="outline"
+      size="sm"
+      className="w-fit max-sm:w-full"
+    >
+      <Icono data-icon="inline-start" aria-hidden />
+      {enlace.texto}{" "}
+      <span className="sr-only">de {asignacion.medio.nombre}</span>
+    </EnlaceBoton>
+  )
+}
+
 const TEXTO_NOVEDAD: Readonly<Record<Exclude<Novedad, null>, string>> = {
   nueva: "Nueva",
   cambiada: "Con novedades",
@@ -236,8 +278,9 @@ const TEXTO_NOVEDAD: Readonly<Record<Exclude<Novedad, null>, string>> = {
 /**
  * Una asignación de la campaña: el medio (su ficha pública a un toque), la
  * cuenta y el alcance que declaró al aceptar, el estado con su plazo, el valor
- * del cupo y el enlace a cada publicación. Al desplegarla: la captura firmada,
- * los cortes aprobados y la línea de tiempo.
+ * del cupo, el enlace a cada publicación y, con `disputas.abrir`, reportar un
+ * problema o ver su disputa. Al desplegarla: la captura firmada, los cortes
+ * aprobados y la línea de tiempo.
  */
 export function TarjetaAsignacion({
   asignacion,
@@ -246,6 +289,8 @@ export function TarjetaAsignacion({
   destacada,
   novedad,
   ahoraServidor,
+  campanaId,
+  puedeDisputar = false,
 }: {
   asignacion: AsignacionSeguimiento
   abierta: boolean
@@ -254,6 +299,10 @@ export function TarjetaAsignacion({
   destacada: boolean
   novedad: Novedad
   ahoraServidor: number
+  /** La campaña, para enlazar la página de la disputa. */
+  campanaId?: string
+  /** `disputas.abrir`: reportar un problema y ver la disputa. */
+  puedeDisputar?: boolean
 }) {
   const { medio, cuenta, publicaciones } = asignacion
   const ubicacion = ubicacionMedio(medio)
@@ -361,6 +410,14 @@ export function TarjetaAsignacion({
         ) : null}
 
         <ResumenResultados asignacion={asignacion} />
+
+        {puedeDisputar && campanaId ? (
+          <AccionDisputa
+            asignacion={asignacion}
+            campanaId={campanaId}
+            ahoraServidor={ahoraServidor}
+          />
+        ) : null}
       </div>
 
       <Collapsible open={abierta} onOpenChange={onAbiertaChange}>

@@ -15,6 +15,8 @@ export type Plataforma = Enums["plataforma"]
 export type EstadoValidacion = Enums["validacion_estado"]
 export type CausaCancelacion = Enums["cancelacion_causa"]
 export type TipoCreativo = Enums["creativo_tipo"]
+export type EstadoDisputa = Enums["disputa_estado"]
+export type ParteDisputa = Enums["disputa_parte"]
 
 /**
  * Lo que el medio recibe por la asignación, congelado al aceptar. El
@@ -36,6 +38,23 @@ export interface PagoAsignacion {
   /** Se conocen al liquidar. */
   montoRetenciones: number | null
   montoNeto: number | null
+}
+
+/**
+ * La disputa más reciente de una asignación, resumida (ADM-011, MED-011 c2):
+ * basta para saber si hay una abierta, si el medio ya reclamó una vencida y a
+ * dónde llevarlo. El hilo y el resultado completo se leen en su página.
+ */
+export interface DisputaDeAsignacion {
+  id: string
+  estado: EstadoDisputa
+  /** Parte que la abrió. */
+  parte: ParteDisputa
+  /** Estado de la asignación al abrirla (`VENCIDA_SIN_PUBLICAR`: un reclamo). */
+  estadoOrigen: EstadoAsignacion
+  estadoResultante: EstadoAsignacion | null
+  creadaAt: string
+  resueltaAt: string | null
 }
 
 /** Una asignación aceptada del medio (`mis_asignaciones_medio`) con su oferta. */
@@ -85,6 +104,11 @@ export interface AsignacionMedio {
   /** Versión del creativo que descargó por última vez. */
   creativoDescargadoId: string | null
   pago: PagoAsignacion
+  /**
+   * Su disputa más reciente (fase 4). `undefined`: no se consultó (el tablero
+   * solo la lee en las vencidas que aún se pueden reclamar); `null`: no tiene.
+   */
+  disputa?: DisputaDeAsignacion | null
 }
 
 // ── Próximas acciones (`proximas_acciones_medio`) ────────────────────────────
@@ -112,6 +136,8 @@ export type TipoAccionMedio =
   | "CORREGIR_EVIDENCIA"
   | "CARGAR_METRICA"
   | "CORREGIR_METRICAS"
+  /** Reclamar una vencida dentro de su plazo (fase 4: `vence_at` = fin del plazo). */
+  | "RECLAMAR"
 
 /** Una próxima acción interpretada: qué hacer, dónde y para cuándo. */
 export interface AccionMedio {
@@ -149,13 +175,27 @@ export type PasoMedio =
       descripcion: string
       /** Hay una disputa abierta (no una revisión de rutina). */
       disputa?: boolean
+      /** La disputa es el reclamo de una vencida. */
+      reclamo?: boolean
+      /** Con `disputa`: la asignación, para enlazar su página de disputa. */
+      asignacionId?: string
     }
-  | { tipo: "reclamo"; hasta: string | null }
+  | {
+      tipo: "reclamo"
+      /** Fin del plazo para reclamar la vencida (`reclamo_hasta`). */
+      hasta: string | null
+      asignacionId?: string
+      /** Ya reclamó esta vencida y el equipo AMO lo resolvió: no hay otro reclamo. */
+      reclamada?: boolean
+    }
   | {
       tipo: "cerrada"
       titulo: string
       descripcion: string
       tono: "exito" | "neutro" | "peligro"
+      /** Terminó por una disputa: enlaza su resultado. */
+      asignacionId?: string
+      disputa?: boolean
     }
 
 // ── Ejecución: publicaciones, métricas y descargas ───────────────────────────

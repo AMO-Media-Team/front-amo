@@ -7,14 +7,19 @@ import "server-only"
  * filtra por `mi_medio_id()` y oculta tarifa, bruto y comisión si la
  * configuración no los deja ver); publicaciones, métricas, descargas y
  * creativos se leen con su RLS. Un error de lectura se lanza y lo recoge el
- * límite de error de la sección; las próximas acciones y la configuración
- * son de apoyo: si fallan, la pantalla sigue con lo que dice el estado.
+ * límite de error de la sección; las próximas acciones, las disputas de la
+ * asignación y la configuración son de apoyo: si fallan, la pantalla sigue
+ * con lo que dice el estado.
  */
 import { cache } from "react"
 
+import { disputasDeAsignacion } from "@/features/disputas/queries"
+import type { DisputaDetalle } from "@/features/disputas/tipos"
+import { medioPropio } from "@/features/mi-medio/queries"
 import { clienteSolicitud, fallar } from "@/features/operacion/queries/comun"
 import type { Database, Json } from "@/types/database.types"
 
+import { correoDeConfiguracion } from "./contacto"
 import {
   interpretarAccion,
   PLAZO_CARGA_HORAS_POR_DEFECTO,
@@ -28,6 +33,7 @@ import type {
   ContenidoAsignacion,
   Corte,
   DescargaContenido,
+  DisputaDeAsignacion,
   EjecucionAsignacion,
   FilaAccionMedio,
   MetricaMedio,
@@ -42,6 +48,10 @@ type FilaAsignacion =
 const LIMITE_ACCIONES = 100
 
 const CLAVE_PLAZO_CARGA = "metricas.plazo_carga_horas"
+const CLAVE_CORREO_SOPORTE = "soporte.correo"
+
+/** Vencidas por reclamar cuyas disputas se leen de una vez (con holgura). */
+const LIMITE_RECLAMABLES = 100
 
 /** Las SRF generan columnas «no nulas» que sí llegan nulas: se normaliza aquí. */
 function texto(valor: string | null | undefined): string | null {
@@ -117,7 +127,77 @@ export interface AsignacionesDelMedio {
   completas: boolean
 }
 
-/** Las asignaciones aceptadas del medio, de la más reciente a la más antigua. */
+function resumenDisputa(disputa: DisputaDetalle): DisputaDeAsignacion {
+  return {
+    id: disputa.id,
+    estado: disputa.estado,
+    parte: disputa.parte,
+    estadoOrigen: disputa.estadoOrigen,
+    estadoResultante: disputa.estadoResultante,
+    creadaAt: disputa.creadaAt,
+    resueltaAt: disputa.resueltaAt,
+  }
+}
+
+/** Una vencida que todavía se puede reclamar (el plazo sigue abierto). */
+function esReclamable(asignacion: AsignacionMedio, ahora: number): boolean {
+  return (
+    asignacion.estado === "VENCIDA_SIN_PUBLICAR" &&
+    asignacion.reclamoHasta !== null &&
+    Date.parse(asignacion.reclamoHasta) >= ahora
+  )
+}
+
+/**
+ * La disputa más reciente de cada vencida que aún se podría reclamar: una
+ * vencida se reclama una sola vez y el tablero no debe ofrecer otro reclamo.
+ * Dato de apoyo: si la lectura falla, el tablero sigue (la página de la
+ * disputa vuelve a comprobarlo todo).
+ */
+async function disputasDeReclamables(
+  asignaciones: readonly AsignacionMedio[]
+): Promise<ReadonlyMap<string, DisputaDeAsignacion>> {
+  const ahora = Date.now()
+  const ids = asignaciones
+    .filter((asignacion) => esReclamable(asignacion, ahora))
+    .map((asignacion) => asignacion.id)
+    .slice(0, LIMITE_RECLAMABLES)
+  if (ids.length === 0) return new Map()
+  const supabase = await clienteSolicitud()
+  const { data, error } = await supabase
+    .from("disputas")
+    .select(
+      "id, asignacion_id, estado, parte, estado_asignacion_origen, estado_asignacion_resultante, created_at, fecha_resolucion"
+    )
+    .in("asignacion_id", ids)
+    .order("created_at", { ascending: false })
+  if (error) {
+    console.error(
+      `[mis-campanas] disputas de las vencidas no disponibles (${error.code ?? "sin código"})`
+    )
+    return new Map()
+  }
+  const porAsignacion = new Map<string, DisputaDeAsignacion>()
+  for (const fila of data) {
+    if (porAsignacion.has(fila.asignacion_id)) continue
+    porAsignacion.set(fila.asignacion_id, {
+      id: fila.id,
+      estado: fila.estado,
+      parte: fila.parte,
+      estadoOrigen: fila.estado_asignacion_origen,
+      estadoResultante: fila.estado_asignacion_resultante,
+      creadaAt: fila.created_at,
+      resueltaAt: fila.fecha_resolucion,
+    })
+  }
+  return porAsignacion
+}
+
+/**
+ * Las asignaciones aceptadas del medio, de la más reciente a la más antigua.
+ * Las vencidas que aún se pueden reclamar traen su disputa (`null` si no la
+ * tienen): así el tablero sabe si ya se reclamaron.
+ */
 export const misAsignaciones = cache(
   async (): Promise<AsignacionesDelMedio> => {
     const supabase = await clienteSolicitud()
@@ -125,14 +205,38 @@ export const misAsignaciones = cache(
       p_limite: LIMITE_TABLERO,
     })
     if (error) fallar("consultar tus campañas", error)
+    const asignaciones = data.map(comoAsignacion)
+    const disputas = await disputasDeReclamables(asignaciones)
+    const ahora = Date.now()
     return {
-      asignaciones: data.map(comoAsignacion),
+      asignaciones: asignaciones.map((asignacion) =>
+        esReclamable(asignacion, ahora)
+          ? { ...asignacion, disputa: disputas.get(asignacion.id) ?? null }
+          : asignacion
+      ),
       completas: data.length < LIMITE_TABLERO,
     }
   }
 )
 
-/** Una asignación del medio; `null` si no es suya o no existe. */
+/**
+ * La disputa más reciente de la asignación (`disputasDeAsignacion`, la misma
+ * consulta memorizada que usa su página). Dato de apoyo: si falla, `undefined`
+ * y la ficha decide por el estado.
+ */
+async function ultimaDisputa(
+  asignacionId: string
+): Promise<DisputaDeAsignacion | null | undefined> {
+  try {
+    const [ultima] = await disputasDeAsignacion(asignacionId)
+    return ultima ? resumenDisputa(ultima) : null
+  } catch {
+    console.error("[mis-campanas] disputa de la asignación no disponible")
+    return undefined
+  }
+}
+
+/** Una asignación del medio con su disputa más reciente; `null` si no es suya o no existe. */
 export const miAsignacion = cache(
   async (asignacionId: string): Promise<AsignacionMedio | null> => {
     const supabase = await clienteSolicitud()
@@ -142,9 +246,43 @@ export const miAsignacion = cache(
     })
     if (error) fallar("consultar la campaña", error)
     const fila = data.at(0)
-    return fila ? comoAsignacion(fila) : null
+    if (!fila) return null
+    return {
+      ...comoAsignacion(fila),
+      disputa: await ultimaDisputa(asignacionId),
+    }
   }
 )
+
+/**
+ * ¿El medio está suspendido? (D73: conserva lo que tiene en curso mientras el
+ * equipo AMO decide.) Dato de apoyo: si no se puede leer, `false`.
+ */
+export async function medioSuspendido(
+  medioId: string | null
+): Promise<boolean> {
+  if (!medioId) return false
+  try {
+    return (await medioPropio(medioId))?.estado === "SUSPENDIDO"
+  } catch {
+    console.error("[mis-campanas] estado del medio no disponible")
+    return false
+  }
+}
+
+/**
+ * Correo de soporte del equipo AMO (`soporte.correo`, pública). `null` si no
+ * tiene valor: entonces no se le pide al medio que escriba a ninguna parte.
+ */
+export const correoSoporte = cache(async (): Promise<string | null> => {
+  const supabase = await clienteSolicitud()
+  const { data, error } = await supabase
+    .from("configuracion")
+    .select("valor")
+    .eq("clave", CLAVE_CORREO_SOPORTE)
+    .maybeSingle()
+  return error ? null : correoDeConfiguracion(data?.valor)
+})
 
 /**
  * Horas para cargar un corte desde que se cumple (`metricas.plazo_carga_horas`,

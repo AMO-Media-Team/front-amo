@@ -490,7 +490,7 @@ function Negocio({
   conEnlace: boolean
 }) {
   const pasos = ESTADOS_EN_CURSO.length
-  const paso = pasoEstado(negocio.estado)
+  const paso = pasoEstado(negocio.estado, negocio.estadoPrevioDisputa)
   const estado = etiquetaEstado(negocio.estado)
   const titulo = negocio.titulo ?? estado
   return (

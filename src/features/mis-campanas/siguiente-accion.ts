@@ -4,9 +4,11 @@
  * cuál va primero y qué sigue en una asignación que no tiene nada pendiente.
  * La usan «Mis campañas», la ficha de la asignación y el inicio del medio (DM).
  */
+import { rutaDisputaMedio } from "@/features/disputas/rutas"
 import { rutaMetricaPersonalizada } from "@/features/ejecucion/rutas"
 import { CORTES } from "@/features/operacion/estados"
 
+import { consecuenciaCancelacion } from "./estados"
 import {
   rutaAsignacionMedio,
   rutaContenido,
@@ -42,6 +44,7 @@ const TIPOS: readonly TipoAccionMedio[] = [
   "PUBLICAR",
   "CORREGIR_EVIDENCIA",
   "CORREGIR_METRICAS",
+  "RECLAMAR",
 ]
 
 /** `CARGAR_METRICA_H72` → `CARGAR_METRICA`; un código desconocido → `null`. */
@@ -91,6 +94,8 @@ export function etiquetaAccion(
       return `Carga las métricas${delCorte}${sufijo}`
     case "CORREGIR_METRICAS":
       return `Corrige las métricas${delCorte}${sufijo}`
+    case "RECLAMAR":
+      return "Reclama la publicación"
   }
 }
 
@@ -102,6 +107,7 @@ export const TEXTO_BOTON_ACCION: Readonly<Record<TipoAccionMedio, string>> = {
   CORREGIR_EVIDENCIA: "Corregir la evidencia",
   CARGAR_METRICA: "Cargar las métricas",
   CORREGIR_METRICAS: "Corregir las métricas",
+  RECLAMAR: "Reclamar",
 }
 
 /** Qué implica cada acción, para la ficha («Lo que sigue»). */
@@ -118,6 +124,8 @@ export const DESCRIPCION_ACCION: Readonly<Record<TipoAccionMedio, string>> = {
     "Cuando se cumpla el corte, carga las estadísticas de la publicación con una captura del panel.",
   CORREGIR_METRICAS:
     "El equipo AMO te pidió corregir estas métricas. Revisa sus observaciones y cárgalas de nuevo.",
+  RECLAMAR:
+    "Venció el plazo sin tu evidencia. Si publicaste a tiempo y no se registró, cuéntanoslo antes de que cierre el plazo: el equipo AMO lo revisa.",
 }
 
 /** Qué vence, para la cuenta regresiva y su aviso: «Publicación», «Métricas de 72 h». */
@@ -129,7 +137,7 @@ export function etiquetaPlazoAccion(
     if (corte === "PERSONALIZADO") return "Corte personalizado"
     return corte ? `Métricas de ${CORTES[corte].corta}` : "Métricas"
   }
-  return "Publicación"
+  return tipo === "RECLAMAR" ? "Plazo para reclamar" : "Publicación"
 }
 
 /**
@@ -161,6 +169,8 @@ export function rutaDeAccion(
       return numero && corte
         ? rutaMetricas(asignacionId, numero, corte)
         : rutaAsignacionMedio(asignacionId)
+    case "RECLAMAR":
+      return rutaDisputaMedio(asignacionId)
   }
 }
 
@@ -217,6 +227,8 @@ export function interpretarAccion(
  * cercano.
  */
 const PRIORIDAD: Readonly<Record<TipoAccionMedio, number>> = {
+  // Una vencida no tiene otra acción: reclamar es lo único que le queda.
+  RECLAMAR: 0,
   DESCARGAR_NUEVA_VERSION: 0,
   DESCARGAR: 1,
   CORREGIR_EVIDENCIA: 2,
@@ -284,7 +296,13 @@ export type AsignacionParaPaso = Pick<
   | "fechaLimitePublicacion"
   | "reclamoHasta"
   | "publicaciones"
->
+> &
+  Partial<
+    Pick<
+      AsignacionMedio,
+      "estadoPrevioDisputa" | "causaCancelacion" | "disputa"
+    >
+  >
 
 /** Sin fila en `proximas_acciones_medio`, lo que su estado pide hacer. */
 function accionPorEstado(asignacion: AsignacionParaPaso): AccionMedio | null {
@@ -311,21 +329,51 @@ function accionPorEstado(asignacion: AsignacionParaPaso): AccionMedio | null {
   }
 }
 
+/** Una disputa abierta: el reclamo de una vencida o una disputa en curso. */
+function pasoEnDisputa(asignacion: AsignacionParaPaso): PasoMedio {
+  const reclamo = asignacion.estadoPrevioDisputa === "VENCIDA_SIN_PUBLICAR"
+  return {
+    tipo: "espera",
+    titulo: reclamo
+      ? "Estamos revisando tu reclamo"
+      : "Hay una disputa abierta",
+    descripcion: reclamo
+      ? "Mientras lo revisamos, el cupo no vuelve a tu cuenta. Si te damos la razón, tendrás un plazo nuevo para cargar la evidencia."
+      : "El equipo AMO la está revisando y te avisará la decisión. Mientras tanto, puedes seguir la conversación y aportar pruebas.",
+    disputa: true,
+    ...(reclamo ? { reclamo: true } : {}),
+    asignacionId: asignacion.id,
+  }
+}
+
 /**
  * Lo que sigue en la asignación: su acción más urgente, la espera mientras
- * el equipo AMO revisa, el plazo para reclamar una vencida o su cierre.
+ * el equipo AMO revisa (también una disputa: si quedan cortes por cargar, lo
+ * que sigue es cargarlos, D72), el reclamo de una vencida o su cierre.
  */
 export function siguientePaso(
   asignacion: AsignacionParaPaso,
   acciones: readonly AccionMedio[]
 ): PasoMedio {
+  // Una vencida no tiene más que el reclamo (MED-011 c2): su plazo es el de
+  // la fila RECLAMAR o el de la asignación. Ya reclamada, no admite otro (la
+  // BD tampoco lo propone).
+  if (asignacion.estado === "VENCIDA_SIN_PUBLICAR") {
+    const reclamar = accionesDe(asignacion.id, acciones).find(
+      (accion) => accion.tipo === "RECLAMAR"
+    )
+    return {
+      tipo: "reclamo",
+      hasta: reclamar?.venceAt ?? asignacion.reclamoHasta,
+      asignacionId: asignacion.id,
+      ...(asignacion.disputa ? { reclamada: true } : {}),
+    }
+  }
   const accion =
     accionesDe(asignacion.id, acciones).at(0) ?? accionPorEstado(asignacion)
   if (accion) return { tipo: "accion", accion }
 
   switch (asignacion.estado) {
-    case "VENCIDA_SIN_PUBLICAR":
-      return { tipo: "reclamo", hasta: asignacion.reclamoHasta }
     case "PUBLICADA":
       return {
         tipo: "espera",
@@ -348,13 +396,7 @@ export function siguientePaso(
           "El equipo AMO revisa tus cifras para verificar la campaña. Te avisamos al terminar.",
       }
     case "EN_DISPUTA":
-      return {
-        tipo: "espera",
-        titulo: "Hay una disputa abierta",
-        descripcion:
-          "El equipo AMO la atiende y te avisará la decisión. No tienes que hacer nada por ahora.",
-        disputa: true,
-      }
+      return pasoEnDisputa(asignacion)
     case "VERIFICADA":
       return {
         tipo: "cerrada",
@@ -388,8 +430,11 @@ export function siguientePaso(
       return {
         tipo: "cerrada",
         titulo: "Cancelada",
-        descripcion: "El equipo AMO canceló tu participación en esta campaña.",
+        descripcion: consecuenciaCancelacion(asignacion.causaCancelacion),
         tono: "peligro",
+        ...(asignacion.disputa
+          ? { asignacionId: asignacion.id, disputa: true }
+          : {}),
       }
     case "ACEPTADA":
     case "CONTENIDO_ENTREGADO":
@@ -405,6 +450,6 @@ export function siguientePaso(
 /** Fecha que ordena el tablero: la del paso que sigue (las cerradas, al final). */
 export function vencimientoDelPaso(paso: PasoMedio): string | null {
   if (paso.tipo === "accion") return paso.accion.venceAt
-  if (paso.tipo === "reclamo") return paso.hasta
+  if (paso.tipo === "reclamo") return paso.reclamada ? null : paso.hasta
   return null
 }

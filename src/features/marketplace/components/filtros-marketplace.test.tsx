@@ -155,13 +155,18 @@ describe("FiltrosMarketplace", () => {
 
     await usuario.click(screen.getByRole("button", { name: "Limpiar filtros" }))
 
-    expect(ultimaUrl(alActualizar)).toBe("?orden=pago")
-    expect(
-      screen.queryByRole("button", { name: "Limpiar filtros" })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole("group", { name: "Filtros de las ofertas" })
-    ).toHaveFocus()
+    // Limpiar corre en una transición: bajo carga, la URL y el foco llegan después.
+    await waitFor(() => expect(ultimaUrl(alActualizar)).toBe("?orden=pago"))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Limpiar filtros" })
+      ).not.toBeInTheDocument()
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole("group", { name: "Filtros de las ofertas" })
+      ).toHaveFocus()
+    )
   })
 
   it("un valor de la URL sin nombre conocido no muestra su id", () => {

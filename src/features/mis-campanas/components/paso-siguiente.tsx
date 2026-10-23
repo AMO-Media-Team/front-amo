@@ -19,6 +19,7 @@ import {
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { CuentaRegresiva } from "@/components/tiempo/cuenta-regresiva"
 import { useAhora } from "@/components/tiempo/use-ahora"
+import { rutaDisputaMedio } from "@/features/disputas/rutas"
 import { formatearFechaHora } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +37,7 @@ const ICONOS_ACCION: Readonly<Record<TipoAccionMedio, LucideIcon>> = {
   CORREGIR_EVIDENCIA: PencilLine,
   CARGAR_METRICA: ChartColumn,
   CORREGIR_METRICAS: PencilLine,
+  RECLAMAR: Scale,
 }
 
 /** Un corte que aún no se cumple no es urgente: siempre en tono neutro. */
@@ -110,7 +112,7 @@ function NotaPlazo({ accion, ahora }: { accion: AccionMedio; ahora: Date }) {
       <p className="text-xs text-muted-foreground">
         {ES_METRICA.has(accion.tipo)
           ? "Aún puedes cargarlas: el equipo AMO verá que llegaron tarde."
-          : "El plazo ya pasó: si crees que es un error, escríbele al equipo AMO."}
+          : "El plazo ya pasó. Si publicaste a tiempo y no alcanzaste a cargar la evidencia, podrás reclamar desde aquí cuando la campaña aparezca como vencida."}
       </p>
     )
   }
@@ -207,56 +209,14 @@ export function PasoSiguiente({
   }
 
   if (paso.tipo === "reclamo") {
-    const abierto =
-      paso.hasta !== null && new Date(paso.hasta).getTime() > ahora.getTime()
     return (
-      <div className={cn("flex items-start gap-2.5", className)}>
-        <span
-          aria-hidden
-          className={cn(
-            "grid shrink-0 place-items-center rounded-lg bg-destructive/10 text-destructive",
-            enFicha ? "size-10" : "size-8"
-          )}
-        >
-          <TimerOff className="size-4" />
-        </span>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <p
-            className={cn(
-              "leading-snug font-semibold",
-              enFicha ? "text-base" : "text-sm"
-            )}
-          >
-            {abierto
-              ? "Puedes reclamar si publicaste a tiempo"
-              : "El plazo para publicar se venció"}
-          </p>
-          {abierto && paso.hasta ? (
-            <>
-              <CuentaRegresiva
-                venceAt={paso.hasta}
-                ahoraServidor={ahoraServidor}
-                etiqueta="Plazo para reclamar"
-                textos={{ pendiente: "Reclama en", vencido: "Cerró hace" }}
-              />
-              {enFicha ? (
-                <p className="text-sm text-pretty text-muted-foreground">
-                  Tienes hasta el {formatearFechaHora(paso.hasta)}. Muy pronto
-                  podrás abrir el reclamo desde aquí; mientras tanto, el equipo
-                  AMO lo atiende directamente: escríbele y menciona esta
-                  campaña.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-sm text-pretty text-muted-foreground">
-              {paso.hasta
-                ? `El plazo para reclamar terminó el ${formatearFechaHora(paso.hasta)}.`
-                : "El cupo se liberó para otro medio."}
-            </p>
-          )}
-        </div>
-      </div>
+      <PasoReclamo
+        paso={paso}
+        ahora={ahora}
+        ahoraServidor={ahoraServidor}
+        enFicha={enFicha}
+        className={className}
+      />
     )
   }
 
@@ -304,6 +264,133 @@ export function PasoSiguiente({
           <p className="text-sm text-pretty text-muted-foreground">
             {descripcion}
           </p>
+        ) : null}
+        {paso.disputa && paso.asignacionId ? (
+          <EnlaceDisputa
+            asignacionId={paso.asignacionId}
+            texto={
+              paso.tipo === "espera" && paso.reclamo
+                ? "Ver tu reclamo"
+                : "Ver la disputa"
+            }
+          />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** Enlace secundario a la página de la disputa (sobre el área de toque de la tarjeta). */
+function EnlaceDisputa({
+  asignacionId,
+  texto,
+  principal = false,
+}: {
+  asignacionId: string
+  texto: string
+  principal?: boolean
+}) {
+  return (
+    <EnlaceBoton
+      href={rutaDisputaMedio(asignacionId)}
+      size="sm"
+      variant={principal ? "default" : "outline"}
+      className="relative z-10 mt-1.5 w-fit max-sm:w-full"
+    >
+      {principal ? null : <Scale data-icon="inline-start" aria-hidden />}
+      {texto}
+      {principal ? <ArrowRight data-icon="inline-end" aria-hidden /> : null}
+    </EnlaceBoton>
+  )
+}
+
+/**
+ * Una vencida (MED-011 c2): el plazo para reclamar con su cuenta regresiva y
+ * el botón que abre el reclamo; si ya lo reclamó, que lo revisamos y su
+ * resultado; si el plazo terminó, desde cuándo.
+ */
+function PasoReclamo({
+  paso,
+  ahora,
+  ahoraServidor,
+  enFicha,
+  className,
+}: {
+  paso: Extract<PasoMedio, { tipo: "reclamo" }>
+  ahora: Date
+  ahoraServidor: number
+  enFicha: boolean
+  className?: string
+}) {
+  const abierto =
+    !paso.reclamada &&
+    paso.hasta !== null &&
+    new Date(paso.hasta).getTime() > ahora.getTime()
+  const titulo = paso.reclamada
+    ? "Ya reclamaste esta publicación"
+    : abierto
+      ? "Puedes reclamar si publicaste a tiempo"
+      : "El plazo para publicar se venció"
+  return (
+    <div className={cn("flex items-start gap-2.5", className)}>
+      <span
+        aria-hidden
+        className={cn(
+          "grid shrink-0 place-items-center rounded-lg",
+          paso.reclamada
+            ? "bg-muted text-muted-foreground"
+            : "bg-destructive/10 text-destructive",
+          enFicha ? "size-10" : "size-8"
+        )}
+      >
+        {paso.reclamada ? (
+          <Scale className="size-4" />
+        ) : (
+          <TimerOff className="size-4" />
+        )}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p
+          className={cn(
+            "leading-snug font-semibold",
+            enFicha ? "text-base" : "text-sm"
+          )}
+        >
+          {titulo}
+        </p>
+        {paso.reclamada ? (
+          <p className="text-sm text-pretty text-muted-foreground">
+            El equipo AMO revisó tu reclamo y la campaña sigue vencida.
+          </p>
+        ) : abierto && paso.hasta ? (
+          <>
+            <CuentaRegresiva
+              venceAt={paso.hasta}
+              ahoraServidor={ahoraServidor}
+              etiqueta="Plazo para reclamar"
+              textos={{ pendiente: "Reclama en", vencido: "Cerró hace" }}
+            />
+            {enFicha ? (
+              <p className="text-sm text-pretty text-muted-foreground">
+                Tienes hasta el {formatearFechaHora(paso.hasta)}. Cuéntanos qué
+                pasó y, si puedes, comparte el enlace o una captura de tu
+                publicación: el equipo AMO lo revisa.
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-pretty text-muted-foreground">
+            {paso.hasta
+              ? `El plazo para reclamar terminó el ${formatearFechaHora(paso.hasta)}.`
+              : "El cupo se liberó para otro medio."}
+          </p>
+        )}
+        {paso.asignacionId && (abierto || paso.reclamada) ? (
+          <EnlaceDisputa
+            asignacionId={paso.asignacionId}
+            texto={paso.reclamada ? "Ver tu reclamo" : "Reclamar: sí publiqué"}
+            principal={abierto}
+          />
         ) : null}
       </div>
     </div>

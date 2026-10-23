@@ -116,7 +116,7 @@ export function presentarSituacion(
       return {
         titulo: "Tu medio está suspendido",
         descripcion:
-          "Mientras siga suspendido no verás ofertas nuevas ni podrás aceptarlas. Si crees que es un error, escríbele al equipo de AMO.",
+          "Mientras siga suspendido no verás ofertas nuevas ni podrás aceptarlas. El equipo AMO revisa tus campañas en curso; mientras no te avisemos que se cancelan, puedes seguir cumpliéndolas.",
         tono: "aviso",
       }
   }

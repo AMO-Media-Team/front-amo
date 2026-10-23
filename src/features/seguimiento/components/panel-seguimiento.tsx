@@ -83,9 +83,12 @@ function novedadDe(cambios: CambiosSeguimiento, id: string): Novedad {
 export function PanelSeguimiento({
   inicial,
   estadoCampana,
+  puedeDisputar = false,
 }: {
   inicial: SeguimientoCampana
   estadoCampana: EstadoCampana
+  /** `disputas.abrir`: cada tarjeta ofrece reportar un problema o ver su disputa. */
+  puedeDisputar?: boolean
 }) {
   const [datos, setDatos] = useState(() => masReciente(inicial))
   const actuales = useRef(datos)
@@ -351,6 +354,8 @@ export function PanelSeguimiento({
                     destacada={asignacion.id === pedida}
                     novedad={novedadDe(cambios, asignacion.id)}
                     ahoraServidor={ahoraServidor}
+                    campanaId={inicial.campanaId}
+                    puedeDisputar={puedeDisputar}
                   />
                 </li>
               ))}
