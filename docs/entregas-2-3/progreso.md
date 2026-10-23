@@ -9,7 +9,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
-| P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
+| P4   | Validación de evidencias y métricas, disputas, suspensión                               | 🔧     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
 
@@ -187,3 +187,11 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   superadministradores, secreto de Vault; advisors sin ERROR (WARN nuevos esperados: `marketplace_medio`,
   `marketplace_facetas`, `impedimentos_aceptar`, `mi_elegibilidad_marketplace` y `seguimiento_campana`, definer con permiso
   y medio o empresa comprobados por dentro).
+- 2026-10-23 · **Fase 4 en curso.** Mapeo (4 lectores) con borrador de migración probado. Migración
+  `20261023171316_e3_validacion` (E3a, §3.12 de `docs/modelo-datos.md`, D65–D74) aplicada en local: validación atómica de
+  evidencias y métricas, corrección auditada, cancelación con causa y suspensión, alertas por cuenta persistentes y ocultas al
+  medio y al anunciante, colas del equipo, puerta a pago sin pendientes, reclamo de vencidas con motivo Otro, mensajes de
+  disputa con su parte, métricas durante la disputa, `asignacion.reabierta` y `soporte.correo`; 20 suites en verde tras
+  ajustar las expectativas que cambiaron. Preparación del líder: navegación «Validación» y «Disputas», `/ir` de las disputas,
+  rutas, configuración de texto libre, proyecto E2E `validacion` y brief `fase-4.md` (commit `e3757d4`). Workflow de
+  implementación con 7 paquetes (VA, AS, MS, DI → DX, E0, SQ).

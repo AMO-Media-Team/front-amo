@@ -203,5 +203,13 @@ Geist (UI), Geist Mono / `tabular-nums` (cifras). Detalle completo en `docs/marc
 - `page.goto`, `page.reload` y los ingresos de `e2e/utilidades` esperan a que React revele el contenido que llegó por
   streaming (`esperarStreaming`): mientras tanto la copia del servidor sigue oculta en `div#S:n` y `getByLabel` o
   `getByText` la cuentan. Para lo demás, busca por rol o dentro de un contenedor visible (`getByRole("main")`, el formulario).
-- `pnpm pruebas:pauta-e2e` comprueba las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
+- Proyecto `validacion` (`validacion-*` y `disputas-*`, en serie, después de `pauta-medio` y `anunciante`): el equipo AMO
+  valida, verifica, cancela, suspende y resuelve disputas. Fábricas en `e2e/utilidades/validacion.ts` (colas, disputas,
+  cancelar, suspender, `ingresarComoOperaciones`, `vencerAsignacionE2E` —solo contra la base local: lleva el plazo al pasado y
+  corre `private.vencer_asignaciones()`— y `restablecerValidacionE2E()` en el `beforeAll` y el `afterAll`, con campañas
+  «Validación E2E»). Cuentas propias: OPERACIONES con TOTP (`E2E_OPERACIONES_*`) y «Medio Suspensión E2E»
+  (`E2E_MEDIO_SUSPENSION_*`, verificado en Barranquilla para no recibir las ofertas del «Medio E2E»). Las limpiezas cierran
+  las disputas y los reclamos pendientes; una disputa con mensajes, igual que una descarga, no se puede borrar. Los specs de
+  `pauta-medio-*` y `anunciante-*` no llaman a `restablecerValidacionE2E()`.
+- `pnpm pruebas:pauta-e2e` y `pnpm pruebas:validacion-e2e` comprueban las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
   de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia).
