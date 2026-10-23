@@ -4,15 +4,15 @@ import { cache } from "react"
 
 import type { FilaKpi } from "@/components/kpi/tipos"
 import { numero } from "@/features/dashboard/insights/adaptadores"
+import { PLAZO_CARGA_HORAS_POR_DEFECTO } from "@/features/mis-campanas/siguiente-accion"
 
 import { filasKpi } from "../kpi"
 import { clientePanel, fallar } from "../servidor"
 import {
   type AccionPendiente,
-  type AsignacionEnCurso,
   ESTADOS_EN_CURSO,
   type GranularidadGanancias,
-  type OfertaDelNegocio,
+  type NegocioEnCurso,
   type PuntoGanancias,
   UMBRALES_TOPE_POR_DEFECTO,
 } from "./datos"
@@ -20,7 +20,8 @@ import {
 /**
  * Consultas del panel del medio. El medio no lee `asignaciones` ni
  * `asignacion_montos` en la tabla base (§3.6): sus RPC son definer y filtran
- * por `mi_medio_id()`. Su ficha y los niveles sí se leen por RLS.
+ * por `mi_medio_id()`. Su ficha, los niveles y la configuración pública sí se
+ * leen por RLS.
  */
 
 const n = (valor: number | string | null | undefined) => numero(valor) ?? 0
@@ -78,12 +79,20 @@ export const proximasAcciones = cache(
       ofertaTitulo: fila.oferta_titulo,
       accion: fila.accion,
       venceAt: fila.vence_at,
+      numero: fila.numero ?? null,
+      corte: fila.corte ?? null,
+      metricaId: fila.metrica_id ?? null,
     }))
   }
 )
 
+/**
+ * Asignaciones en curso, de la más reciente a la más antigua (`id` es un
+ * UUID v7), con su oferta: `mis_asignaciones_medio` trae el título y la marca
+ * (exige `asignaciones.ver_propias`; sin él no devuelve filas).
+ */
 export const asignacionesEnCurso = cache(
-  async (limite: number): Promise<AsignacionEnCurso[]> => {
+  async (limite: number): Promise<NegocioEnCurso[]> => {
     const supabase = await clientePanel()
     const { data, error } = await supabase.rpc("mis_asignaciones_medio", {
       p_estados: [...ESTADOS_EN_CURSO],
@@ -96,36 +105,34 @@ export const asignacionesEnCurso = cache(
       estado: fila.estado,
       plataforma: fila.plataforma,
       montoMedio: numero(fila.monto_medio),
+      titulo: fila.oferta_titulo?.trim() || null,
+      marca: fila.marca?.trim() || null,
+      handle: fila.handle ?? null,
+      publicaciones: fila.publicaciones,
     }))
   }
 )
 
 /**
- * Título y marca de una oferta en la que el medio tiene asignación
- * (`ofertas_para_medio` es definer y exige `ofertas.marketplace`: el medio no
- * lee `ofertas` en la tabla base). Es un dato de apoyo: si falla, `null` y el
- * negocio se muestra sin nombre.
+ * Horas para cargar un corte una vez cumplido (`metricas.plazo_carga_horas`,
+ * pública): con ellas se sabe desde cuándo se habilita cada corte. Si no se
+ * puede leer rige el valor sembrado, el mismo con el que la RPC calcula el
+ * vencimiento.
  */
-const ofertaDelNegocio = cache(
-  async (ofertaId: string): Promise<OfertaDelNegocio | null> => {
-    const supabase = await clientePanel()
-    const { data, error } = await supabase.rpc("ofertas_para_medio", {
-      p_oferta_id: ofertaId,
-    })
-    const oferta = error ? undefined : data.at(0)
-    return oferta
-      ? { id: oferta.id, titulo: oferta.titulo, marca: oferta.marca }
+export const plazoCargaHoras = cache(async (): Promise<number> => {
+  const supabase = await clientePanel()
+  const { data } = await supabase
+    .from("configuracion")
+    .select("valor")
+    .eq("clave", "metricas.plazo_carga_horas")
+    .maybeSingle()
+  const valor = numero(
+    typeof data?.valor === "number" || typeof data?.valor === "string"
+      ? data.valor
       : null
-  }
-)
-
-/** Ofertas de los negocios en curso (una consulta por oferta, en paralelo). */
-export async function ofertasDeNegocios(
-  ofertaIds: readonly string[]
-): Promise<OfertaDelNegocio[]> {
-  const ofertas = await Promise.all(ofertaIds.map(ofertaDelNegocio))
-  return ofertas.filter((oferta) => oferta !== null)
-}
+  )
+  return valor !== null && valor > 0 ? valor : PLAZO_CARGA_HORAS_POR_DEFECTO
+})
 
 /** Valor que siembra la migración (`medios.n_minimo_cumplimiento`). */
 const N_MINIMO_CUMPLIMIENTO_POR_DEFECTO = 3

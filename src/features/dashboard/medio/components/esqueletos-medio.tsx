@@ -88,13 +88,17 @@ export function EsqueletoReputacion({ className }: { className?: string }) {
 /**
  * Mientras se lee la situación del medio aún no se sabe si irá su panel o su
  * lista de alta: la primera franja de ambos (una tarjeta destacada y una
- * lista), en la rejilla del panel.
+ * lista), en la columna principal del panel; en escritorio, la columna de
+ * consulta empieza por el tope.
  */
 export function EsqueletoInicioMedio() {
   return (
-    <div className="flex flex-col gap-4 sm:gap-5 @2xl/panel:grid @2xl/panel:grid-cols-2 @4xl/panel:grid-cols-3">
-      <EsqueletoHeroGanancias className="@2xl/panel:col-span-2" />
-      <EsqueletoLista filas={3} />
+    <div className="flex flex-col gap-4 sm:gap-5 @4xl/panel:grid @4xl/panel:grid-cols-3">
+      <div className="flex min-w-0 flex-col gap-4 sm:gap-5 @4xl/panel:col-span-2">
+        <EsqueletoHeroGanancias />
+        <EsqueletoLista filas={3} />
+      </div>
+      <EsqueletoTopeAnual className="hidden @4xl/panel:flex" />
     </div>
   )
 }

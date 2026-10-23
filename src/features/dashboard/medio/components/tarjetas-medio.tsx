@@ -3,7 +3,9 @@ import {
   ArrowRight,
   ArrowUpRight,
   Award,
+  ChevronRight,
   Gauge,
+  GraduationCap,
   Handshake,
   Info,
   Lock,
@@ -12,14 +14,20 @@ import {
   Star,
   TrendingUp,
 } from "lucide-react"
+import type { Route } from "next"
+import Link from "next/link"
 import { type CSSProperties, useId } from "react"
 
 import { Sparkline } from "@/components/charts/sparkline"
 import { presentarDelta, type TonoDelta } from "@/components/kpi/delta"
 import type { FilaKpi } from "@/components/kpi/tipos"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { NumeroAnimado } from "@/components/motion/numero-animado"
+import { formatearFactor } from "@/features/calidad-medio/calidad"
 import { NOMBRES_PLATAFORMA } from "@/features/dashboard/insights/textos"
 import type { Plataforma } from "@/features/dashboard/insights/tipos"
+import { rutaAsignacionMedio } from "@/features/mis-campanas/rutas"
+import { formatearHandle } from "@/features/operacion/formato"
 import {
   formatearCOP,
   formatearCOPCompacto,
@@ -30,6 +38,7 @@ import { cn } from "@/lib/utils"
 
 import { TarjetaPanel } from "../../components/tarjeta-panel"
 import {
+  enlazaSubirNivel,
   etiquetaEstado,
   ESTADOS_EN_CURSO,
   formatoMonto,
@@ -237,7 +246,11 @@ function mensajeTope(progreso: ProgresoTope, bloqueo: number): string {
   }
 }
 
-/** Avance del tope anual del nivel (§7.1.1), con el umbral de bloqueo marcado. */
+/**
+ * Avance del tope anual del nivel (§7.1.1), con el umbral de bloqueo marcado.
+ * Cerca del tope o en el bloqueo, con `enlaceNivel`, lleva a «Cómo subir de
+ * nivel» (DSH-006); en «Mi medio › Nivel» no se pasa: esa guía ya está ahí.
+ */
 export function ProgresoTopeAnual({
   progreso,
   consumido,
@@ -245,6 +258,7 @@ export function ProgresoTopeAnual({
   nivel,
   alerta,
   bloqueo,
+  enlaceNivel,
   className,
 }: {
   progreso: ProgresoTope
@@ -253,6 +267,7 @@ export function ProgresoTopeAnual({
   nivel: string
   alerta: number
   bloqueo: number
+  enlaceNivel?: Route | null
   className?: string
 }) {
   const estilo = ESTILOS_TOPE[progreso.estado]
@@ -333,6 +348,16 @@ export function ProgresoTopeAnual({
           <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
           {mensajeTope(progreso, bloqueo)}
         </p>
+        {enlaceNivel && enlazaSubirNivel(progreso) ? (
+          <EnlaceBoton
+            href={enlaceNivel}
+            variant="outline"
+            className="w-full sm:w-fit"
+          >
+            <GraduationCap data-icon="inline-start" aria-hidden />
+            Cómo subir de nivel
+          </EnlaceBoton>
+        ) : null}
       </div>
     </TarjetaPanel>
   )
@@ -356,13 +381,17 @@ export function Reputacion({
   cumplimiento,
   calificacion,
   multiplicador,
+  notaMultiplicador,
   publicaciones,
   nMinimoCumplimiento,
   className,
 }: {
   cumplimiento: FilaKpi | undefined
   calificacion: number | null
+  /** El vigente más bajo de sus cuentas (`resumenMultiplicador`). */
   multiplicador: number | null
+  /** El cambio anunciado o de cuántas cuentas es (sin ella, qué hace). */
+  notaMultiplicador?: string | null
   publicaciones: number | null
   nMinimoCumplimiento: number
   className?: string
@@ -394,8 +423,9 @@ export function Reputacion({
       etiqueta: "Multiplicador",
       Icono: TrendingUp,
       valor:
-        multiplicador === null ? "—" : `${formatearNumero(multiplicador, 2)} ×`,
-      nota: "Ajusta tu tarifa según tu desempeño",
+        multiplicador === null ? "—" : `${formatearFactor(multiplicador)} ×`,
+      nota:
+        notaMultiplicador || "Ajusta tu pago según el alcance de tus cuentas",
     },
   ]
   return (
@@ -446,22 +476,112 @@ function nombrePlataforma(plataforma: string): string {
   return esPlataforma(plataforma) ? NOMBRES_PLATAFORMA[plataforma] : plataforma
 }
 
+/** «Instagram @medio» o solo la red si no hay cuenta. */
+function redYCuenta(negocio: NegocioEnCurso): string {
+  const red = nombrePlataforma(negocio.plataforma)
+  return negocio.handle ? `${red} ${formatearHandle(negocio.handle)}` : red
+}
+
+function Negocio({
+  negocio,
+  conEnlace,
+}: {
+  negocio: NegocioEnCurso
+  conEnlace: boolean
+}) {
+  const pasos = ESTADOS_EN_CURSO.length
+  const paso = pasoEstado(negocio.estado)
+  const estado = etiquetaEstado(negocio.estado)
+  const titulo = negocio.titulo ?? estado
+  return (
+    <li
+      className={cn(
+        "relative -mx-2 flex flex-col gap-2 rounded-lg px-2 py-1.5",
+        conEnlace &&
+          "transition-colors duration-200 hover:bg-accent/40 has-[a:focus-visible]:anillo-foco motion-reduce:transition-none"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3 text-[0.8125rem]">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          {conEnlace ? (
+            <Link
+              href={rutaAsignacionMedio(negocio.id)}
+              title={negocio.titulo ?? undefined}
+              className="truncate font-medium outline-none after:absolute after:inset-0 after:content-['']"
+            >
+              {titulo}
+            </Link>
+          ) : (
+            <span
+              className="truncate font-medium"
+              title={negocio.titulo ?? undefined}
+            >
+              {titulo}
+            </span>
+          )}
+          <span className="truncate text-xs text-muted-foreground">
+            {[
+              negocio.titulo ? estado : null,
+              negocio.marca,
+              redYCuenta(negocio),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1">
+          <span
+            className="font-semibold cifras"
+            title="Valor para ti, antes de retenciones"
+          >
+            {dinero(negocio.montoMedio)}
+          </span>
+          {conEnlace ? (
+            <ChevronRight
+              aria-hidden
+              className="size-4 text-muted-foreground"
+            />
+          ) : null}
+        </span>
+      </div>
+      <div
+        className="flex gap-1"
+        role="img"
+        aria-label={`Paso ${paso} de ${pasos}: ${estado}`}
+      >
+        {ESTADOS_EN_CURSO.map((etapa, indice) => (
+          <span
+            key={etapa}
+            className={cn(
+              "h-1 flex-1 rounded-full",
+              indice < paso ? "bg-primary" : "bg-primary/15"
+            )}
+          />
+        ))}
+      </div>
+    </li>
+  )
+}
+
 /**
  * Negocios en ejecución con su paso (descargar → publicar → métricas). Cada
- * uno se nombra por su oferta; el estado y la red van debajo. Sin el nombre
- * (rol sin marketplace), el estado hace de título.
+ * uno se nombra por su oferta (el estado, la marca y la cuenta van debajo) y,
+ * con `enlaceTodas`, lleva a su ficha en «Mis campañas».
  */
 export function NegociosEnCurso({
   negocios,
   activas,
+  enlaceTodas,
   className,
 }: {
   negocios: readonly NegocioEnCurso[]
   activas: number | null
+  /** «Mis campañas»: con ella, cada negocio enlaza a su ficha. */
+  enlaceTodas?: Route | null
   className?: string
 }) {
-  const pasos = ESTADOS_EN_CURSO.length
   const ocultos = Math.max(0, (activas ?? 0) - negocios.length)
+  const conEnlace = Boolean(enlaceTodas)
   return (
     <TarjetaPanel
       titulo="Negocios en curso"
@@ -481,6 +601,11 @@ export function NegociosEnCurso({
           ? `Y ${formatearNumero(ocultos)} más en curso (se muestran los más recientes).`
           : null
       }
+      enlace={
+        enlaceTodas && negocios.length > 0
+          ? { href: enlaceTodas, texto: "Ver mis campañas" }
+          : undefined
+      }
     >
       {negocios.length === 0 ? (
         <p className="rounded-lg border border-dashed bg-background/40 p-4 text-[0.8125rem] text-muted-foreground">
@@ -488,56 +613,10 @@ export function NegociosEnCurso({
           hasta que se verifiquen sus métricas.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3.5">
-          {negocios.map((negocio) => {
-            const paso = pasoEstado(negocio.estado)
-            const estado = etiquetaEstado(negocio.estado)
-            const plataforma = nombrePlataforma(negocio.plataforma)
-            return (
-              <li key={negocio.id} className="flex flex-col gap-2">
-                <div className="flex items-start justify-between gap-3 text-[0.8125rem]">
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span
-                      className="truncate font-medium"
-                      title={negocio.titulo ?? undefined}
-                    >
-                      {negocio.titulo ?? estado}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {[
-                        negocio.titulo ? estado : null,
-                        negocio.marca,
-                        plataforma,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </span>
-                  <span
-                    className="shrink-0 font-semibold cifras"
-                    title="Valor para ti, antes de retenciones"
-                  >
-                    {dinero(negocio.montoMedio)}
-                  </span>
-                </div>
-                <div
-                  className="flex gap-1"
-                  role="img"
-                  aria-label={`Paso ${paso} de ${pasos}: ${estado}`}
-                >
-                  {ESTADOS_EN_CURSO.map((etapa, indice) => (
-                    <span
-                      key={etapa}
-                      className={cn(
-                        "h-1 flex-1 rounded-full",
-                        indice < paso ? "bg-primary" : "bg-primary/15"
-                      )}
-                    />
-                  ))}
-                </div>
-              </li>
-            )
-          })}
+        <ul className="flex flex-col gap-2">
+          {negocios.map((negocio) => (
+            <Negocio key={negocio.id} negocio={negocio} conEnlace={conEnlace} />
+          ))}
         </ul>
       )}
     </TarjetaPanel>
