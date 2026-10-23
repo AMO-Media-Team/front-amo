@@ -369,6 +369,8 @@ begin
     r := r || jsonb_build_object('c6_no_cotiza_cuenta_ajena', sqlerrm = 'AMO_NO_AUTORIZADO');
   end;
   execute 'reset role';
+  -- La suite tiene 3 medios en F1: el estimador los muestra con un mínimo de anonimato de 3 (por defecto 5).
+  update public.configuracion set valor = '3' where clave = 'ofertas.estimador_n_minimo';
   perform set_config('request.jwt.claims', c_ana, true);
   execute 'set local role authenticated';
   select * into v_rec from public.estimar_oferta(f_post, '{}', '{}', '{}', null, jsonb_build_object(fr1::text, 3));
@@ -528,8 +530,12 @@ begin
   exception when others then
     r := r || jsonb_build_object('d20_presupuesto_bajo_comprometido', sqlerrm = 'AMO_PRESUPUESTO_CAMPANA');
   end;
-  update public.campanas set presupuesto_total = 800000 where id = c1;
+  -- Fixture: total por debajo de lo que reservan sus ofertas para forzar el tope en la reserva (desde
+  -- e2_anunciantes_ofertas la BD no deja hacerlo por la API; solo la carga lo salta).
   execute 'reset role';
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.campanas set presupuesto_total = 800000 where id = c1;
+  perform set_config('amo.modo_carga', '', true);
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
   begin

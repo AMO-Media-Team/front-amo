@@ -170,6 +170,7 @@ export type Database = {
           es_demo: boolean
           estado_verificacion: Database["public"]["Enums"]["anunciante_estado"]
           id: string
+          identificacion_cambiada_at: string | null
           identificacion_extranjera: string | null
           logo_path: string | null
           motivo_estado: string | null
@@ -196,6 +197,7 @@ export type Database = {
           es_demo?: boolean
           estado_verificacion?: Database["public"]["Enums"]["anunciante_estado"]
           id?: string
+          identificacion_cambiada_at?: string | null
           identificacion_extranjera?: string | null
           logo_path?: string | null
           motivo_estado?: string | null
@@ -222,6 +224,7 @@ export type Database = {
           es_demo?: boolean
           estado_verificacion?: Database["public"]["Enums"]["anunciante_estado"]
           id?: string
+          identificacion_cambiada_at?: string | null
           identificacion_extranjera?: string | null
           logo_path?: string | null
           motivo_estado?: string | null
@@ -3736,6 +3739,14 @@ export type Database = {
           nombre_comercial: string
           sector_id: string
         }[]
+      }
+      archivar_campana_srv: {
+        Args: { p_actor_id: string; p_campana_id: string; p_session_id: string }
+        Returns: undefined
+      }
+      archivar_oferta_srv: {
+        Args: { p_actor_id: string; p_oferta_id: string; p_session_id: string }
+        Returns: undefined
       }
       autorizar_gestion_usuario_srv: {
         Args: {

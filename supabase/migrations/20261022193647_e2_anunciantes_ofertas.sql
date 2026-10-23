@@ -21,8 +21,8 @@
 
 insert into public.configuracion
   (clave, valor, tipo, minimo, maximo, opciones, modulo, descripcion, unidad, es_publica, pendiente_validacion) values
-  ('ofertas.estimador_n_minimo', '3', 'ENTERO', 1, 50, null, 'ofertas',
-   'Medios elegibles mínimos por franja para mostrar precio, inversión y alcance estimados sin revelar a un medio.',
+  ('ofertas.estimador_n_minimo', '5', 'ENTERO', 3, 50, null, 'ofertas',
+   'Medios elegibles mínimos por franja para mostrar cuántos son, el precio, la inversión y el alcance estimados sin revelar a un medio.',
    'medios', true, false),
   ('archivos.tolerancia_aspecto', '0.02', 'DECIMAL', 0, 0.2, null, 'archivos',
    'Diferencia relativa admitida entre la relación de aspecto de un creativo y la que exige su formato.',
@@ -53,6 +53,10 @@ alter table public.anunciantes add column enviado_verificacion_at timestamptz;
 create index anunciantes_cola_verificacion_idx on public.anunciantes (enviado_verificacion_at)
   where estado_verificacion = 'PENDIENTE' and deleted_at is null;
 
+-- Último cambio de la identificación (NIT, DV, país, identificación extranjera o razón social) antes de verificar: los
+-- documentos aprobados antes no la respaldan.
+alter table public.anunciantes add column identificacion_cambiada_at timestamptz;
+
 alter table public.anunciantes add constraint anunciantes_identificacion_ext_chk
   check (pais_iso2 = 'CO' or identificacion_extranjera is not null);
 
@@ -71,6 +75,12 @@ begin
      and not private.tiene_permiso('anunciantes.editar') then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO',
       detail = 'La razón social y la identificación tributaria de una empresa verificada solo las corrige el equipo de AMO.';
+  end if;
+
+  if tg_op = 'UPDATE' and old.estado_verificacion not in ('VERIFICADO', 'SUSPENDIDO')
+     and (new.nit, new.digito_verificacion, new.identificacion_extranjera, new.pais_iso2, new.razon_social)
+         is distinct from (old.nit, old.digito_verificacion, old.identificacion_extranjera, old.pais_iso2, old.razon_social) then
+    new.identificacion_cambiada_at := private.ahora();
   end if;
 
   if new.pais_iso2 = 'CO'
@@ -98,32 +108,41 @@ create trigger trg_anunciantes_b_identificacion
 -- existencia de la empresa (Cámara de Comercio u otro equivalente; un certificado bancario no lo es).
 create or replace function private.validar_verificacion_anunciante(p_anunciante_id uuid) returns void
 language plpgsql stable security definer set search_path = '' as $$
-declare v_pais char(2); v_faltan text[];
+declare v_pais char(2); v_cambio timestamptz; v_faltan text[];
 begin
-  select a.pais_iso2 into v_pais from public.anunciantes a where a.id = p_anunciante_id;
+  select a.pais_iso2, a.identificacion_cambiada_at into v_pais, v_cambio from public.anunciantes a where a.id = p_anunciante_id;
   if v_pais = 'CO' then
     select coalesce(array_agg(private.nombre_documento(x.tipo::text) order by x.tipo), '{}') into v_faltan
     from unnest(array['RUT', 'CAMARA_COMERCIO']::public.documento_anunciante_tipo[]) as x (tipo)
     where not exists (select 1 from public.documentos_anunciante d
                       where d.anunciante_id = p_anunciante_id and d.tipo = x.tipo and d.estado_validacion = 'APROBADO'
-                        and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy()));
+                        and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy())
+                        and (v_cambio is null or d.validado_at >= v_cambio));
   elsif not exists (select 1 from public.documentos_anunciante d
                     where d.anunciante_id = p_anunciante_id and d.tipo in ('CAMARA_COMERCIO', 'OTRO')
                       and d.estado_validacion = 'APROBADO'
-                      and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy())) then
+                      and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy())
+                      and (v_cambio is null or d.validado_at >= v_cambio)) then
     v_faltan := array['un documento de existencia de la empresa'];
   end if;
   if cardinality(v_faltan) > 0 then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
-      detail = 'Faltan documentos aprobados y vigentes: ' || array_to_string(v_faltan, ', ') || '.';
+      detail = 'Faltan documentos aprobados y vigentes: ' || array_to_string(v_faltan, ', ') || '.'
+               || case when v_cambio is not null
+                            and exists (select 1 from public.documentos_anunciante d
+                                        where d.anunciante_id = p_anunciante_id and d.estado_validacion = 'APROBADO'
+                                          and d.validado_at < v_cambio)
+                       then ' La identificación de la empresa cambió después de aprobar algunos: deben cargarse y aprobarse de nuevo.'
+                       else '' end;
   end if;
 end $$;
 
 -- ADM-003 / ANU-001: el anunciante envía su empresa a la cola (o la reenvía tras un rechazo, que la devuelve a
--- PENDIENTE). Exige los documentos cargados (pendientes o aprobados); la decisión es del equipo AMO.
+-- PENDIENTE). Exige los documentos cargados (pendientes o aprobados) y la persona de contacto; la decisión es del
+-- equipo AMO.
 create function public.enviar_anunciante_a_verificacion_srv(p_anunciante_id uuid, p_actor_id uuid, p_session_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
-declare v_anunciante public.anunciantes; v_faltan text[] := '{}';
+declare v_anunciante public.anunciantes; v_faltan text[] := '{}'; v_contacto boolean;
 begin
   perform private.validar_actor(p_actor_id, 'anunciantes.editar_propio', p_session_id);
   if (select p.anunciante_id from public.perfiles p where p.id = p_actor_id) is distinct from p_anunciante_id then
@@ -141,17 +160,30 @@ begin
     from unnest(array['RUT', 'CAMARA_COMERCIO']::public.documento_anunciante_tipo[]) as x (tipo)
     where not exists (select 1 from public.documentos_anunciante d
                       where d.anunciante_id = p_anunciante_id and d.tipo = x.tipo
-                        and d.estado_validacion in ('PENDIENTE', 'APROBADO')
+                        and (d.estado_validacion = 'PENDIENTE'
+                             or (d.estado_validacion = 'APROBADO'
+                                 and (v_anunciante.identificacion_cambiada_at is null
+                                      or d.validado_at >= v_anunciante.identificacion_cambiada_at)))
                         and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy()));
   elsif not exists (select 1 from public.documentos_anunciante d
                     where d.anunciante_id = p_anunciante_id and d.tipo in ('CAMARA_COMERCIO', 'OTRO')
-                      and d.estado_validacion in ('PENDIENTE', 'APROBADO')
+                      and (d.estado_validacion = 'PENDIENTE'
+                           or (d.estado_validacion = 'APROBADO'
+                               and (v_anunciante.identificacion_cambiada_at is null
+                                    or d.validado_at >= v_anunciante.identificacion_cambiada_at)))
                       and (d.fecha_vencimiento is null or d.fecha_vencimiento >= private.hoy())) then
     v_faltan := array['un documento de existencia de la empresa'];
   end if;
-  if cardinality(v_faltan) > 0 then
+  v_contacto := exists (select 1 from public.anunciantes_privado p
+                        where p.anunciante_id = p_anunciante_id and p.contacto_nombre is not null
+                          and p.contacto_email is not null);
+  if cardinality(v_faltan) > 0 or not v_contacto then
     raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
-      detail = 'Antes de enviar carga: ' || array_to_string(v_faltan, ', ') || '.';
+      detail = 'Antes de enviar '
+               || concat_ws(' y ',
+                            case when cardinality(v_faltan) > 0 then 'carga: ' || array_to_string(v_faltan, ', ') end,
+                            case when not v_contacto then 'completa la persona de contacto (nombre y correo)' end)
+               || '.';
   end if;
   if v_anunciante.estado_verificacion = 'RECHAZADO' then
     perform private.aplicar_transicion('anunciantes', p_anunciante_id, 'PENDIENTE', 'ANUNCIANTE', p_actor_id, null, '{}');
@@ -273,6 +305,15 @@ begin
         hint = 'liquidacion_integridad';
     end if;
   end if;
+  -- ADM-005: la moderación decide sobre el envío que revisó. Si el anunciante retiró y reenvió la oferta mientras
+  -- tanto, `enviada_at` cambió y la decisión se rechaza (la interfaz manda el que mostró).
+  if p_entidad = 'ofertas' and p_desde = 'EN_REVISION' and p_actor_tipo = 'ADMIN'
+     and coalesce(p_datos, '{}') ? 'enviada_at'
+     and (select o.enviada_at from public.ofertas o where o.id = p_id) is distinct from (p_datos ->> 'enviada_at')::timestamptz then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El anunciante cambió la oferta mientras la revisabas: vuelve a abrirla para revisar lo que envió ahora.',
+      hint = 'oferta_reenviada';
+  end if;
   case
     when v_clave = 'medios:PENDIENTE→VERIFICADO' then
       perform private.validar_verificacion_medio(p_id, (p_datos ->> 'nivel')::smallint, true);
@@ -303,8 +344,10 @@ begin
           detail = 'La empresa debe estar verificada por AMO para activar campañas.';
       end if;
     when v_clave = 'campanas:ACTIVA→CANCELADA' then
+      -- ANU-014: lo verificado, liquidado o pagado ya está cumplido; solo bloquea lo que sigue en curso.
       if exists (select 1 from public.asignaciones a where a.campana_id = p_id
-                   and private.consume_cupo(a.estado, a.estado_previo_disputa)) then
+                   and private.consume_cupo(a.estado, a.estado_previo_disputa)
+                   and a.estado not in ('VERIFICADA', 'LIQUIDADA', 'PAGADA')) then
         raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
           detail = 'La campaña tiene asignaciones en curso: no se puede cancelar.';
       end if;
@@ -435,15 +478,9 @@ begin
     raise exception using errcode = 'P0001', message = 'AMO_PRESUPUESTO_CAMPANA',
       detail = 'El presupuesto no puede quedar por debajo de lo ya comprometido.';
   end if;
-  if (new.fecha_inicio, new.fecha_fin) is distinct from (old.fecha_inicio, old.fecha_fin)
-     and exists (select 1 from public.ofertas o
-                 where o.campana_id = new.id and o.deleted_at is null
-                   and o.estado in ('EN_REVISION', 'PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION')
-                   and (o.ventana_inicio < private.inicio_dia(new.fecha_inicio)
-                        or o.ventana_fin > private.inicio_dia(new.fecha_fin + 1))) then
-    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
-      detail = 'Hay ofertas en revisión o publicadas cuya ventana quedaría fuera de las nuevas fechas de la campaña.';
-  end if;
+  perform private.validar_campana_guardar(new.id, new.fecha_inicio, new.fecha_fin, new.presupuesto_total,
+                                          old.presupuesto_total,
+                                          (new.fecha_inicio, new.fecha_fin) is distinct from (old.fecha_inicio, old.fecha_fin));
   if current_user = 'postgres' then return new; end if;
   if private.hay_cambios(to_jsonb(old), to_jsonb(new), array['anunciante_id', 'presupuesto_comprometido', 'activada_at',
        'finalizada_at', 'cancelada_at', 'creada_por', 'es_demo', 'created_at']) then
@@ -473,6 +510,81 @@ language sql stable security definer set search_path = '' as $$
   where o.campana_id = p_campana_id and o.id is distinct from p_excluir and o.deleted_at is null
     and o.estado in ('EN_REVISION', 'PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION', 'VENCIDA', 'CERRADA') $$;
 revoke all on function private.comprometido_en_ofertas(uuid, uuid) from public, anon, authenticated;
+
+-- Guardas de la campaña que necesitan ver todas sus ofertas (el trigger corre con los permisos de quien edita y la RLS
+-- le ocultaría las ajenas a su rol): el total no baja de lo que reservan las ofertas vivas (ANU-003) y las fechas no
+-- dejan fuera la ventana de una oferta en revisión o publicada.
+create function private.validar_campana_guardar(p_campana_id uuid, p_inicio date, p_fin date, p_total numeric,
+                                                p_total_anterior numeric, p_fechas_cambian boolean) returns void
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if p_total < p_total_anterior and p_total < private.comprometido_en_ofertas(p_campana_id) then
+    raise exception using errcode = 'P0001', message = 'AMO_PRESUPUESTO_CAMPANA',
+      detail = 'El presupuesto no puede quedar por debajo de lo que reservan las ofertas en revisión o publicadas.';
+  end if;
+  if p_fechas_cambian
+     and exists (select 1 from public.ofertas o
+                 where o.campana_id = p_campana_id and o.deleted_at is null
+                   and o.estado in ('EN_REVISION', 'PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION')
+                   and (o.ventana_inicio < private.inicio_dia(p_inicio) or o.ventana_fin > private.inicio_dia(p_fin + 1))) then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Hay ofertas en revisión o publicadas cuya ventana quedaría fuera de las nuevas fechas de la campaña.';
+  end if;
+end $$;
+revoke all on function private.validar_campana_guardar(uuid, date, date, numeric, numeric, boolean) from public, anon;
+grant execute on function private.validar_campana_guardar(uuid, date, date, numeric, numeric, boolean)
+  to authenticated, service_role;
+
+-- Archivar (ocultar) lo que ya no sirve. La sesión del dueño no puede: la fila nueva dejaría de cumplir su política de
+-- lectura (`deleted_at is null`).
+create function public.archivar_campana_srv(p_campana_id uuid, p_actor_id uuid, p_session_id uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_tipo public.rol_tipo; c public.campanas;
+begin
+  v_tipo := private.validar_actor(p_actor_id, null, p_session_id);
+  select * into c from public.campanas x where x.id = p_campana_id and x.deleted_at is null for update;
+  if c.id is null
+     or not ((v_tipo = 'ANUNCIANTE' and private.tiene_permiso_de(p_actor_id, 'campanas.gestionar_propias')
+              and c.anunciante_id = (select p.anunciante_id from public.perfiles p where p.id = p_actor_id))
+             or (v_tipo = 'ADMIN' and private.tiene_permiso_de(p_actor_id, 'campanas.gestionar'))) then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+  end if;
+  if c.estado not in ('BORRADOR', 'CANCELADA', 'FINALIZADA') then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Solo se archivan campañas en borrador, canceladas o finalizadas.';
+  end if;
+  update public.ofertas o set deleted_at = private.ahora()
+  where o.campana_id = p_campana_id and o.deleted_at is null and o.estado in ('BORRADOR', 'CANCELADA', 'VENCIDA', 'CERRADA');
+  update public.campanas x set deleted_at = private.ahora() where x.id = p_campana_id;
+end $$;
+revoke all on function public.archivar_campana_srv(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.archivar_campana_srv(uuid, uuid, uuid) to service_role;
+
+create function public.archivar_oferta_srv(p_oferta_id uuid, p_actor_id uuid, p_session_id uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_tipo public.rol_tipo; o public.ofertas;
+begin
+  v_tipo := private.validar_actor(p_actor_id, null, p_session_id);
+  select * into o from public.ofertas x where x.id = p_oferta_id and x.deleted_at is null for update;
+  if o.id is null
+     or not ((v_tipo = 'ANUNCIANTE' and private.tiene_permiso_de(p_actor_id, 'ofertas.gestionar_propias')
+              and o.anunciante_id = (select p.anunciante_id from public.perfiles p where p.id = p_actor_id))
+             or (v_tipo = 'ADMIN' and private.tiene_permiso_de(p_actor_id, 'ofertas.gestionar'))) then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+  end if;
+  if o.estado not in ('BORRADOR', 'CANCELADA', 'VENCIDA', 'CERRADA') then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Solo se archivan borradores y ofertas terminadas.';
+  end if;
+  -- Una vencida con cupos tomados sigue en ejecución para esos medios hasta cerrar.
+  if o.estado = 'VENCIDA' and o.cupos_ocupados > 0 then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Hay medios publicando esta oferta: archívala cuando se cierre.';
+  end if;
+  update public.ofertas x set deleted_at = private.ahora() where x.id = p_oferta_id;
+end $$;
+revoke all on function public.archivar_oferta_srv(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.archivar_oferta_srv(uuid, uuid, uuid) to service_role;
 
 -- ANU-007: presupuesto que le queda a la campaña para una oferta (la que se edita no cuenta). Null si no se ve.
 create function public.disponible_campana(p_campana_id uuid, p_excluir_oferta uuid default null) returns numeric
@@ -585,6 +697,9 @@ begin
   elsif p_entidad = 'campanas' and p_hacia = 'CANCELADA' then
     for r in select o.id from public.ofertas o
              where o.campana_id = p_id and o.estado in ('BORRADOR', 'EN_REVISION', 'DEVUELTA', 'PUBLICADA', 'EN_EJECUCION')
+               -- Las que tienen obligaciones (cumplidas) se cierran solas con el cron.
+               and not exists (select 1 from public.asignaciones a
+                               where a.oferta_id = o.id and private.consume_cupo(a.estado, a.estado_previo_disputa))
              order by o.id loop
       perform private.aplicar_transicion('ofertas', r.id, 'CANCELADA', 'SISTEMA', null,
                                          coalesce(p_motivo, 'Cancelación de la campaña'));
@@ -611,6 +726,165 @@ begin
     perform private.ejecutar_transicion('asignaciones', v_asig, 'EN_DISPUTA', v_dest, 'ADMIN', p_actor_id, p_motivo, v_datos);
   end if;
   return v_res;
+end $function$;
+
+-- ANU-009 / ADM-005: el comentario de moderación queda en la oferta en cada devolución o rechazo.
+create or replace function private.aplicar_transicion(p_entidad text, p_id uuid, p_hacia text, p_actor_tipo transicion_actor, p_actor_id uuid, p_motivo text DEFAULT NULL::text, p_datos jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_col text := private.columna_estado(p_entidad);
+  v_tipo_col text;
+  v_desde text;
+  t private.transiciones_estado;
+  v_motivo text := nullif(btrim(p_motivo), '');
+  v_datos jsonb := coalesce(p_datos, '{}');
+  v_ahora timestamptz := private.ahora();
+  v_sets text[];
+  v_prev_aut text := current_setting('amo.transicion_autorizada', true);
+  v_prev_tipo text := current_setting('amo.actor_tipo', true);
+  v_prev_motivo text := current_setting('amo.motivo', true);
+  v_prev_actor text := current_setting('amo.actor_id', true);
+begin
+  if v_col is null then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Esta entidad no tiene estados.', hint = coalesce(p_entidad, 'null');
+  end if;
+  execute format('select t.%I::text from public.%I t where t.id = $1 for update', v_col, p_entidad) into v_desde using p_id;
+  if v_desde is null then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA', detail = 'El registro no existe.',
+      hint = p_entidad || ':' || coalesce(p_id::text, 'null');
+  end if;
+  select * into t from private.transiciones_estado x
+  where x.entidad = p_entidad and x.desde = v_desde and x.hacia = p_hacia and x.actor = p_actor_tipo;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El registro no puede pasar a ese estado desde el actual.',
+      hint = p_entidad || ':' || v_desde || '→' || coalesce(p_hacia, 'null') || ' (' || p_actor_tipo || ')';
+  end if;
+  if not private.modo_carga() then
+    if t.permiso is not null and not coalesce(private.tiene_permiso_de(p_actor_id, t.permiso), false) then
+      raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+    end if;
+    if t.requiere_motivo and v_motivo is null then
+      raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO', detail = 'Indica el motivo del cambio.';
+    end if;
+  end if;
+
+  select format_type(a.atttypid, a.atttypmod) into v_tipo_col
+  from pg_attribute a where a.attrelid = format('public.%I', p_entidad)::regclass and a.attname = v_col;
+  v_sets := array[format('%I = $1::%s', v_col, v_tipo_col)];
+  if t.columna_at is not null then
+    v_sets := v_sets || case t.modo_at
+      when 'PRIMERA' then format('%1$I = coalesce(%1$I, $2)', t.columna_at)
+      when 'SIEMPRE' then format('%I = $2', t.columna_at)
+      else format('%I = null', t.columna_at) end;
+  end if;
+
+  -- Columnas propias de la entidad y datos permitidos de p_datos (lista blanca por entidad).
+  case p_entidad
+    when 'perfiles' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if p_hacia = 'DESACTIVADO' then v_sets := v_sets || 'deleted_at = $2'::text; end if;
+      if p_hacia = 'INVITADO' then v_sets := v_sets || array['deleted_at = null', 'debe_cambiar_password = true']; end if;
+    when 'anunciantes' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if v_desde = 'PENDIENTE' and p_hacia = 'VERIFICADO' then v_sets := v_sets || 'verificado_por = $5'::text; end if;
+    when 'medios' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if p_hacia in ('PENDIENTE', 'RECHAZADO') then
+        v_sets := v_sets || 'nivel_verificacion = 0'::text;
+      elsif v_datos ? 'nivel' and p_hacia = 'VERIFICADO' and v_desde in ('PENDIENTE', 'VERIFICADO') then
+        v_sets := v_sets || ($s$nivel_verificacion = ($4 ->> 'nivel')::smallint$s$)::text;
+      end if;
+      if p_hacia = 'VERIFICADO' and v_desde in ('PENDIENTE', 'VERIFICADO') then
+        v_sets := v_sets || 'verificado_por = $5'::text;
+      end if;
+    when 'documentos_medio', 'documentos_anunciante' then
+      if p_hacia in ('APROBADO', 'RECHAZADO') then
+        v_sets := v_sets || array['validado_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      end if;
+      -- MED-003: quien aprueba puede fijar la vigencia del documento (cédula, certificados, seguridad social…).
+      if p_hacia = 'APROBADO' then
+        v_sets := v_sets || ($s$fecha_vencimiento = coalesce(($4 ->> 'fecha_vencimiento')::date, fecha_vencimiento)$s$)::text;
+      end if;
+    when 'verificaciones_cuenta' then
+      v_sets := v_sets || array['validada_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      if p_hacia = 'APROBADA' then
+        v_sets := v_sets || ($s$seguidores_verificados = coalesce(($4 ->> 'seguidores_verificados')::integer, seguidores_verificados, seguidores_reportados)$s$)::text;
+      end if;
+    when 'ofertas' then
+      -- E2d: también la devolución del sistema (fecha límite vencida en revisión) y el rechazo dejan su comentario.
+      if p_hacia = 'DEVUELTA' or (v_desde = 'EN_REVISION' and p_hacia = 'CANCELADA')
+         or (p_actor_tipo = 'ADMIN' and v_datos ? 'comentario_moderacion') then
+        v_sets := v_sets || ($s$comentario_moderacion = coalesce($4 ->> 'comentario_moderacion', $3, comentario_moderacion)$s$)::text;
+      end if;
+      if p_actor_tipo = 'ADMIN' and v_desde = 'EN_REVISION' then v_sets := v_sets || 'moderada_por = $5'::text; end if;
+    when 'asignaciones' then
+      if p_hacia = 'EN_DISPUTA' then
+        v_sets := v_sets || 'estado_previo_disputa = $6::public.asignacion_estado'::text;
+      elsif v_desde = 'EN_DISPUTA' then
+        v_sets := v_sets || 'estado_previo_disputa = null'::text;
+      end if;
+      if v_motivo is not null then v_sets := v_sets || 'motivo = $3'::text; end if;
+      if p_hacia = 'CANCELADA' then
+        if nullif(v_datos ->> 'causa', '') is null and not private.modo_carga() then
+          raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO',
+            detail = 'Indica la causa de la cancelación.';
+        end if;
+        v_sets := v_sets || ($s$causa_cancelacion = ($4 ->> 'causa')::public.cancelacion_causa$s$)::text;
+      end if;
+    when 'publicaciones' then
+      if p_hacia in ('APROBADA', 'RECHAZADA') then
+        v_sets := v_sets || array['validada_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      end if;
+      if p_hacia = 'APROBADA' then
+        v_sets := v_sets || ($s$etiqueta_verificada = coalesce(($4 ->> 'etiqueta_verificada')::boolean, etiqueta_verificada)$s$)::text;
+      end if;
+    when 'metricas' then
+      if p_hacia in ('APROBADA', 'RECHAZADA') then v_sets := v_sets || 'validada_por = $5'::text; end if;
+      v_sets := v_sets || ($s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$)::text;
+    when 'liquidaciones' then
+      if p_hacia = 'PAGADA' then
+        v_sets := v_sets || array[$s$fecha_pago = coalesce(($4 ->> 'fecha_pago')::date, fecha_pago)$s$,
+                                  $s$referencia_pago = coalesce($4 ->> 'referencia_pago', referencia_pago)$s$,
+                                  $s$soporte_pago_path = coalesce($4 ->> 'soporte_pago_path', soporte_pago_path)$s$];
+      end if;
+      if p_hacia = 'APROBADA' then v_sets := v_sets || 'aprobada_por = $5'::text; end if;
+    when 'documentos_soporte', 'facturas' then
+      -- Numeración DIAN: solo al emitir y en el mismo UPDATE que el estado (el borrador nunca tiene número).
+      if p_hacia in ('EMITIDO', 'EMITIDA') then
+        v_sets := v_sets || array[$s$resolucion_id = ($4 ->> 'resolucion_id')::uuid$s$, $s$prefijo = $4 ->> 'prefijo'$s$,
+                                  $s$consecutivo = ($4 ->> 'consecutivo')::bigint$s$,
+                                  $s$fecha_emision = ($4 ->> 'fecha_emision')::date$s$];
+        if p_entidad = 'facturas' then
+          v_sets := v_sets || ($s$fecha_vencimiento = coalesce(($4 ->> 'fecha_vencimiento')::date, fecha_vencimiento)$s$)::text;
+        end if;
+      end if;
+    when 'disputas' then
+      if p_hacia in ('RESUELTA', 'DESCARTADA') then
+        v_sets := v_sets || array['resuelta_por = $5', $s$resolucion = coalesce($4 ->> 'resolucion', $3, resolucion)$s$,
+          $s$estado_asignacion_resultante = coalesce(($4 ->> 'estado_asignacion_resultante')::public.asignacion_estado, estado_asignacion_resultante)$s$];
+      end if;
+    else
+      null;
+  end case;
+
+  perform set_config('amo.transicion_autorizada', 'on', true);
+  perform set_config('amo.actor_tipo', p_actor_tipo::text, true);
+  perform set_config('amo.motivo', coalesce(v_motivo, ''), true);
+  if p_actor_id is not null then perform set_config('amo.actor_id', p_actor_id::text, true); end if;
+  execute format('update public.%I set %s where id = $7', p_entidad, array_to_string(v_sets, ', '))
+    using p_hacia, v_ahora, v_motivo, v_datos, p_actor_id, v_desde, p_id;
+  perform set_config('amo.transicion_autorizada', coalesce(v_prev_aut, ''), true);
+  perform set_config('amo.actor_tipo', coalesce(v_prev_tipo, ''), true);
+  perform set_config('amo.motivo', coalesce(v_prev_motivo, ''), true);
+  perform set_config('amo.actor_id', coalesce(v_prev_actor, ''), true);
+
+  return jsonb_build_object('entidad', p_entidad, 'id', p_id, 'desde', v_desde, 'hacia', p_hacia, 'at', v_ahora);
 end $function$;
 
 -- ANU-009: el envío dice qué paso del asistente falta (hint `envio_oferta:<que|quien|cuando|cuanto|creativo|envio>`).
@@ -665,7 +939,7 @@ begin
     v_paso := 'creativo'; v_falla := 'Carga el paquete creativo con al menos un archivo.';
   elsif v_archivos > v_max then
     v_paso := 'creativo'; v_falla := format('Este formato admite hasta %s archivos.', v_max);
-  elsif (v_formato.clave = 'CARRUSEL') <> (cr.tipo = 'CARRUSEL') then
+  elsif not private.tipo_creativo_valido(cr.tipo, v_formato.clave, v_formato.requisitos) then
     v_paso := 'creativo'; v_falla := 'El tipo de creativo no corresponde al formato elegido.';
   elsif cr.tipo = 'CARRUSEL' and v_archivos < 2 then
     v_paso := 'creativo'; v_falla := 'Un carrusel necesita al menos 2 archivos.';
@@ -1085,9 +1359,13 @@ begin
   end loop;
 end $procedure$;
 
--- ANU-005 / ANU-007: el estimador recibe las exclusiones y las publicaciones por medio, y no muestra precio, inversión
--- ni alcance de una franja con menos de `ofertas.estimador_n_minimo` medios («Sin estimación»): con uno solo, la
--- mediana sería su precio. El alcance solo cuenta cuentas con historial suficiente (`calidad.minimo_publicaciones`).
+-- ANU-005 / ANU-007: el estimador recibe las exclusiones y las publicaciones por medio y nunca deja conocer a un medio:
+-- · con menos de `ofertas.estimador_n_minimo` medios en la franja no dice cuántos son ni da precio, inversión o alcance
+--   («Sin estimación»);
+-- · si las exclusiones quitan menos de ese mínimo, se estima sin ellas (comparar con y sin excluir a uno revelaría sus
+--   cifras);
+-- · el mínimo de seguidores se redondea hacia abajo a miles de 5.000 (una búsqueda fina revelaría los de un medio).
+-- El alcance solo cuenta cuentas con historial suficiente (`calidad.minimo_publicaciones`).
 drop function public.estimar_oferta(uuid, character[], character[], uuid[], integer, jsonb, smallint);
 drop function private.estimar_oferta_agregado(uuid, character[], character[], uuid[], integer, jsonb, smallint);
 
@@ -1130,19 +1408,25 @@ begin
   return query
   with pedidas as (
     select e.key::uuid as franja_id, greatest(e.value::integer, 0) as cupos from jsonb_each_text(p_cupos) e
-  ), cuentas as (
-    select c.medio_id, c.franja_id, c.alcance_mediano, c.multiplicador_calidad, c.publicaciones_verificadas_count
+  ), todas as (
+    select c.medio_id, c.franja_id, c.alcance_mediano, c.multiplicador_calidad, c.publicaciones_verificadas_count,
+           m.id = any (coalesce(p_medios_excluidos, '{}')) as excluido
     from public.cuentas_sociales c
     join public.medios m on m.id = c.medio_id
     join public.municipios mu on mu.codigo = m.municipio_codigo
     join public.departamentos d on d.codigo = m.departamento_codigo
     where c.plataforma = v_plataforma and c.deleted_at is null and private.cuenta_vigente(c.id)
-      and c.seguidores_verificados >= greatest(v_umbral, coalesce(p_seguidores_minimos, 0))
+      and c.seguidores_verificados >= greatest(v_umbral, floor(coalesce(p_seguidores_minimos, 0) / 5000.0) * 5000)
       and m.estado = 'VERIFICADO' and m.nivel_verificacion >= 1 and m.deleted_at is null and mu.activo and d.activo
-      and m.id <> all (coalesce(p_medios_excluidos, '{}'))
       and (v_sin_geo or m.municipio_codigo = any (p_municipios) or m.departamento_codigo = any (p_departamentos))
       and (coalesce(cardinality(p_categorias), 0) = 0
            or exists (select 1 from public.medio_categorias mc where mc.medio_id = m.id and mc.categoria_id = any (p_categorias)))
+  ), quitados as (
+    select t.franja_id, count(distinct t.medio_id) filter (where t.excluido) as n from todas t group by t.franja_id
+  ), cuentas as (
+    -- Las exclusiones solo se aplican si quitan cero medios o al menos el mínimo de la franja.
+    select t.* from todas t left join quitados q on q.franja_id = t.franja_id
+    where not t.excluido or coalesce(q.n, 0) between 1 and v_n_min - 1
   ), precios as (
     select cu.medio_id, cu.franja_id,
            case when cu.publicaciones_verificadas_count >= v_min_pub then cu.alcance_mediano end as alcance,
@@ -1167,7 +1451,8 @@ begin
     from pedidas pe left join precios pr on pr.franja_id = pe.franja_id
     group by pe.franja_id, pe.cupos
   )
-  select f.franja_id, f.medios,
+  select f.franja_id,
+         case when f.medios >= v_n_min then f.medios end,
          case when f.medios >= v_n_min then (round(f.precio / v_r) * v_r)::numeric end,
          case when f.medios >= v_n_min then (round(f.precio / v_r) * v_r * f.cupos)::numeric end,
          case when f.con_alcance >= v_n_min then f.alcance::bigint end
@@ -1226,13 +1511,21 @@ grant execute on function public.medios_para_exclusion(text, uuid[], integer) to
 -- 6. Creativos -----------------------------------------------------------------------------------------------------
 
 -- ANU-010: `activado_at` null = versión nueva de una oferta publicada aún sin activar (una a la vez por oferta).
+-- Carrusel solo en el formato carrusel (y viceversa); en formatos solo de video, el creativo es un video.
+create function private.tipo_creativo_valido(p_tipo public.creativo_tipo, p_clave text, p_requisitos jsonb) returns boolean
+language sql immutable set search_path = '' as $$
+  select (p_clave = 'CARRUSEL') = (p_tipo = 'CARRUSEL')
+     and (p_tipo = 'VIDEO'
+          or exists (select 1 from jsonb_array_elements_text(coalesce(p_requisitos -> 'mime', '[]')) m where m like 'image/%')) $$;
+revoke all on function private.tipo_creativo_valido(public.creativo_tipo, text, jsonb) from public, anon, authenticated;
+
 alter table public.creativos add column activado_at timestamptz;
 update public.creativos set activado_at = created_at;
 create unique index creativos_pendiente_key on public.creativos (oferta_id) where activado_at is null;
 
 create or replace function private.fn_creativos_version() returns trigger
 language plpgsql security definer set search_path = '' as $$
-declare v_anterior uuid; v_estado public.oferta_estado;
+declare v_anterior uuid; v_estado public.oferta_estado; v_clave text; v_req jsonb;
 begin
   if private.modo_carga() then
     new.activado_at := coalesce(new.activado_at, new.created_at);
@@ -1243,6 +1536,12 @@ begin
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = case when v_estado = 'EN_REVISION' then 'Retira la oferta de revisión para cambiar el creativo.'
                     else 'La oferta ya no admite creativos nuevos.' end;
+  end if;
+  select f.clave, f.requisitos into v_clave, v_req
+  from public.ofertas o join public.formatos f on f.id = o.formato_id where o.id = new.oferta_id;
+  if not private.tipo_creativo_valido(new.tipo, v_clave, v_req) then
+    raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
+      detail = 'El tipo de creativo no corresponde al formato elegido.';
   end if;
   select c.id into v_anterior from public.creativos c where c.oferta_id = new.oferta_id and c.vigente;
   new.version := coalesce((select max(c.version) from public.creativos c where c.oferta_id = new.oferta_id), 0) + 1;
@@ -1330,6 +1629,36 @@ create policy "creativo_archivos: delete en borrador" on public.creativo_archivo
                         or (o.anunciante_id = (select private.mi_anunciante_id())
                             and (select private.tiene_permiso('ofertas.gestionar_propias'))))));
 
+-- La confirmación es idempotente por ruta; el orden se cambia con UPDATE (antes: borrar y reinsertar).
+create unique index creativo_archivos_archivo_path_key on public.creativo_archivos (archivo_path);
+grant update (orden) on public.creativo_archivos to authenticated;
+create policy "creativo_archivos: update orden" on public.creativo_archivos for update to authenticated
+  using (exists (select 1 from public.creativos c join public.ofertas o on o.id = c.oferta_id
+                 where c.id = creativo_archivos.creativo_id
+                   and ((c.vigente and o.estado in ('BORRADOR', 'DEVUELTA'))
+                        or (c.activado_at is null and o.estado in ('PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION')))
+                   and ((select private.tiene_permiso('ofertas.gestionar'))
+                        or (o.anunciante_id = (select private.mi_anunciante_id())
+                            and (select private.tiene_permiso('ofertas.gestionar_propias'))))))
+  with check (exists (select 1 from public.creativos c join public.ofertas o on o.id = c.oferta_id
+                      where c.id = creativo_archivos.creativo_id
+                        and ((c.vigente and o.estado in ('BORRADOR', 'DEVUELTA'))
+                             or (c.activado_at is null and o.estado in ('PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION')))
+                        and ((select private.tiene_permiso('ofertas.gestionar'))
+                             or (o.anunciante_id = (select private.mi_anunciante_id())
+                                 and (select private.tiene_permiso('ofertas.gestionar_propias'))))));
+
+-- Descartar una versión en preparación (nadie la ha visto: no está activada).
+grant delete on public.creativos to authenticated;
+create policy "creativos: delete pendiente" on public.creativos for delete to authenticated
+  using (activado_at is null
+         and exists (select 1 from public.ofertas o
+                     where o.id = creativos.oferta_id and o.deleted_at is null
+                       and o.estado in ('PUBLICADA', 'CUPOS_COMPLETOS', 'EN_EJECUCION')
+                       and ((select private.tiene_permiso('ofertas.gestionar'))
+                            or (o.anunciante_id = (select private.mi_anunciante_id())
+                                and (select private.tiene_permiso('ofertas.gestionar_propias'))))));
+
 create or replace function private.puedo_subir_creativo(p_oferta_id uuid, p_creativo_id uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (
@@ -1365,7 +1694,7 @@ language sql immutable set search_path = '' as $$
                'seg', 'seg_uuid', 'es_mi_oferta', 'puedo_subir_creativo', 'puedo_subir_evidencia', 'soy_parte_disputa',
                'soy_dueno_soporte',
                -- E2 fase 2
-               'creativo_activado']::text[] $$;
+               'creativo_activado', 'validar_campana_guardar']::text[] $$;
 
 drop policy "storage: creativos select" on storage.objects;
 create policy "storage: creativos select" on storage.objects for select to authenticated
@@ -1469,6 +1798,12 @@ begin
           or (v_tipo = 'ADMIN' and private.tiene_permiso_de(p_actor_id, 'ofertas.gestionar'))) then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
   end if;
+  if v_tipo = 'ANUNCIANTE'
+     and not exists (select 1 from public.anunciantes an
+                     where an.id = o.anunciante_id and an.estado_verificacion = 'VERIFICADO' and an.deleted_at is null) then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO',
+      detail = 'Tu empresa no está verificada (o está suspendida): no puedes activar versiones nuevas del creativo de una oferta publicada.';
+  end if;
   if cr.activado_at is not null then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA', detail = 'Esta versión ya está activa.';
   end if;
@@ -1485,6 +1820,10 @@ begin
   if v_clave = 'CARRUSEL' and v_n < 2 then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = 'Un carrusel necesita al menos 2 archivos.';
+  end if;
+  if not private.tipo_creativo_valido(cr.tipo, v_clave, v_req) then
+    raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
+      detail = 'El tipo de creativo no corresponde al formato elegido.';
   end if;
   select c.id into v_anterior from public.creativos c where c.oferta_id = o.id and c.vigente for update;
   if v_anterior is not null then
