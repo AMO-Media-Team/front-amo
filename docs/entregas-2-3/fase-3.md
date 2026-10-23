@@ -68,8 +68,8 @@ scroll horizontal, pies fijos que no tapan contenido.
 `src/app/(app)/mis-campanas/[id]/page.tsx`, `src/app/(app)/mis-campanas/[id]/contenido/**`,
 `e2e/pauta-medio-campanas.spec.ts`.
 
-- `/mis-campanas`: tablero por estado (en el celular, segmentos con conteo: Por publicar, Publicadas, Validadas, Terminadas,
-  Vencidas o canceladas) con la siguiente acción, la fecha límite con cuenta regresiva y el pago; estados en voz del medio
+- `/mis-campanas`: tablero por estado (en el celular, segmentos con conteo: Por publicar, Pendiente de métricas, En
+  verificación, Validadas, Terminadas, Vencidas o canceladas, como pide MED-011) con la siguiente acción, la fecha límite con cuenta regresiva y el pago; estados en voz del medio
   (`ESTADOS_PARA_MEDIO`, los 12).
 - `/mis-campanas/[id]`: progreso y siguiente acción como botón principal (descargar, publicar con `rutaEvidencia`, cargar el
   corte con `rutaMetricas`), precio congelado y multiplicador de calidad aplicado, publicaciones y cortes con su estado,

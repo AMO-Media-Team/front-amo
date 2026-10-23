@@ -193,3 +193,15 @@ Geist (UI), Geist Mono / `tabular-nums` (cifras). Detalle completo en `docs/marc
   las teselas) mientras no se añada ese origen al token. Antes de la primera vez: `pnpm bootstrap:e2e` y los datos
   demo (`pnpm demo:generar`). El proyecto `preparacion` guarda las sesiones compartidas en `playwright/.auth/`
   (ignorado por git).
+- Proyectos E2E que escriben, en serie (un worker): `alta-medio` (`onboarding-medio-*`, «Medio Nuevo E2E»), `anunciante`
+  (`anunciante-*`, «Anunciante E2E» y «Anunciante Nuevo E2E») y `pauta-medio` (`pauta-medio-*`, a 390 px, «Medio E2E»). Sus
+  pruebas de solo lectura corren también en escritorio, tablet y móvil. Fábricas: `e2e/utilidades/negocio.ts` (campañas y
+  ofertas con creativo real), `e2e/utilidades/pauta.ts` (aceptar, descargar, evidencia, métricas y validación por el camino
+  real; `restablecerPautaMedioE2E()` en el `beforeAll` de cada `pauta-medio-*`; las campañas de esos specs llevan el prefijo
+  «Pauta E2E» y las de los specs del anunciante, «Seguimiento E2E» con `borrarPautaE2E`). Una asignación que descargó
+  contenido no se puede borrar por la API (`descargas_contenido` es de solo inserción): la limpieza la cancela.
+- `page.goto`, `page.reload` y los ingresos de `e2e/utilidades` esperan a que React revele el contenido que llegó por
+  streaming (`esperarStreaming`): mientras tanto la copia del servidor sigue oculta en `div#S:n` y `getByLabel` o
+  `getByText` la cuentan. Para lo demás, busca por rol o dentro de un contenedor visible (`getByRole("main")`, el formulario).
+- `pnpm pruebas:pauta-e2e` comprueba las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
+  de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia).

@@ -124,9 +124,11 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   corta a 390 px; nombre accesible del selector de nivel. E2E: proyecto `alta-medio` en serie, spec de términos solo en
   local, cuentas externas y demo con términos aceptados, abortos de View Transition tratados como benignos.
   Verificación en local: 17 suites SQL (38/38 en onboarding), 3.684 Vitest, E2E 249 + 13 en verde.
-- Pendiente para investigar: tras un ingreso o un `reload()` dentro del runner E2E conviven un instante dos copias del
-  contenido de la página (`_R_…` del servidor y `_r_…` del cliente); no se reproduce fuera del runner ni en desarrollo.
-  Los specs afectados esperan a que quede una sola copia.
+- Explicado (fase 3): tras un ingreso o un `reload()` conviven un instante dos copias del contenido de la página. Es el
+  streaming de React: la copia del servidor (`_R_…`) llega oculta en `div#S:n` mientras el cliente ya pintó la suya
+  (`_r_…`), y React la descarta al revelar el lote. No se ve ni la anuncian los lectores de pantalla, pero `getByLabel` y
+  `getByText` la cuentan. El fixture E2E (`e2e/utilidades/prueba.ts`) hace que `goto`, `reload` y los ingresos esperen a
+  que no quede ninguna (`esperarStreaming`); los specs además buscan por rol o dentro de un contenedor visible.
 - Pendiente (P6): limpieza programada de objetos de Storage sin fila (subidas no confirmadas o reemplazadas).
 - 2026-10-22 · **Fases 0 y 1 en producción** (`oriuuuaczpncmtglfgpv`): respaldo previo de esquema y datos en
   `context/respaldos/` (0600, fuera de git); `pnpm db:push produccion --confirmar-produccion` aplicó
