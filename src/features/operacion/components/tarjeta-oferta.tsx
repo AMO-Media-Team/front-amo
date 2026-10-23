@@ -6,8 +6,11 @@ import {
   Target,
   Ticket,
 } from "lucide-react"
+import type { Route } from "next"
+import Link from "next/link"
 import type { ReactNode } from "react"
 
+import { rutaOfertaInterna } from "@/features/ofertas/rutas"
 import {
   formatearCOP,
   formatearCOPCompacto,
@@ -291,14 +294,18 @@ function Indicaciones({ oferta }: { oferta: OfertaDetalle }) {
 /**
  * Oferta de una campaña: estado, plataforma y formato, cupos por franja con
  * su llenado, presupuesto comprometido frente al máximo, ventana de
- * publicación y segmentación.
+ * publicación y segmentación. El título lleva a la ficha completa de la
+ * oferta (por defecto, la interna con moderación, creativos e historial).
  */
 export function TarjetaOferta({
   oferta,
   indice,
+  enlace = rutaOfertaInterna(oferta.id),
 }: {
   oferta: OfertaDetalle
   indice: number
+  /** Ficha a la que lleva el título; `null` lo deja como texto. */
+  enlace?: Route | null
 }) {
   return (
     <article
@@ -312,7 +319,18 @@ export function TarjetaOferta({
             className="[&>span:first-child]:size-9 [&>span:first-child]:rounded-xl [&>span:first-child]:text-xs"
           />
           <div className="flex min-w-0 flex-col gap-0.5">
-            <h3 className="font-semibold text-balance">{oferta.titulo}</h3>
+            <h3 className="font-semibold text-balance">
+              {enlace ? (
+                <Link
+                  href={enlace}
+                  className="underline-offset-4 hover:underline focus-visible:underline"
+                >
+                  {oferta.titulo}
+                </Link>
+              ) : (
+                oferta.titulo
+              )}
+            </h3>
             <p className="text-xs text-muted-foreground">
               {[
                 oferta.formato,

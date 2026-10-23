@@ -4,7 +4,11 @@
  */
 import { formatearDuracion, formatearTamano } from "@/lib/archivos/formato"
 import { categoriaDe, describirFormatos } from "@/lib/archivos/mime"
-import { describirRelacion, type ReglasArchivo } from "@/lib/archivos/validar"
+import {
+  describirRelacion,
+  reglasDeAspecto,
+  type ReglasArchivo,
+} from "@/lib/archivos/validar"
 import { formatearPorcentaje } from "@/lib/format"
 
 import type { EstadoSubida, InstantaneaSubida } from "./motor-subida"
@@ -12,14 +16,26 @@ import type { EstadoSubida, InstantaneaSubida } from "./motor-subida"
 /** Rechazo de formato (el mismo texto que la validación y el servidor). */
 export { mensajeFormatoNoAdmitido as mensajeFormato } from "@/lib/archivos/mime"
 
+const listaDisyuntiva = new Intl.ListFormat("es-CO", {
+  style: "long",
+  type: "disjunction",
+})
+
+/** «proporción 9:16», «proporción 1:1, 4:5 o 1,91:1». */
+function describirProporciones(reglas: ReglasArchivo): string | null {
+  const aspectos = reglasDeAspecto(reglas.aspecto)
+  if (aspectos.length === 0) return null
+  return `proporción ${listaDisyuntiva.format(
+    aspectos.map(({ relacion }) => describirRelacion(relacion))
+  )}`
+}
+
 /** «JPG, PNG o WebP · hasta 10 MB · proporción 9:16 · hasta 1 min». */
 export function describirReglas(reglas: ReglasArchivo): string {
   return [
     describirFormatos(reglas.mimes),
     `hasta ${formatearTamano(reglas.maxBytes)}`,
-    reglas.aspecto
-      ? `proporción ${describirRelacion(reglas.aspecto.relacion)}`
-      : null,
+    describirProporciones(reglas),
     reglas.duracionMaxSeg !== undefined
       ? `video de hasta ${formatearDuracion(reglas.duracionMaxSeg)}`
       : null,
