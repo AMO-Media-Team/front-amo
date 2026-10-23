@@ -13,8 +13,17 @@ export const RUTA_MIS_CAMPANAS = "/campanas" satisfies Route
 
 export const RUTA_NUEVA_CAMPANA = "/campanas/nueva" satisfies Route
 
-/** Pestañas de la ficha de una campaña (`?pestana=`; la primera no ocupa la URL). */
-export const PESTANAS_CAMPANA = ["ofertas", "datos"] as const
+/**
+ * Pestañas de la ficha de una campaña (`?pestana=`; la primera no ocupa la
+ * URL). «Seguimiento» (`?pestana=seguimiento&asignacion=`) es contrato con
+ * `/ir` (paquete SG, ANU-011); «Métricas» es el consolidado (ANU-012).
+ */
+export const PESTANAS_CAMPANA = [
+  "ofertas",
+  "seguimiento",
+  "metricas",
+  "datos",
+] as const
 
 export type PestanaCampana = (typeof PESTANAS_CAMPANA)[number]
 

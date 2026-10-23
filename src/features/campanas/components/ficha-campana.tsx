@@ -1,13 +1,20 @@
 import "server-only"
 
-import { FileText, Megaphone } from "lucide-react"
+import { Activity, ChartColumn, FileText, Megaphone } from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { campanaMetricas } from "@/features/metricas-campana/calculos"
+import { EsqueletoMetricas } from "@/features/metricas-campana/components/esqueleto-metricas"
+import { SeccionMetricas } from "@/features/metricas-campana/components/seccion-metricas"
+import { Diferida } from "@/features/operacion/components/ficha"
 import {
   type PestanaFicha,
   PestanasFicha,
 } from "@/features/operacion/components/pestanas-ficha"
+import { EsqueletoSeguimiento } from "@/features/seguimiento/components/esqueleto-seguimiento"
+import { SeccionSeguimiento } from "@/features/seguimiento/components/seccion-seguimiento"
+import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { serializarFecha } from "@/lib/fechas"
 
@@ -32,8 +39,12 @@ import { OfertasCampana } from "./ofertas-campana"
  * Ficha de una campaña propia (ANU-003, ANU-014): cabecera con su estado y
  * las acciones que permite la máquina de estados, resumen de presupuesto y
  * vigencia, y las pestañas «Ofertas» (por defecto; `?pestana=ofertas` también
- * la abre) y «Datos». La página ya autorizó con el DAL; la RLS decide qué se
- * ve (una campaña de otra empresa no existe para esta sesión).
+ * la abre), «Seguimiento» (ANU-011, con `asignaciones.ver_propias`),
+ * «Métricas» (ANU-012, con `reportes.ver`) y «Datos». Las dos del paquete SG
+ * solo existen fuera del borrador (antes no hay medios ni resultados) y
+ * llegan en streaming, cada una con su esqueleto. La página ya autorizó con
+ * el DAL; la RLS decide qué se ve (una campaña de otra empresa no existe para
+ * esta sesión).
  */
 export async function FichaMiCampana({
   usuario,
@@ -62,6 +73,11 @@ export async function FichaMiCampana({
   })
   const puedeEditar = puedeEditarCampana(campana.estado, usuario.permisos)
   const puedeCrear = puedeCrearOfertas(campana.estado, usuario.permisos)
+  const conEjecucion = campana.estado !== "BORRADOR"
+  const verSeguimiento =
+    conEjecucion && tieneAlgunPermiso(usuario, ["asignaciones.ver_propias"])
+  const verMetricas =
+    conEjecucion && tieneAlgunPermiso(usuario, ["reportes.ver"])
 
   const pestanas: PestanaFicha[] = [
     {
@@ -78,6 +94,45 @@ export async function FichaMiCampana({
         />
       ),
     },
+    ...(verSeguimiento
+      ? [
+          {
+            clave: "seguimiento",
+            titulo: "Seguimiento",
+            icono: <Activity aria-hidden />,
+            contenido: (
+              <Diferida
+                recurso="el seguimiento"
+                respaldo={<EsqueletoSeguimiento />}
+              >
+                <SeccionSeguimiento
+                  campanaId={campana.id}
+                  estadoCampana={campana.estado}
+                />
+              </Diferida>
+            ),
+          },
+        ]
+      : []),
+    ...(verMetricas
+      ? [
+          {
+            clave: "metricas",
+            titulo: "Métricas",
+            icono: <ChartColumn aria-hidden />,
+            contenido: (
+              <Diferida recurso="las métricas" respaldo={<EsqueletoMetricas />}>
+                <SeccionMetricas
+                  campana={campanaMetricas(campana)}
+                  puedeExportar={tieneAlgunPermiso(usuario, [
+                    "reportes.exportar",
+                  ])}
+                />
+              </Diferida>
+            ),
+          },
+        ]
+      : []),
     {
       clave: "datos",
       titulo: "Datos",

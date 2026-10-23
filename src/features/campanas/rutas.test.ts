@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { rutaAsistente } from "@/features/asistente-oferta/rutas"
 
 import {
+  PESTANAS_CAMPANA,
   RUTA_MIS_CAMPANAS,
   rutaEditarCampana,
   rutaMiCampana,
@@ -18,6 +19,21 @@ describe("rutas de campañas", () => {
       `/campanas/${CAMPANA}?pestana=ofertas`
     )
     expect(rutaEditarCampana(CAMPANA)).toBe(`/campanas/${CAMPANA}/editar`)
+  })
+
+  it("seguimiento y métricas son pestañas de la ficha", () => {
+    expect(PESTANAS_CAMPANA).toEqual([
+      "ofertas",
+      "seguimiento",
+      "metricas",
+      "datos",
+    ])
+    expect(rutaMiCampana(CAMPANA, "seguimiento")).toBe(
+      `/campanas/${CAMPANA}?pestana=seguimiento`
+    )
+    expect(rutaMiCampana(CAMPANA, "metricas")).toBe(
+      `/campanas/${CAMPANA}?pestana=metricas`
+    )
   })
 
   it("el listado filtrado usa el mismo parámetro que la tabla", () => {
