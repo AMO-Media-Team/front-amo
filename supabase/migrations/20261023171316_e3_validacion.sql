@@ -60,6 +60,11 @@ begin
   perform set_config('lock_timeout', '3s', true);
   perform private.bloquear_transicion('asignaciones', v_asig,
                                       case when p_aprobar then 'EVIDENCIA_VALIDADA' else 'CONTENIDO_ENTREGADO' end);
+  -- Durante una disputa la evidencia se decide al resolverla (aprobarla no movería la asignación).
+  if (select x.estado from public.asignaciones x where x.id = v_asig) = 'EN_DISPUTA' then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'La asignación está en disputa: decide sobre la evidencia al resolverla.', hint = 'en_disputa';
+  end if;
   if p_aprobar then
     if not coalesce(p_etiqueta_verificada, false) then
       raise exception using errcode = 'P0001', message = 'AMO_ETIQUETA_REQUERIDA',
@@ -119,6 +124,13 @@ begin
   else
     if v_obs is null then
       raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO', detail = 'Indica qué debe corregir el medio.';
+    end if;
+    -- Con todo cargado y en disputa, rechazar dejaría METRICAS_CARGADAS con una rechazada al restaurarla (D10).
+    if exists (select 1 from public.asignaciones x where x.id = v_asig and x.estado = 'EN_DISPUTA'
+                 and x.estado_previo_disputa = 'METRICAS_CARGADAS') then
+      raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+        detail = 'La asignación está en disputa con todas sus métricas cargadas: recházala al resolver la disputa.',
+        hint = 'en_disputa';
     end if;
     perform public.transicionar_srv('metricas', p_metrica_id, 'RECHAZADA', p_actor_id, p_session_id, v_obs,
                                     jsonb_build_object('observaciones', v_obs));
@@ -257,10 +269,14 @@ begin
     'n_historial', v_n, 'factor', v_factor, 'seguidores', v_seguidores, 'multiplo', v_multiplo,
     'alcance', v_alcance, 'impresiones', v_impr, 'limite_alcance', v_multiplo * v_seguidores);
   -- Una alerta no se borra corrigiendo las cifras: el validador ve también la que tuvo (con sus cifras de entonces).
-  if tg_op = 'UPDATE' and (old.alerta_desviacion or old.alerta_multiplo) then
-    new.detalle_alertas := new.detalle_alertas || jsonb_build_object('alerta_previa',
-      (old.detalle_alertas - 'alerta_previa') || jsonb_build_object('desviacion', old.alerta_desviacion,
-                                                                     'multiplo_superado', old.alerta_multiplo));
+  if tg_op = 'UPDATE' then
+    if old.alerta_desviacion or old.alerta_multiplo then
+      new.detalle_alertas := new.detalle_alertas || jsonb_build_object('alerta_previa',
+        (old.detalle_alertas - 'alerta_previa') || jsonb_build_object('desviacion', old.alerta_desviacion,
+                                                                       'multiplo_superado', old.alerta_multiplo));
+    elsif old.detalle_alertas ? 'alerta_previa' then
+      new.detalle_alertas := new.detalle_alertas || jsonb_build_object('alerta_previa', old.detalle_alertas -> 'alerta_previa');
+    end if;
   end if;
   return new;
 end $$;
@@ -314,18 +330,20 @@ grant execute on function public.alertas_metricas(uuid, uuid) to authenticated;
 create function public.cola_evidencias(p_limite integer default 50, p_desplazamiento integer default 0)
 returns table (publicacion_id uuid, asignacion_id uuid, numero smallint, publicaciones smallint, plataforma public.plataforma,
   url_post text, fecha_publicacion timestamptz, captura_path text, miniatura_path text, enviada_at timestamptz,
+  etiqueta_declarada boolean, formato_clave text, formato_nombre text,
   observaciones_previas text, medio_id uuid, medio_nombre text, handle text, cuenta_url text, oferta_id uuid, oferta_titulo text,
   marca text, ventana_inicio timestamptz, ventana_fin timestamptz, permanencia_hasta timestamptz,
   asignacion_estado public.asignacion_estado, total bigint)
 language sql stable security invoker set search_path = '' as $$
   select p.id, p.asignacion_id, p.numero, a.publicaciones, p.plataforma, p.url_post, p.fecha_publicacion, p.captura_path,
-         p.miniatura_path, p.updated_at,
+         p.miniatura_path, p.updated_at, p.etiqueta_publicidad_confirmada, f.clave, f.nombre,
          p.observaciones,
          m.id, m.nombre, c.handle::text, c.url, o.id, o.titulo, ca.marca, o.ventana_inicio, o.ventana_fin,
          p.permanencia_hasta, a.estado, count(*) over ()
   from public.publicaciones p
   join public.asignaciones a on a.id = p.asignacion_id
   join public.ofertas o on o.id = a.oferta_id
+  join public.formatos f on f.id = o.formato_id
   join public.campanas ca on ca.id = a.campana_id
   join public.medios m on m.id = a.medio_id
   left join public.cuentas_sociales c on c.id = a.cuenta_social_id
@@ -344,24 +362,26 @@ returns table (metrica_id uuid, publicacion_id uuid, asignacion_id uuid, numero 
   fecha_corte timestamptz, plataforma public.plataforma, alcance bigint, impresiones bigint, reproducciones bigint,
   espectadores_unicos bigint, interacciones bigint, clics_enlace bigint, captura_path text, miniatura_path text,
   alerta_desviacion boolean, alerta_multiplo boolean, detalle_alertas jsonb, evidencia_aprobada boolean, enviada_at timestamptz,
-  medio_id uuid, medio_nombre text, handle text, seguidores_al_aceptar integer, oferta_titulo text,
+  medio_id uuid, medio_nombre text, handle text, seguidores_al_aceptar integer, oferta_id uuid, oferta_titulo text,
+  formato_clave text, formato_nombre text,
   asignacion_estado public.asignacion_estado, total bigint)
 language sql stable security definer set search_path = '' as $$
   select x.id, x.publicacion_id, x.asignacion_id, p.numero, x.corte, x.fecha_corte, x.plataforma, x.alcance, x.impresiones,
          x.reproducciones, x.espectadores_unicos, x.interacciones, x.clics_enlace, x.captura_path, x.miniatura_path,
          x.alerta_desviacion, x.alerta_multiplo, x.detalle_alertas, p.estado_validacion = 'APROBADA', x.updated_at,
-         m.id, m.nombre, c.handle::text, a.seguidores_al_aceptar, o.titulo, a.estado, count(*) over ()
+         m.id, m.nombre, c.handle::text, a.seguidores_al_aceptar, o.id, o.titulo, f.clave, f.nombre, a.estado, count(*) over ()
   from public.metricas x
   join public.publicaciones p on p.id = x.publicacion_id
   join public.asignaciones a on a.id = x.asignacion_id
   join public.ofertas o on o.id = a.oferta_id
+  join public.formatos f on f.id = o.formato_id
   join public.medios m on m.id = a.medio_id
   left join public.cuentas_sociales c on c.id = a.cuenta_social_id
   where x.estado_validacion = 'PENDIENTE' and (select private.acceso_valido())
     and (select private.tiene_permiso('metricas.validar'))
     and a.estado in ('PUBLICADA', 'EVIDENCIA_VALIDADA', 'METRICAS_CARGADAS')
-    and (not coalesce(p_solo_alertas, false) or x.alerta_desviacion or x.alerta_multiplo)
-  order by (x.alerta_desviacion or x.alerta_multiplo) desc, x.updated_at, x.id
+    and (not coalesce(p_solo_alertas, false) or x.alerta_desviacion or x.alerta_multiplo or x.detalle_alertas ? 'alerta_previa')
+  order by (x.alerta_desviacion or x.alerta_multiplo or x.detalle_alertas ? 'alerta_previa') desc, x.updated_at, x.id
   limit least(greatest(coalesce(p_limite, 50), 1), 200) offset greatest(coalesce(p_desplazamiento, 0), 0) $$;
 revoke all on function public.cola_metricas(boolean, integer, integer) from public, anon;
 grant execute on function public.cola_metricas(boolean, integer, integer) to authenticated;
@@ -371,7 +391,7 @@ create function public.cola_verificacion(p_limite integer default 50, p_desplaza
 returns table (asignacion_id uuid, oferta_id uuid, oferta_titulo text, marca text, medio_id uuid, medio_nombre text,
                handle text, plataforma public.plataforma, publicaciones smallint, metricas_cargadas_at timestamptz,
                cortes_requeridos integer, cortes_aprobados integer, metricas_pendientes integer, metricas_con_alerta integer,
-               permanencia_hasta timestamptz, lista boolean, bloqueo text, total bigint)
+               permanencia_hasta timestamptz, lista boolean, bloqueo text, listas bigint, total bigint)
 language sql stable security definer set search_path = '' as $$
   with base as (
     select a.id, a.oferta_id, o.titulo, ca.marca, a.medio_id, me.nombre, c.handle::text as handle, a.plataforma,
@@ -401,6 +421,8 @@ language sql stable security definer set search_path = '' as $$
          b.aprobados >= b.requeridos and b.pendientes = 0 and (b.permanencia is null or b.permanencia <= private.ahora()),
          case when b.aprobados < b.requeridos or b.pendientes > 0 then 'METRICAS'
               when b.permanencia > private.ahora() then 'PERMANENCIA' end,
+         count(*) filter (where b.aprobados >= b.requeridos and b.pendientes = 0
+                            and (b.permanencia is null or b.permanencia <= private.ahora())) over (),
          count(*) over ()
   from base b
   order by (b.aprobados >= b.requeridos and b.pendientes = 0 and (b.permanencia is null or b.permanencia <= private.ahora())) desc,
@@ -608,7 +630,8 @@ begin
           detail = 'La evidencia de la publicación debe estar aprobada antes de aprobar sus métricas.';
       end if;
       -- ADM-009/INT-006: una métrica con alerta no se aprueba sin constancia de lo que se revisó.
-      if exists (select 1 from public.metricas m where m.id = p_id and (m.alerta_desviacion or m.alerta_multiplo))
+      if exists (select 1 from public.metricas m
+                 where m.id = p_id and (m.alerta_desviacion or m.alerta_multiplo or m.detalle_alertas ? 'alerta_previa'))
          and coalesce(nullif(btrim(p_datos ->> 'observaciones'), ''), nullif(btrim(p_motivo), '')) is null then
         raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO',
           detail = 'La métrica tiene alertas: anota qué revisaste antes de aprobarla.', hint = 'alerta_sin_revision';
@@ -1362,8 +1385,8 @@ language sql stable security invoker set search_path = '' as $$
          (select d.id from public.disputas d where d.asignacion_id = a.id and d.estado in ('ABIERTA', 'EN_REVISION')),
          a.estado <> 'EN_DISPUTA'                       -- en disputa se cancela al resolverla
   from public.asignaciones a
-  join public.ofertas o on o.id = a.oferta_id
-  join public.anunciantes an on an.id = a.anunciante_id
+  left join public.ofertas o on o.id = a.oferta_id                -- la RLS de ofertas o empresas no esconde filas
+  left join public.anunciantes an on an.id = a.anunciante_id
   where a.medio_id = p_medio_id and (select private.tiene_permiso('asignaciones.ver'))
     and a.estado in ('ACEPTADA', 'CONTENIDO_ENTREGADO', 'PUBLICADA', 'EVIDENCIA_VALIDADA', 'METRICAS_CARGADAS', 'VERIFICADA',
                      'EN_DISPUTA')

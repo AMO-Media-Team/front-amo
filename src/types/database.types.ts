@@ -3823,7 +3823,10 @@ export type Database = {
           captura_path: string
           cuenta_url: string
           enviada_at: string
+          etiqueta_declarada: boolean
           fecha_publicacion: string
+          formato_clave: string
+          formato_nombre: string
           handle: string
           marca: string
           medio_id: string
@@ -3863,6 +3866,8 @@ export type Database = {
           espectadores_unicos: number
           evidencia_aprobada: boolean
           fecha_corte: string
+          formato_clave: string
+          formato_nombre: string
           handle: string
           impresiones: number
           interacciones: number
@@ -3871,6 +3876,7 @@ export type Database = {
           metrica_id: string
           miniatura_path: string
           numero: number
+          oferta_id: string
           oferta_titulo: string
           plataforma: Database["public"]["Enums"]["plataforma"]
           publicacion_id: string
@@ -3888,6 +3894,7 @@ export type Database = {
           cortes_requeridos: number
           handle: string
           lista: boolean
+          listas: number
           marca: string
           medio_id: string
           medio_nombre: string

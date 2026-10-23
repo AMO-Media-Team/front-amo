@@ -763,9 +763,10 @@ begin
     and (select estado = 'METRICAS_CARGADAS' from public.asignaciones where id = a_a));
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
-  perform public.transicionar_srv('metricas', m_h24, 'APROBADA', u_adm, s_adm);
-  perform public.transicionar_srv('metricas', m_h72, 'APROBADA', u_adm, s_adm);
-  perform public.transicionar_srv('metricas', m_d7, 'APROBADA', u_adm, s_adm);
+  -- Desde e3_validacion, una métrica que tuvo alerta (aunque el medio la corrigiera) se aprueba con constancia.
+  perform public.transicionar_srv('metricas', m_h24, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
+  perform public.transicionar_srv('metricas', m_h72, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
+  perform public.transicionar_srv('metricas', m_d7, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
   execute 'reset role';
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
