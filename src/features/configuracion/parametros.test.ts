@@ -22,7 +22,10 @@ type Regla = [
   opciones?: string[],
 ]
 
-/** Las 53 claves sembradas (docs/modelo-datos.md §7) con sus reglas reales. */
+/**
+ * Las 53 claves sembradas (docs/modelo-datos.md §7) y las que suma la fase 4
+ * (e3_validacion), con sus reglas reales.
+ */
 const SEMILLA: readonly Regla[] = [
   ["comision.porcentaje_global", "PORCENTAJE", 0, 0.5],
   ["comision.visible_para_medio", "BOOLEANO", null, null],
@@ -44,6 +47,8 @@ const SEMILLA: readonly Regla[] = [
     ["H24", "H72", "D7"],
   ],
   ["metricas.plazo_carga_horas", "ENTERO", 1, 336],
+  ["evidencias.plazo_recarga_horas", "ENTERO", 1, 168],
+  ["soporte.correo", "TEXTO", null, null],
   ["metricas.factor_desviacion", "DECIMAL", 1.5, 10],
   ["metricas.minimo_historial", "ENTERO", 1, 50],
   [
@@ -120,8 +125,8 @@ function reglas([
 }
 
 describe("catálogo de parámetros", () => {
-  it("cubre exactamente las 53 claves sembradas", () => {
-    expect(SEMILLA).toHaveLength(53)
+  it("cubre exactamente las 55 claves con ficha", () => {
+    expect(SEMILLA).toHaveLength(55)
     expect(Object.keys(FICHAS).sort()).toEqual(SEMILLA.map(([c]) => c).sort())
   })
 

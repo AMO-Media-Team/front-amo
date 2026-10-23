@@ -319,18 +319,15 @@ begin
   execute 'reset role';
 
   -- ── (b) Edición de métricas, §10.8 (12a) ────────────────────────────────────────────────────────────
+  -- Desde e3_validacion solo el medio dueño edita por la sesión; el equipo AMO corrige con corregir_metrica_srv.
   perform set_config('request.jwt.claims', c_ope, true);
   execute 'set local role authenticated';
-  begin
-    update public.metricas set alcance = 777777 where id = m3;
-    r := r || jsonb_build_object('b1_validador_no_corrige_rechazada', 'NO FALLÓ');
-  exception when others then r := r || jsonb_build_object('b1_validador_no_corrige_rechazada', sqlerrm = 'AMO_NO_AUTORIZADO'); end;
-  begin
-    update public.metricas set alcance = 777777 where id = m1;
-    r := r || jsonb_build_object('b2_validador_no_corrige_aprobada', 'NO FALLÓ');
-  exception when others then r := r || jsonb_build_object('b2_validador_no_corrige_aprobada', sqlerrm = 'AMO_NO_AUTORIZADO'); end;
+  update public.metricas set alcance = 777777 where id = m3; get diagnostics v_n = row_count;
+  r := r || jsonb_build_object('b1_validador_no_corrige_rechazada', v_n = 0);
+  update public.metricas set alcance = 777777 where id = m1; get diagnostics v_n = row_count;
+  r := r || jsonb_build_object('b2_validador_no_corrige_aprobada', v_n = 0);
   update public.metricas set alcance = 9001 where id = m2; get diagnostics v_n = row_count;
-  r := r || jsonb_build_object('b3_validador_ajusta_pendiente', v_n = 1);
+  r := r || jsonb_build_object('b3_validador_no_reescribe_pendiente', v_n = 0);
   execute 'reset role';
   r := r || jsonb_build_object('b1_rechazada_intacta', (select estado_validacion = 'RECHAZADA' and alcance = 8000 from public.metricas where id = m3));
   perform set_config('request.jwt.claims', c_meb, true);
@@ -355,10 +352,15 @@ begin
   execute 'set local role authenticated';
   update public.metricas set alcance = 7001 where id = m4; get diagnostics v_n = row_count;
   execute 'reset role';
+  r := r || jsonb_build_object('b8b_admin_no_corrige_por_sesion', v_n = 0);
+  perform set_config('request.jwt.claims', c_srv, true);
+  execute 'set local role service_role';
+  perform public.corregir_metrica_srv(m4, '{"alcance": 7001}', 'Cifra mal transcrita del panel', u_adm, s_adm);
+  execute 'reset role';
   r := r || jsonb_build_object('b8_admin_corrige_validada_con_bitacora',
-    v_n = 1 and (select estado_validacion = 'APROBADA' and alcance = 7001 from public.metricas where id = m4)
+    (select estado_validacion = 'APROBADA' and alcance = 7001 from public.metricas where id = m4)
     and exists (select 1 from public.bitacora b where b.entidad = 'metricas' and b.entidad_id = m4::text and b.accion = 'UPDATE'
-                  and b.cambios ? 'alcance'));
+                  and b.cambios ? 'alcance' and b.motivo = 'Cifra mal transcrita del panel' and b.actor_id = u_adm));
 
   -- ── (d) Guardas de plataforma frente al servidor (12b) ──────────────────────────────────────────────
   perform set_config('request.jwt.claims', c_srv, true);

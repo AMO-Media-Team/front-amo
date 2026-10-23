@@ -41,6 +41,16 @@ export const SPECS_ANUNCIANTE = /anunciante-.*\.spec\.ts/
 export const PROYECTO_PAUTA_MEDIO = "pauta-medio"
 export const SPECS_PAUTA_MEDIO = /[\\/]pauta-medio-[^\\/]*\.spec\.ts$/
 
+/**
+ * Specs del equipo AMO que escriben (`validacion-*`, `disputas-*`): colas de
+ * validación, verificación, cancelación, suspensión y disputas sobre asignaciones
+ * de las fábricas. En serie y después de `pauta-medio` y `anunciante`, que
+ * comparten el «Medio E2E».
+ */
+export const PROYECTO_VALIDACION = "validacion"
+export const SPECS_VALIDACION =
+  /[\\/](?:validacion|disputas)-[^\\/]*\.spec\.ts$/
+
 /** Tablet y móvil emulan pantalla táctil (`hasTouch`). */
 export function esTactil(proyecto: string): boolean {
   return proyecto === PROYECTO_TABLET || proyecto === PROYECTO_MOVIL

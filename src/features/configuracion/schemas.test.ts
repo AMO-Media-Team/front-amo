@@ -80,6 +80,21 @@ describe("cifras escritas a mano", () => {
 })
 
 describe("esquemaValorParametro (mismas reglas que fn_validar_configuracion)", () => {
+  it("un texto sin opciones es libre: puede quedar vacío y un correo debe tener su forma", () => {
+    const correo = esquemaValorParametro(
+      reglas({ clave: "soporte.correo", tipo: "TEXTO" })
+    )
+    expect(correo.safeParse("").success).toBe(true)
+    expect(correo.safeParse(" soporte@amo.com.co ").data).toBe(
+      "soporte@amo.com.co"
+    )
+    expect(correo.safeParse("soporte").success).toBe(false)
+    const conOpciones = esquemaValorParametro(
+      reglas({ tipo: "TEXTO", opciones: ["QUINCENAL", "MENSUAL"] })
+    )
+    expect(conOpciones.safeParse("").success).toBe(false)
+  })
+
   it("ENTERO: entero y dentro del rango", () => {
     const esquema = esquemaValorParametro(reglas({ minimo: 1, maximo: 168 }))
     expect(esquema.parse(24)).toBe(24)

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
 // Origen: Supabase local (supabase start), esquema public,
-// última migración aplicada: 20261023022211_e2_integridad_ejecucion.
+// última migración aplicada: 20261023171316_e3_validacion.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -1254,6 +1254,7 @@ export type Database = {
         Row: {
           adjunto_path: string | null
           autor_id: string
+          autor_parte: Database["public"]["Enums"]["disputa_parte"] | null
           created_at: string
           disputa_id: string
           id: number
@@ -1263,6 +1264,7 @@ export type Database = {
         Insert: {
           adjunto_path?: string | null
           autor_id?: string
+          autor_parte?: Database["public"]["Enums"]["disputa_parte"] | null
           created_at?: string
           disputa_id: string
           id?: never
@@ -1272,6 +1274,7 @@ export type Database = {
         Update: {
           adjunto_path?: string | null
           autor_id?: string
+          autor_parte?: Database["public"]["Enums"]["disputa_parte"] | null
           created_at?: string
           disputa_id?: string
           id?: never
@@ -3734,6 +3737,18 @@ export type Database = {
           hora: number
         }[]
       }
+      alertas_metricas: {
+        Args: { p_asignacion_id?: string; p_medio_id?: string }
+        Returns: {
+          alerta_desviacion: boolean
+          alerta_multiplo: boolean
+          asignacion_id: string
+          created_at: string
+          detalle_alertas: Json
+          estado_validacion: Database["public"]["Enums"]["validacion_estado"]
+          metrica_id: string
+        }[]
+      }
       anunciantes_publico: {
         Args: { p_ids?: string[] }
         Returns: {
@@ -3751,6 +3766,21 @@ export type Database = {
         Args: { p_actor_id: string; p_oferta_id: string; p_session_id: string }
         Returns: undefined
       }
+      asignaciones_en_curso_medio: {
+        Args: { p_medio_id: string }
+        Returns: {
+          anunciante: string
+          cancelable: boolean
+          disputa_abierta_id: string
+          estado: Database["public"]["Enums"]["asignacion_estado"]
+          estado_previo_disputa: Database["public"]["Enums"]["asignacion_estado"]
+          fecha_limite_publicacion: string
+          id: string
+          monto_bruto: number
+          oferta_id: string
+          oferta_titulo: string
+        }[]
+      }
       autorizar_gestion_usuario_srv: {
         Args: {
           p_accion: string
@@ -3759,6 +3789,17 @@ export type Database = {
           p_session_id: string
         }
         Returns: undefined
+      }
+      cancelar_asignacion_srv: {
+        Args: {
+          p_actor_id: string
+          p_asignacion_id: string
+          p_causa: Database["public"]["Enums"]["cancelacion_causa"]
+          p_motivo: string
+          p_session_id: string
+          p_suspender_medio: boolean
+        }
+        Returns: Json
       }
       cancelar_tarifa_programada: {
         Args: { p_tarifa_id: string }
@@ -3773,6 +3814,103 @@ export type Database = {
           p_usuario_id: string
         }
         Returns: number
+      }
+      cola_evidencias: {
+        Args: { p_desplazamiento?: number; p_limite?: number }
+        Returns: {
+          asignacion_estado: Database["public"]["Enums"]["asignacion_estado"]
+          asignacion_id: string
+          captura_path: string
+          cuenta_url: string
+          enviada_at: string
+          fecha_publicacion: string
+          handle: string
+          marca: string
+          medio_id: string
+          medio_nombre: string
+          miniatura_path: string
+          numero: number
+          observaciones_previas: string
+          oferta_id: string
+          oferta_titulo: string
+          permanencia_hasta: string
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicacion_id: string
+          publicaciones: number
+          total: number
+          url_post: string
+          ventana_fin: string
+          ventana_inicio: string
+        }[]
+      }
+      cola_metricas: {
+        Args: {
+          p_desplazamiento?: number
+          p_limite?: number
+          p_solo_alertas?: boolean
+        }
+        Returns: {
+          alcance: number
+          alerta_desviacion: boolean
+          alerta_multiplo: boolean
+          asignacion_estado: Database["public"]["Enums"]["asignacion_estado"]
+          asignacion_id: string
+          captura_path: string
+          clics_enlace: number
+          corte: Database["public"]["Enums"]["corte_metrica"]
+          detalle_alertas: Json
+          enviada_at: string
+          espectadores_unicos: number
+          evidencia_aprobada: boolean
+          fecha_corte: string
+          handle: string
+          impresiones: number
+          interacciones: number
+          medio_id: string
+          medio_nombre: string
+          metrica_id: string
+          miniatura_path: string
+          numero: number
+          oferta_titulo: string
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicacion_id: string
+          reproducciones: number
+          seguidores_al_aceptar: number
+          total: number
+        }[]
+      }
+      cola_verificacion: {
+        Args: { p_desplazamiento?: number; p_limite?: number }
+        Returns: {
+          asignacion_id: string
+          bloqueo: string
+          cortes_aprobados: number
+          cortes_requeridos: number
+          handle: string
+          lista: boolean
+          marca: string
+          medio_id: string
+          medio_nombre: string
+          metricas_cargadas_at: string
+          metricas_con_alerta: number
+          metricas_pendientes: number
+          oferta_id: string
+          oferta_titulo: string
+          permanencia_hasta: string
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicaciones: number
+          total: number
+        }[]
+      }
+      corregir_metrica_srv: {
+        Args: {
+          p_actor_id: string
+          p_metrica_id: string
+          p_motivo: string
+          p_session_id: string
+          p_valores: Json
+        }
+        Returns: string
       }
       cotizar_oferta: {
         Args: { p_cuenta_social_id: string; p_oferta_id: string }
@@ -4154,6 +4292,20 @@ export type Database = {
           publicaciones_verificadas: number
           tasa_cumplimiento: number
           tipo: Database["public"]["Enums"]["medio_tipo"]
+        }[]
+      }
+      mensajes_disputa: {
+        Args: { p_disputa_id: string }
+        Returns: {
+          adjunto_path: string
+          autor_nombre: string
+          autor_parte: Database["public"]["Enums"]["disputa_parte"]
+          autor_persona: string
+          created_at: string
+          es_mio: boolean
+          id: number
+          interno: boolean
+          mensaje: string
         }[]
       }
       metricas_accesos: {
@@ -4815,6 +4967,27 @@ export type Database = {
           p_hacia: string
           p_id: string
           p_motivo?: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      validar_evidencia_srv: {
+        Args: {
+          p_actor_id: string
+          p_aprobar: boolean
+          p_etiqueta_verificada: boolean
+          p_observaciones: string
+          p_publicacion_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      validar_metrica_srv: {
+        Args: {
+          p_actor_id: string
+          p_aprobar: boolean
+          p_metrica_id: string
+          p_observaciones: string
           p_session_id: string
         }
         Returns: Json

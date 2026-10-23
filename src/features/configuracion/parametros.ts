@@ -46,8 +46,9 @@ export const GRUPOS: readonly GrupoParametros[] = [
   {
     id: "disputas",
     seccion: "comercial",
-    titulo: "Disputas",
-    descripcion: "Plazos del medio cuando una asignación vence sin publicar.",
+    titulo: "Disputas y soporte",
+    descripcion:
+      "Plazos del medio cuando una asignación vence sin publicar y el correo de soporte que ven medios y anunciantes.",
   },
   {
     id: "precios",
@@ -218,6 +219,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Plazo para recargar la evidencia",
     defecto: 24,
   },
+  "soporte.correo": {
+    grupo: "disputas",
+    titulo: "Correo de soporte",
+    defecto: "",
+    impacto:
+      "Medios y anunciantes lo ven cuando necesitan escribirle al equipo AMO. Vacío, solo se ofrecen los reclamos y las disputas de la plataforma.",
+  },
   "precios.redondeo": {
     grupo: "precios",
     titulo: "Redondeo del precio",
@@ -278,6 +286,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     grupo: "cortes",
     titulo: "Plazo de carga",
     defecto: 48,
+  },
+  "evidencias.plazo_recarga_horas": {
+    grupo: "cortes",
+    titulo: "Plazo para recargar una evidencia rechazada",
+    defecto: 24,
+    impacto:
+      "Si el equipo AMO rechaza una evidencia con el plazo de publicación vencido o por vencer, el medio tiene al menos estas horas para cargar una nueva.",
   },
   "metricas.factor_desviacion": {
     grupo: "integridad",

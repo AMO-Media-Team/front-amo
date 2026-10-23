@@ -112,6 +112,26 @@ describe("destinoDe · portales externos", () => {
     expect(destinoDe("disputas", ID, anunciante)).toBe("/campanas")
   })
 
+  it("las disputas abren su hilo en el portal de cada parte y en la bandeja interna", () => {
+    expect(
+      destinoDe("disputas", ID, interno(["disputas.ver"]), {
+        asignacionId: PADRE,
+      })
+    ).toBe(`/operacion/disputas/${ID}`)
+    expect(destinoDe("disputas", ID, interno(), { asignacionId: PADRE })).toBe(
+      `/operacion/asignaciones/${PADRE}`
+    )
+    expect(destinoDe("disputas", ID, medio, { asignacionId: "a1" })).toBe(
+      "/mis-campanas/a1/disputa"
+    )
+    expect(
+      destinoDe("disputas", ID, anunciante, {
+        campanaId: PADRE,
+        asignacionId: "a1",
+      })
+    ).toBe(`/campanas/${PADRE}/asignaciones/a1/disputa`)
+  })
+
   it("el anunciante va a su empresa, sus campañas y sus ofertas", () => {
     expect(destinoDe("anunciantes", ID, anunciante)).toBe("/empresa")
     expect(destinoDe("documentos_anunciante", ID, anunciante)).toBe(

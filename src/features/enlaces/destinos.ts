@@ -121,7 +121,11 @@ function destinoInterno(
     case "asignaciones":
     case "publicaciones":
     case "metricas":
+      return asignacion ? r(`/operacion/asignaciones/${asignacion}`) : null
     case "disputas":
+      // La bandeja de disputas para quien la ve; si no, la ficha de la asignación.
+      if (permisos.includes("disputas.ver"))
+        return r(`/operacion/disputas/${id}`)
       return asignacion ? r(`/operacion/asignaciones/${asignacion}`) : null
     case "liquidaciones":
       return medio ? r(`/operacion/medios/${medio}`) : null
@@ -157,9 +161,12 @@ function destinoMedio(
       return r(`/mis-campanas/${id}`)
     case "publicaciones":
     case "metricas":
-    case "disputas":
       return relacionados.asignacionId
         ? r(`/mis-campanas/${relacionados.asignacionId}`)
+        : r("/mis-campanas")
+    case "disputas":
+      return relacionados.asignacionId
+        ? r(`/mis-campanas/${relacionados.asignacionId}/disputa`)
         : r("/mis-campanas")
     default:
       return INICIO
@@ -187,8 +194,7 @@ function destinoAnunciante(
         : r("/campanas")
     case "asignaciones":
     case "publicaciones":
-    case "metricas":
-    case "disputas": {
+    case "metricas": {
       const asignacion =
         entidad === "asignaciones" ? id : relacionados.asignacionId
       return relacionados.campanaId && asignacion
@@ -197,6 +203,12 @@ function destinoAnunciante(
           )
         : r("/campanas")
     }
+    case "disputas":
+      return relacionados.campanaId && relacionados.asignacionId
+        ? r(
+            `/campanas/${relacionados.campanaId}/asignaciones/${relacionados.asignacionId}/disputa`
+          )
+        : r("/campanas")
     default:
       return INICIO
   }

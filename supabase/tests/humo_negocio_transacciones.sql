@@ -725,8 +725,8 @@ begin
   begin
     perform public.transicionar_srv('publicaciones', p1, 'APROBADA', u_adm, s_adm);
     r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', 'NO FALLÓ');
-  exception when check_violation then
-    r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', true);
+  exception when others then                                  -- desde e3_validacion, con su error de negocio
+    r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', sqlerrm = 'AMO_ETIQUETA_REQUERIDA');
   end;
   perform public.transicionar_srv('publicaciones', p1, 'APROBADA', u_adm, s_adm, null, '{"etiqueta_verificada": true}');
   perform public.transicionar_srv('asignaciones', a_a, 'EVIDENCIA_VALIDADA', u_adm, s_adm);
@@ -1270,7 +1270,8 @@ begin
   execute 'reset role';
   perform set_config('request.jwt.claims', c_adm, true);
   execute 'set local role authenticated';
-  update public.metricas set alcance = 170 where id = m2;                 get diagnostics v_n = row_count; r := r || jsonb_build_object('p12_admin_edita_metrica', v_n = 1);
+  -- Desde e3_validacion el equipo AMO no reescribe cifras por la sesión: corrige con corregir_metrica_srv (motivo).
+  update public.metricas set alcance = 170 where id = m2;                 get diagnostics v_n = row_count; r := r || jsonb_build_object('p12_admin_no_edita_metrica_por_sesion', v_n = 0);
   update public.ofertas set titulo = 'Pol borrador moderado' where id = o1; get diagnostics v_n = row_count; r := r || jsonb_build_object('p13_admin_edita_oferta', v_n = 1);
   update public.campanas set objetivo = 'Objetivo admin' where id = c1;   get diagnostics v_n = row_count; r := r || jsonb_build_object('p13b_admin_edita_campana', v_n = 1);
   execute 'reset role';

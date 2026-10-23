@@ -12,9 +12,11 @@ import {
   PROYECTO_PAUTA_MEDIO,
   PROYECTO_PREPARACION,
   PROYECTO_TABLET,
+  PROYECTO_VALIDACION,
   SPECS_ALTA_MEDIO,
   SPECS_ANUNCIANTE,
   SPECS_PAUTA_MEDIO,
+  SPECS_VALIDACION,
 } from "./e2e/utilidades/proyectos"
 
 /**
@@ -126,6 +128,24 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },
         hasTouch: true,
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // El equipo AMO (validación, verificación, disputas, suspensión), en
+      // serie y después de la pauta del medio y del anunciante: usa asignaciones
+      // del mismo «Medio E2E».
+      name: PROYECTO_VALIDACION,
+      dependencies: [
+        PROYECTO_PREPARACION,
+        PROYECTO_PAUTA_MEDIO,
+        PROYECTO_ANUNCIANTE,
+      ],
+      testMatch: SPECS_VALIDACION,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
         launchOptions: OPCIONES_LANZAMIENTO,
       },
     },
