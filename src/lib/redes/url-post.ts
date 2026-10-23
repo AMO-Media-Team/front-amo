@@ -3,18 +3,46 @@
  *
  * `normalizarUrlPost` deja una forma canónica (https, dominio principal, sin
  * parámetros de rastreo, sin fragmento ni barra final) y `validarUrlPost`
- * comprueba que sea una publicación de la plataforma pedida. La forma
- * canónica cumple el CHECK `publicaciones_url_chk` de la BD (una prueba lo lee
- * de las migraciones): la BD solo exige el dominio y el prefijo de la ruta;
- * aquí además se distingue una publicación de un perfil para orientar a la
- * persona antes de enviar.
+ * comprueba que sea una publicación de la plataforma pedida. Sobre la forma
+ * canónica acepta EXACTAMENTE lo que acepta el CHECK `publicaciones_url_chk`
+ * de la BD (una prueba lo lee de las migraciones y compara las dos reglas con
+ * miles de enlaces): lo que no pasa se explica antes de enviar (un perfil, otra
+ * red, una sección que no es una publicación) con un ejemplo del formato que
+ * pide la oferta. El formato no bloquea (la BD tampoco lo exige): si el enlace
+ * parece de otro tipo de contenido, devuelve un `aviso` para que la persona lo
+ * revise. Con la cuenta de la campaña, un enlace que nombra otra cuenta (un
+ * video de TikTok, una historia de Instagram) se rechaza, igual que en
+ * `registrar_evidencia_srv`.
  */
 import type { Database } from "@/types/database.types"
 
 export type PlataformaPost = Database["public"]["Enums"]["plataforma"]
 
+/** Claves de `formatos` (matriz plataforma × formato). */
+export type FormatoPost =
+  "POST_FEED" | "CARRUSEL" | "REEL" | "HISTORIA" | "VIDEO"
+
+/** Qué tipo de contenido abre un enlace válido (si se puede saber por su forma). */
+export type TipoContenidoPost =
+  | "publicacion"
+  | "reel"
+  | "historia"
+  | "video"
+  | "foto"
+  /** Enlaces cortos o de compartir que no dicen qué abren. */
+  | "indeterminado"
+
 export type ResultadoUrlPost =
-  | { ok: true; /** Forma canónica: la que se guarda. */ url: string }
+  | {
+      ok: true
+      /** Forma canónica: la que se guarda. */
+      url: string
+      /**
+       * El enlace parece de otro tipo de contenido que el que pide la oferta
+       * (una historia en una oferta de reel). No impide enviarlo.
+       */
+      aviso?: string
+    }
   | { ok: false; mensaje: string; ejemplo: string }
 
 /** Igual que `publicaciones_url_chk`. */
@@ -30,6 +58,46 @@ export const EJEMPLOS_URL_POST: Readonly<Record<PlataformaPost, string>> = {
   FACEBOOK: "https://www.facebook.com/share/p/1AbCdEfGh2/",
   INSTAGRAM: "https://www.instagram.com/p/C8xYz12AbCd/",
   TIKTOK: "https://www.tiktok.com/@tucuenta/video/7412345678901234567",
+}
+
+/** Ejemplos por formato (los que no están usan el de la plataforma). */
+const EJEMPLOS_POR_FORMATO: Readonly<
+  Record<PlataformaPost, Partial<Record<FormatoPost, string>>>
+> = {
+  FACEBOOK: {
+    VIDEO: "https://www.facebook.com/share/v/1Q2w3E4r5T/",
+    REEL: "https://www.facebook.com/reel/1234567890123456",
+    HISTORIA: "https://www.facebook.com/stories/100064527312345/UzpfSVNDOjEy/",
+  },
+  INSTAGRAM: {
+    REEL: "https://www.instagram.com/reel/C9AbCdEfGhI/",
+    HISTORIA: "https://www.instagram.com/stories/tucuenta/3456789012345678901/",
+  },
+  TIKTOK: {},
+}
+
+const FORMATOS_POST: ReadonlySet<string> = new Set<FormatoPost>([
+  "POST_FEED",
+  "CARRUSEL",
+  "REEL",
+  "HISTORIA",
+  "VIDEO",
+])
+
+function comoFormato(formato: string | null | undefined): FormatoPost | null {
+  return formato && FORMATOS_POST.has(formato) ? (formato as FormatoPost) : null
+}
+
+/** Ejemplo de enlace para la plataforma y, si se conoce, el formato de la oferta. */
+export function ejemploUrlPost(
+  plataforma: PlataformaPost,
+  formato?: string | null
+): string {
+  const clave = comoFormato(formato)
+  return (
+    (clave && EJEMPLOS_POR_FORMATO[plataforma][clave]) ??
+    EJEMPLOS_URL_POST[plataforma]
+  )
 }
 
 const NOMBRES: Readonly<Record<PlataformaPost, string>> = {
@@ -48,6 +116,42 @@ const QUE_SE_ACEPTA: Readonly<Record<PlataformaPost, string>> = {
   FACEBOOK: "una publicación, un video, un reel o una historia",
   INSTAGRAM: "una publicación, un reel o una historia",
   TIKTOK: "un video o una publicación de fotos",
+}
+
+/** Cómo se nombra lo que pide la oferta: «el enlace del reel». */
+const CONTENIDO_DEL_FORMATO: Readonly<
+  Record<FormatoPost, { del: string; un: string }>
+> = {
+  POST_FEED: { del: "de la publicación", un: "una publicación de feed" },
+  CARRUSEL: { del: "del carrusel", un: "un carrusel" },
+  REEL: { del: "del reel", un: "un reel" },
+  HISTORIA: { del: "de la historia", un: "una historia" },
+  VIDEO: { del: "del video", un: "un video" },
+}
+
+const NOMBRE_TIPO: Readonly<
+  Record<Exclude<TipoContenidoPost, "indeterminado">, string>
+> = {
+  publicacion: "una publicación",
+  reel: "un reel",
+  historia: "una historia",
+  video: "un video",
+  foto: "una foto",
+}
+
+/**
+ * Tipos de contenido que con seguridad NO son lo que pide el formato. Lo
+ * dudoso no avisa: Instagram abre un reel también con `/p/` y un video de
+ * feed con `/reel/`; Facebook, un reel con `/watch`.
+ */
+const INCOMPATIBLES: Readonly<
+  Record<FormatoPost, ReadonlySet<TipoContenidoPost>>
+> = {
+  POST_FEED: new Set(["historia"]),
+  CARRUSEL: new Set(["historia"]),
+  REEL: new Set(["historia", "foto"]),
+  HISTORIA: new Set(["publicacion", "reel", "video", "foto"]),
+  VIDEO: new Set(["historia", "foto"]),
 }
 
 const MENSAJE_VACIO = "Pega el enlace de la publicación."
@@ -100,15 +204,19 @@ const ENLACE_EN_TEXTO = /https?:\/\/[^\s<>"']+/i
 const PUNTUACION_FINAL: ReadonlySet<string> = new Set(".,;:!?)]}»”’")
 const PARECE_DOMINIO = /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i
 
-/** Únicos parámetros que identifican una publicación de Facebook. */
-const PARAMETROS_FACEBOOK = new Set([
+/**
+ * Únicos parámetros que identifican una publicación de Facebook, en el orden
+ * en que se guardan: el mismo post copiado con los parámetros en otro orden
+ * (o repetidos) queda igual.
+ */
+const PARAMETROS_FACEBOOK = [
   "story_fbid",
   "fbid",
   "id",
   "v",
   "set",
   "multi_permalinks",
-])
+] as const
 
 const PARAMETROS_RASTREO = new Set([
   "fbclid",
@@ -196,9 +304,16 @@ function parametrosLimpios(
   parametros: URLSearchParams,
   plataforma: PlataformaPost | null
 ): string {
+  if (plataforma === "FACEBOOK") {
+    return new URLSearchParams(
+      PARAMETROS_FACEBOOK.flatMap((nombre) => {
+        const valor = parametros.get(nombre)
+        return valor ? [[nombre, valor]] : []
+      })
+    ).toString()
+  }
+  if (plataforma) return ""
   const conservar = (nombre: string) => {
-    if (plataforma === "FACEBOOK") return PARAMETROS_FACEBOOK.has(nombre)
-    if (plataforma) return false
     const minusculas = nombre.toLowerCase()
     return !minusculas.startsWith("utm_") && !PARAMETROS_RASTREO.has(minusculas)
   }
@@ -229,24 +344,35 @@ export function normalizarUrlPost(url: string): string {
 
 // ── Validación ─────────────────────────────────────────────────────────────
 
-type TipoEnlace = "publicacion" | "perfil" | "otro"
+/**
+ * Las rutas de cada red son las alternativas de `publicaciones_url_chk` (que
+ * no distingue mayúsculas), cada una con el tipo de contenido que abre.
+ */
+type TipoEnlace = TipoContenidoPost | "perfil" | "otro"
 
-const RUTAS_POST_FACEBOOK = [
-  /^\/[^/]+\/posts\/[^/]+$/i,
-  /^\/[^/]+\/videos\/(?:[^/]+\/)?[^/]+$/i,
-  /^\/[^/]+\/photos\/(?:[^/]+\/)?[^/]+$/i,
-  /^\/reel\/[^/]+$/i,
-  /^\/share\/(?:[prv]\/)?[^/]+$/i,
-  /^\/groups\/[^/]+\/(?:posts|permalink)\/[^/]+$/i,
-  /^\/stories\/[^/]+(?:\/[^/]+)?$/i,
+const RUTAS_POST_FACEBOOK: readonly (readonly [RegExp, TipoContenidoPost])[] = [
+  [/^\/[^/]+\/posts\/(?:[^/]+\/)?[^/]+$/i, "publicacion"],
+  [/^\/[^/]+\/videos\/(?:[^/]+\/)?[^/]+$/i, "video"],
+  [/^\/[^/]+\/photos\/(?:[^/]+\/)?[^/]+$/i, "foto"],
+  [/^\/reel\/[^/]+$/i, "reel"],
+  [/^\/share\/p\/[^/]+$/i, "publicacion"],
+  [/^\/share\/r\/[^/]+$/i, "reel"],
+  [/^\/share\/v\/[^/]+$/i, "video"],
+  [/^\/share\/[^/]+$/i, "indeterminado"],
+  [/^\/groups\/[^/]+\/(?:posts|permalink)\/[^/]+$/i, "publicacion"],
+  [/^\/stories\/[^/]+(?:\/[^/]+)?$/i, "historia"],
 ]
 
 /** Rutas de Facebook que identifican la publicación con un parámetro. */
-const RUTAS_CON_PARAMETRO_FACEBOOK: readonly (readonly [RegExp, string])[] = [
-  [/^\/(?:watch|video\.php)$/i, "v"],
-  [/^\/(?:photo|photo\.php)$/i, "fbid"],
-  [/^\/(?:permalink|story)\.php$/i, "story_fbid"],
-  [/^\/groups\/[^/]+$/i, "multi_permalinks"],
+const RUTAS_CON_PARAMETRO_FACEBOOK: readonly (readonly [
+  RegExp,
+  string,
+  TipoContenidoPost,
+])[] = [
+  [/^\/(?:watch|video\.php)$/i, "v", "video"],
+  [/^\/(?:photo|photo\.php)$/i, "fbid", "foto"],
+  [/^\/(?:permalink|story)\.php$/i, "story_fbid", "publicacion"],
+  [/^\/groups\/[^/]+$/i, "multi_permalinks", "publicacion"],
 ]
 
 function esPerfilDeUnSegmento(ruta: string): boolean {
@@ -261,16 +387,15 @@ function esPerfilDeUnSegmento(ruta: string): boolean {
 function tipoFacebook(url: URL): TipoEnlace {
   const ruta = url.pathname
   if (url.hostname === "fb.watch") {
-    return /^\/[\w-]+$/.test(ruta) ? "publicacion" : "otro"
+    return /^\/[\w-]+$/.test(ruta) ? "video" : "otro"
   }
-  if (RUTAS_POST_FACEBOOK.some((patron) => patron.test(ruta))) {
-    return "publicacion"
-  }
+  const porRuta = RUTAS_POST_FACEBOOK.find(([patron]) => patron.test(ruta))
+  if (porRuta) return porRuta[1]
   const conParametro = RUTAS_CON_PARAMETRO_FACEBOOK.find(([patron]) =>
     patron.test(ruta)
   )
   if (conParametro && url.searchParams.get(conParametro[1])) {
-    return "publicacion"
+    return conParametro[2]
   }
   if (/^\/profile\.php$/i.test(ruta) || esPerfilDeUnSegmento(ruta)) {
     return "perfil"
@@ -280,26 +405,20 @@ function tipoFacebook(url: URL): TipoEnlace {
 
 function tipoInstagram(url: URL): TipoEnlace {
   const ruta = url.pathname
-  if (
-    /^\/(?:p|reel)\/[\w-]+$/.test(ruta) ||
-    /^\/stories\/[\w.]+\/\d+$/.test(ruta)
-  ) {
-    return "publicacion"
-  }
+  if (/^\/p\/[\w-]+$/i.test(ruta)) return "publicacion"
+  if (/^\/reel\/[\w-]+$/i.test(ruta)) return "reel"
+  if (/^\/stories\/[\w.]+\/\d+$/i.test(ruta)) return "historia"
   return esPerfilDeUnSegmento(ruta) ? "perfil" : "otro"
 }
 
 function tipoTikTok(url: URL): TipoEnlace {
   const ruta = url.pathname
   if (url.hostname === "vm.tiktok.com") {
-    return /^\/[A-Za-z0-9]+$/.test(ruta) ? "publicacion" : "otro"
+    return /^\/[A-Za-z0-9]+$/.test(ruta) ? "indeterminado" : "otro"
   }
-  if (
-    /^\/@[\w.-]+\/(?:video|photo)\/\d+$/i.test(ruta) ||
-    /^\/t\/[A-Za-z0-9]+$/.test(ruta)
-  ) {
-    return "publicacion"
-  }
+  if (/^\/@[\w.-]+\/video\/\d+$/i.test(ruta)) return "video"
+  if (/^\/@[\w.-]+\/photo\/\d+$/i.test(ruta)) return "foto"
+  if (/^\/t\/[A-Za-z0-9]+$/i.test(ruta)) return "indeterminado"
   return /^\/@[\w.-]+$/.test(ruta) ? "perfil" : "otro"
 }
 
@@ -311,46 +430,147 @@ const TIPO_POR_PLATAFORMA: Readonly<
   TIKTOK: tipoTikTok,
 }
 
-/** Primer problema del enlace (ya normalizado) o `null` si es una publicación válida. */
-function problemaDelEnlace(
-  plataforma: PlataformaPost,
-  url: string
-): string | null {
+type Analisis =
+  | {
+      valido: false
+      mensaje: string
+      /** Es de la red correcta pero no es una publicación: ayuda el formato. */
+      conPista: boolean
+    }
+  | { valido: true; tipo: TipoContenidoPost }
+
+/** El primer problema del enlace (ya normalizado) o el tipo de contenido que abre. */
+function analizarEnlace(plataforma: PlataformaPost, url: string): Analisis {
+  const invalido = (mensaje: string, conPista = false): Analisis => ({
+    valido: false,
+    mensaje,
+    conPista,
+  })
   const partes = analizar(url)
-  if (!partes) return MENSAJE_NO_ES_ENLACE
+  if (!partes) return invalido(MENSAJE_NO_ES_ENLACE)
   const dominio = clasificarHost(partes.hostname)
   if (!dominio) {
-    return `El enlace debe ser de ${NOMBRES[plataforma]} (${DOMINIOS[plataforma]}).`
+    return invalido(
+      `El enlace debe ser de ${NOMBRES[plataforma]} (${DOMINIOS[plataforma]}).`
+    )
   }
   if (dominio.plataforma !== plataforma) {
-    return `Ese enlace es de ${NOMBRES[dominio.plataforma]}, pero la publicación debe estar en ${NOMBRES[plataforma]}.`
+    return invalido(
+      `Ese enlace es de ${NOMBRES[dominio.plataforma]}, pero la publicación debe estar en ${NOMBRES[plataforma]}.`
+    )
   }
-  if (partes.hostname === TIKTOK_VT) return MENSAJE_TIKTOK_VT
-  if (url.length > LONGITUD_MAXIMA_URL_POST) return MENSAJE_LARGO
+  if (partes.hostname === TIKTOK_VT) return invalido(MENSAJE_TIKTOK_VT)
+  if (url.length > LONGITUD_MAXIMA_URL_POST) return invalido(MENSAJE_LARGO)
   const tipo = TIPO_POR_PLATAFORMA[plataforma](partes)
-  if (tipo === "perfil") return MENSAJE_PERFIL
+  if (tipo === "perfil") return invalido(MENSAJE_PERFIL, true)
   if (tipo === "otro") {
-    return `Ese enlace de ${NOMBRES[plataforma]} no lleva a ${QUE_SE_ACEPTA[plataforma]}.`
+    return invalido(
+      `Ese enlace de ${NOMBRES[plataforma]} no lleva a ${QUE_SE_ACEPTA[plataforma]}.`,
+      true
+    )
   }
-  return null
+  return { valido: true, tipo }
+}
+
+/** «Para esta oferta, copia el enlace del reel.» (sin formato conocido, nada). */
+function pistaDelFormato(formato: FormatoPost | null): string {
+  return formato
+    ? ` Para esta oferta, copia el enlace ${CONTENIDO_DEL_FORMATO[formato].del}.`
+    : ""
+}
+
+function avisoDelFormato(
+  tipo: TipoContenidoPost,
+  formato: FormatoPost | null
+): string | null {
+  if (!formato || tipo === "indeterminado") return null
+  if (!INCOMPATIBLES[formato].has(tipo)) return null
+  return `Ese enlace parece de ${NOMBRE_TIPO[tipo]}, pero esta oferta pide ${CONTENIDO_DEL_FORMATO[formato].un}. Revisa que sea el de tu publicación.`
+}
+
+// ── Cuenta del enlace ──────────────────────────────────────────────────────
+
+/** `@usuario` de un video o una publicación de fotos de TikTok. */
+const CUENTA_TIKTOK = /^https:\/\/www\.tiktok\.com\/@([^/]+)\//i
+/** Usuario de una historia de Instagram. */
+const CUENTA_HISTORIA = /^https:\/\/www\.instagram\.com\/stories\/([^/]+)\//i
+/** `stories/highlights/<id>` es una historia destacada: no nombra la cuenta. */
+const NO_CUENTAS_HISTORIA: ReadonlySet<string> = new Set(["highlights"])
+
+/**
+ * Cuenta que nombra el enlace (sin `@`), si la nombra: el `@usuario` de TikTok
+ * o el usuario de una historia de Instagram. Las publicaciones y los reels de
+ * Instagram, Facebook y los enlaces cortos no dicen de qué cuenta son.
+ */
+export function cuentaDelEnlace(url: string): string | null {
+  const canonica = normalizarUrlPost(url)
+  const tiktok = CUENTA_TIKTOK.exec(canonica)?.[1]
+  if (tiktok) return tiktok
+  const historia = CUENTA_HISTORIA.exec(canonica)?.[1]
+  return historia && !NO_CUENTAS_HISTORIA.has(historia.toLowerCase())
+    ? historia
+    : null
+}
+
+/**
+ * Mensaje si el enlace nombra una cuenta distinta de la de la campaña (sin
+ * distinguir mayúsculas); el mismo `detail` de `AMO_URL_OTRA_CUENTA`.
+ */
+function mensajeOtraCuenta(url: string, cuenta: string): string | null {
+  const deLaCampana = cuenta.trim().replace(/^@/, "")
+  const delEnlace = cuentaDelEnlace(url)
+  if (!deLaCampana || !delEnlace) return null
+  if (delEnlace.toLowerCase() === deLaCampana.toLowerCase()) return null
+  return `El enlace es de @${delEnlace} y esta campaña es con @${deLaCampana}. Pega el enlace de la publicación en tu cuenta.`
+}
+
+/**
+ * Tipo de contenido que abre un enlace (canónico o tal como se pegó), o `null`
+ * si no es un enlace válido de esa plataforma.
+ */
+export function tipoContenidoPost(
+  plataforma: PlataformaPost,
+  url: string
+): TipoContenidoPost | null {
+  const analisis = analizarEnlace(plataforma, normalizarUrlPost(url))
+  return analisis.valido ? analisis.tipo : null
 }
 
 /**
  * ¿Es el enlace de una publicación de `plataforma`? Valida la forma canónica y
- * la devuelve en `url` para guardarla; si no, explica qué falla con un ejemplo.
+ * la devuelve en `url` para guardarla; si no, explica qué falla con un ejemplo
+ * (del formato de la oferta, si se indica). Con `formato`, un enlace válido que
+ * parece de otro tipo de contenido trae un `aviso` que no bloquea. Con
+ * `cuenta` (el usuario de la cuenta de la campaña), un enlace que nombra otra
+ * cuenta no vale.
  */
 export function validarUrlPost(
   plataforma: PlataformaPost,
-  url: string
+  url: string,
+  formato?: string | null,
+  cuenta?: string | null
 ): ResultadoUrlPost {
-  const ejemplo = EJEMPLOS_URL_POST[plataforma]
-  if (!url.trim()) return { ok: false, mensaje: MENSAJE_VACIO, ejemplo }
+  const clave = comoFormato(formato)
+  const ejemplo = ejemploUrlPost(plataforma, clave)
+  if (!url.trim()) {
+    const mensaje = clave
+      ? `Pega el enlace ${CONTENIDO_DEL_FORMATO[clave].del}.`
+      : MENSAJE_VACIO
+    return { ok: false, mensaje, ejemplo }
+  }
   if (url.length > LONGITUD_MAXIMA_ENTRADA) {
     return { ok: false, mensaje: MENSAJE_LARGO, ejemplo }
   }
   const normalizada = normalizarUrlPost(url)
-  const mensaje = problemaDelEnlace(plataforma, normalizada)
-  return mensaje
-    ? { ok: false, mensaje, ejemplo }
+  const analisis = analizarEnlace(plataforma, normalizada)
+  if (!analisis.valido) {
+    const pista = analisis.conPista ? pistaDelFormato(clave) : ""
+    return { ok: false, mensaje: `${analisis.mensaje}${pista}`, ejemplo }
+  }
+  const otraCuenta = cuenta ? mensajeOtraCuenta(normalizada, cuenta) : null
+  if (otraCuenta) return { ok: false, mensaje: otraCuenta, ejemplo }
+  const aviso = avisoDelFormato(analisis.tipo, clave)
+  return aviso
+    ? { ok: true, url: normalizada, aviso }
     : { ok: true, url: normalizada }
 }
