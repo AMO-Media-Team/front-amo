@@ -8,7 +8,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
-| P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ⬜     |
+| P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | 🔧     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
@@ -161,3 +161,10 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   en producción; verificado por MCP: 49 migraciones, 57 plantillas, 56 claves, 145 transiciones, funciones nuevas,
   configuración de prueba intacta, 3 superadministradores, advisors sin ERROR (WARN nuevos esperados:
   `disponible_campana` y `medios_para_exclusion`, definer con permiso y empresa comprobados por dentro).
+- 2026-10-22/23 · **Fase 3 en curso.** Mapeo (4 lectores) con un borrador de migración probado. Migración
+  `20261023022211_e2_integridad_ejecucion` (E2e, §3.11 de `docs/modelo-datos.md`, D54–D60) aplicada en local; la demo y las
+  cuentas E2E se generan con las reglas nuevas. Preparación del líder: navegación del medio (Ofertas, Mis campañas; barra
+  inferior Inicio · Ofertas · Campañas · Mi medio), `/ir` de la pauta para medio y anunciante (y relacionados también para los
+  portales externos: el aviso de una oferta ya lleva al anunciante a su ficha), errores nuevos, proyecto E2E `pauta-medio`,
+  `PieAcciones`, `BotonCopiar`, rutas y brief `fase-3.md`. Workflow de implementación con 7 paquetes (MK, MC, EV, DM, SG, E0,
+  SQ).
