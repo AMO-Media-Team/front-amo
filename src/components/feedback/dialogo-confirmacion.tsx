@@ -47,6 +47,12 @@ interface DialogoConfirmacionProps {
   destructivo?: boolean
   /** Texto que la persona debe escribir para habilitar la confirmación (p. ej. "ELIMINAR"). */
   textoVerificacion?: string
+  /**
+   * A dónde va el foco al cerrar. Úsalo cuando la acción hace desaparecer el
+   * botón que abrió el diálogo (p. ej. el título de la ficha con `tabIndex={-1}`);
+   * `null` vuelve al comportamiento por defecto (el elemento que lo tenía al abrir).
+   */
+  focoAlCerrar?: () => HTMLElement | null
   onConfirmar: () => RespuestaConfirmacion | Promise<RespuestaConfirmacion>
 }
 
@@ -66,6 +72,7 @@ export function DialogoConfirmacion({
   textoCancelar = "Cancelar",
   destructivo = false,
   textoVerificacion,
+  focoAlCerrar,
   onConfirmar,
 }: DialogoConfirmacionProps) {
   const [abiertoInterno, setAbiertoInterno] = useState(false)
@@ -109,7 +116,7 @@ export function DialogoConfirmacion({
   return (
     <AlertDialog open={abierto} onOpenChange={cambiarAbierto}>
       {disparador ? <AlertDialogTrigger render={disparador} /> : null}
-      <AlertDialogContent>
+      <AlertDialogContent finalFocus={focoAlCerrar}>
         <AlertDialogHeader>
           <AlertDialogMedia
             className={cn(

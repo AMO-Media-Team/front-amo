@@ -70,6 +70,26 @@ function useEstadoCampo(nombre: string) {
   return getFieldState(nombre, formState)
 }
 
+/**
+ * Ids de la ayuda y del error de un campo y el `aria-describedby` del control
+ * con solo los que se pintan: al enfocarlo, el lector anuncia su ayuda y, si
+ * lo hay, el error (que además se anuncia al aparecer, `role="alert"`).
+ */
+function descripciones(
+  id: string,
+  {
+    ayuda,
+    error,
+  }: { ayuda: ReactNode; error: { message?: string } | undefined }
+) {
+  const idAyuda = `${id}-ayuda`
+  const idError = `${id}-error`
+  const describedBy = [ayuda ? idAyuda : null, error?.message ? idError : null]
+    .filter(Boolean)
+    .join(" ")
+  return { idAyuda, idError, describedBy: describedBy || undefined }
+}
+
 function Etiqueta({
   htmlFor,
   etiqueta,
@@ -107,6 +127,10 @@ export function CampoTexto({
   const { register } = useFormContext<FieldValues>()
   const { error, invalid } = useEstadoCampo(nombre)
   const id = `${useId()}-${nombre}`
+  const { idAyuda, idError, describedBy } = descripciones(id, {
+    ayuda: descripcion,
+    error,
+  })
   return (
     <Field data-invalid={invalid || undefined} className={className}>
       <Etiqueta htmlFor={id} etiqueta={etiqueta} opcional={opcional} />
@@ -118,11 +142,14 @@ export function CampoTexto({
         autoFocus={autoFocus}
         autoCapitalize={mayusculas ? "characters" : undefined}
         aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         className={cn(mayusculas && "uppercase")}
         {...register(nombre)}
       />
-      {descripcion ? <FieldDescription>{descripcion}</FieldDescription> : null}
-      <FieldError errors={[error]} />
+      {descripcion ? (
+        <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
+      ) : null}
+      <FieldError id={idError} errors={[error]} />
     </Field>
   )
 }
@@ -148,6 +175,10 @@ export function CampoCifra({
   const { register } = useFormContext<FieldValues>()
   const { error, invalid } = useEstadoCampo(nombre)
   const id = `${useId()}-${nombre}`
+  const { idAyuda, idError, describedBy } = descripciones(id, {
+    ayuda: descripcion,
+    error,
+  })
   return (
     <Field data-invalid={invalid || undefined} className={className}>
       <Etiqueta htmlFor={id} etiqueta={etiqueta} opcional={opcional} />
@@ -164,6 +195,7 @@ export function CampoCifra({
           placeholder={placeholder}
           disabled={deshabilitado}
           aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           className="cifras"
           {...register(nombre)}
         />
@@ -173,8 +205,10 @@ export function CampoCifra({
           </InputGroupAddon>
         ) : null}
       </InputGroup>
-      {descripcion ? <FieldDescription>{descripcion}</FieldDescription> : null}
-      <FieldError errors={[error]} />
+      {descripcion ? (
+        <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
+      ) : null}
+      <FieldError id={idError} errors={[error]} />
     </Field>
   )
 }
@@ -193,6 +227,10 @@ export function CampoAreaTexto({
   const { register } = useFormContext<FieldValues>()
   const { error, invalid } = useEstadoCampo(nombre)
   const id = `${useId()}-${nombre}`
+  const { idAyuda, idError, describedBy } = descripciones(id, {
+    ayuda: descripcion,
+    error,
+  })
   return (
     <Field data-invalid={invalid || undefined} className={className}>
       <Etiqueta htmlFor={id} etiqueta={etiqueta} opcional={opcional} />
@@ -203,6 +241,7 @@ export function CampoAreaTexto({
         placeholder={placeholder}
         disabled={deshabilitado}
         aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         style={{ minHeight: `calc(${filas}lh + 1rem + 2px)` }}
         className={cn(
           "max-h-[70vh] resize-y",
@@ -210,8 +249,10 @@ export function CampoAreaTexto({
         )}
         {...register(nombre)}
       />
-      {descripcion ? <FieldDescription>{descripcion}</FieldDescription> : null}
-      <FieldError errors={[error]} />
+      {descripcion ? (
+        <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
+      ) : null}
+      <FieldError id={idError} errors={[error]} />
     </Field>
   )
 }
@@ -226,6 +267,10 @@ export function CampoInterruptor({
 }: PropsBase) {
   const { control } = useFormContext<FieldValues>()
   const id = `${useId()}-${nombre}`
+  const { idAyuda, describedBy } = descripciones(id, {
+    ayuda: descripcion,
+    error: undefined,
+  })
   return (
     <Controller
       control={control}
@@ -238,7 +283,7 @@ export function CampoInterruptor({
           <FieldContent>
             <FieldLabel htmlFor={id}>{etiqueta}</FieldLabel>
             {descripcion ? (
-              <FieldDescription>{descripcion}</FieldDescription>
+              <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
             ) : null}
           </FieldContent>
           <Switch
@@ -246,6 +291,7 @@ export function CampoInterruptor({
             checked={field.value === true}
             onCheckedChange={(valor) => field.onChange(valor)}
             disabled={deshabilitado}
+            aria-describedby={describedBy}
           />
         </Field>
       )}
@@ -273,39 +319,49 @@ export function CampoSelect({
     <Controller
       control={control}
       name={nombre}
-      render={({ field, fieldState }) => (
-        <Field
-          data-invalid={fieldState.invalid || undefined}
-          className={className}
-        >
-          <FieldLabel htmlFor={id}>{etiqueta}</FieldLabel>
-          <Select
-            value={field.value}
-            onValueChange={(valor) => field.onChange(valor ?? "")}
-            items={opciones.map((o) => ({ value: o.valor, label: o.etiqueta }))}
-            disabled={deshabilitado}
+      render={({ field, fieldState }) => {
+        const { idAyuda, idError, describedBy } = descripciones(id, {
+          ayuda: descripcion,
+          error: fieldState.error,
+        })
+        return (
+          <Field
+            data-invalid={fieldState.invalid || undefined}
+            className={className}
           >
-            <SelectTrigger
-              id={id}
-              className="w-full"
-              aria-invalid={fieldState.invalid || undefined}
+            <FieldLabel htmlFor={id}>{etiqueta}</FieldLabel>
+            <Select
+              value={field.value}
+              onValueChange={(valor) => field.onChange(valor ?? "")}
+              items={opciones.map((o) => ({
+                value: o.valor,
+                label: o.etiqueta,
+              }))}
+              disabled={deshabilitado}
             >
-              <SelectValue placeholder={placeholder} />
-            </SelectTrigger>
-            <SelectContent>
-              {opciones.map((opcion) => (
-                <SelectItem key={opcion.valor} value={opcion.valor}>
-                  {opcion.etiqueta}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {descripcion ? (
-            <FieldDescription>{descripcion}</FieldDescription>
-          ) : null}
-          <FieldError errors={[fieldState.error]} />
-        </Field>
-      )}
+              <SelectTrigger
+                id={id}
+                className="w-full"
+                aria-invalid={fieldState.invalid || undefined}
+                aria-describedby={describedBy}
+              >
+                <SelectValue placeholder={placeholder} />
+              </SelectTrigger>
+              <SelectContent>
+                {opciones.map((opcion) => (
+                  <SelectItem key={opcion.valor} value={opcion.valor}>
+                    {opcion.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {descripcion ? (
+              <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
+            ) : null}
+            <FieldError id={idError} errors={[fieldState.error]} />
+          </Field>
+        )
+      }}
     />
   )
 }
@@ -338,6 +394,10 @@ export function CampoFecha({
         const fecha = parsearFecha(
           typeof field.value === "string" ? field.value : ""
         )
+        const { idAyuda, idError, describedBy } = descripciones(id, {
+          ayuda: descripcion,
+          error: fieldState.error,
+        })
         return (
           <Field
             data-invalid={fieldState.invalid || undefined}
@@ -354,6 +414,7 @@ export function CampoFecha({
                       variant="outline"
                       disabled={deshabilitado}
                       aria-invalid={fieldState.invalid || undefined}
+                      aria-describedby={describedBy}
                       className="min-w-0 flex-1 justify-start font-normal"
                     />
                   }
@@ -417,9 +478,9 @@ export function CampoFecha({
               ) : null}
             </div>
             {descripcion ? (
-              <FieldDescription>{descripcion}</FieldDescription>
+              <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
             ) : null}
-            <FieldError errors={[fieldState.error]} />
+            <FieldError id={idError} errors={[fieldState.error]} />
           </Field>
         )
       }}
@@ -438,6 +499,10 @@ export function CampoHora({
   const { register } = useFormContext<FieldValues>()
   const { error, invalid } = useEstadoCampo(nombre)
   const id = `${useId()}-${nombre}`
+  const { idAyuda, idError, describedBy } = descripciones(id, {
+    ayuda: descripcion,
+    error,
+  })
   return (
     <Field data-invalid={invalid || undefined} className={className}>
       <FieldLabel htmlFor={id}>{etiqueta}</FieldLabel>
@@ -447,11 +512,14 @@ export function CampoHora({
         step={900}
         disabled={deshabilitado}
         aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         className="cifras"
         {...register(nombre)}
       />
-      {descripcion ? <FieldDescription>{descripcion}</FieldDescription> : null}
-      <FieldError errors={[error]} />
+      {descripcion ? (
+        <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
+      ) : null}
+      <FieldError id={idError} errors={[error]} />
     </Field>
   )
 }
@@ -490,6 +558,10 @@ export function CampoEtiquetas({
           }
         }
         const pendientes = sugerencias.filter((s) => !valores.includes(s))
+        const { idAyuda, idError, describedBy } = descripciones(id, {
+          ayuda: descripcion,
+          error: fieldState.error,
+        })
         return (
           <Field
             data-invalid={fieldState.invalid || undefined}
@@ -535,6 +607,7 @@ export function CampoEtiquetas({
                 disabled={deshabilitado}
                 autoComplete="off"
                 aria-invalid={fieldState.invalid || undefined}
+                aria-describedby={describedBy}
                 className="h-6 min-w-24 flex-1 bg-transparent font-mono text-xs outline-none placeholder:font-sans placeholder:text-muted-foreground"
               />
             </div>
@@ -560,9 +633,9 @@ export function CampoEtiquetas({
               </div>
             ) : null}
             {descripcion ? (
-              <FieldDescription>{descripcion}</FieldDescription>
+              <FieldDescription id={idAyuda}>{descripcion}</FieldDescription>
             ) : null}
-            <FieldError errors={[fieldState.error]} />
+            <FieldError id={idError} errors={[fieldState.error]} />
           </Field>
         )
       }}

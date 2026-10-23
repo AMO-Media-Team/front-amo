@@ -28,6 +28,8 @@ interface DialogoMotivoProps {
   titulo: string
   descripcion: ReactNode
   textoConfirmar: string
+  /** Botón que cierra sin hacer nada; «Volver» cuando la acción misma es cancelar algo. */
+  textoCancelar?: string
   destructivo?: boolean
   /** Ayuda bajo el campo ("Quedará en la bitácora y lo verá el equipo de administración"). */
   ayuda?: string
@@ -36,6 +38,12 @@ interface DialogoMotivoProps {
   placeholder?: string
   /** Motivos frecuentes: un toque llena el campo, que se puede editar. */
   sugerencias?: readonly string[]
+  /**
+   * A dónde va el foco al cerrar. Úsalo cuando la acción hace desaparecer el
+   * botón que abrió el diálogo (p. ej. el título de la ficha con `tabIndex={-1}`);
+   * `null` vuelve al comportamiento por defecto (el elemento que lo tenía al abrir).
+   */
+  focoAlCerrar?: () => HTMLElement | null
   onConfirmar: (motivo: string) => Promise<ResultadoAccion<unknown>>
 }
 
@@ -55,11 +63,13 @@ export function DialogoMotivo({
   titulo,
   descripcion,
   textoConfirmar,
+  textoCancelar = "Cancelar",
   destructivo = false,
   ayuda = "Queda registrado en la bitácora de auditoría.",
   etiqueta = "Motivo",
   placeholder = PLACEHOLDER_POR_DEFECTO,
   sugerencias = [],
+  focoAlCerrar,
   onConfirmar,
 }: DialogoMotivoProps) {
   const [motivo, setMotivo] = useState("")
@@ -113,6 +123,7 @@ export function DialogoMotivo({
     <AlertDialog open={abierto} onOpenChange={cambiarAbierto}>
       <AlertDialogContent
         className={conSugerencias ? "sm:max-w-lg" : "sm:max-w-md"}
+        finalFocus={focoAlCerrar}
       >
         <AlertDialogHeader>
           <AlertDialogMedia
@@ -188,7 +199,9 @@ export function DialogoMotivo({
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pendiente}>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel disabled={pendiente}>
+            {textoCancelar}
+          </AlertDialogCancel>
           <Button
             onClick={confirmar}
             disabled={pendiente}
