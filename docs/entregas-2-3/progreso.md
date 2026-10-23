@@ -8,7 +8,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P0   | Desbloqueo (registrar anunciante/medio, ROL-008, NIT) y bloques compartidos             | ✅     |
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
-| P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | 🔧     |
+| P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
@@ -43,26 +43,26 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | ANU-014          | Cancelación de ofertas y campañas                          | P2    | ✅     |
 | ADM-003          | Verificación de anunciantes                                | P2    | ✅     |
 | ADM-005          | Moderación de ofertas                                      | P2    | ✅     |
-| MED-008          | Marketplace de ofertas elegibles                           | P3    | ⬜     |
-| MED-009          | Detalle de la oferta                                       | P3    | ⬜     |
-| MED-010          | Aceptar o rechazar una oferta                              | P3    | ⬜     |
-| MED-011          | Mis campañas                                               | P3    | ⬜     |
-| MED-012          | Entrega de contenido                                       | P3    | ⬜     |
-| MED-013          | Carga de evidencia de publicación                          | P3    | ⬜     |
-| MED-014          | Carga de métricas por corte                                | P3    | ⬜     |
-| ANU-011          | Seguimiento de campaña                                     | P3    | ⬜     |
-| ANU-012          | Métricas y reportes del anunciante                         | P3    | ⬜     |
-| INT-001          | Captura obligatoria del panel nativo                       | P3    | ⬜     |
-| INT-002          | URL del post verificable                                   | P3    | ⬜     |
-| INT-005          | Validaciones de coherencia                                 | P3    | ⬜     |
-| NOT-005          | Recordatorios automáticos                                  | P3    | ⬜     |
-| NOT-006          | Aviso de nueva versión del paquete creativo                | P3    | ⬜     |
-| PRC-003          | Multiplicador de calidad (visible al medio)                | P3    | ⬜     |
-| PRC-004          | Recálculo programado con aviso previo                      | P3    | ⬜     |
-| CUP-004          | Vencimiento y liberación de cupos                          | P3    | ⬜     |
-| CUP-005          | Transiciones automáticas                                   | P3    | ⬜     |
-| CUP-006          | Prueba de carrera automatizada                             | P3    | ⬜     |
-| DSH-006          | Inicio del medio con botones directos                      | P3    | ⬜     |
+| MED-008          | Marketplace de ofertas elegibles                           | P3    | ✅     |
+| MED-009          | Detalle de la oferta                                       | P3    | ✅     |
+| MED-010          | Aceptar o rechazar una oferta                              | P3    | ✅     |
+| MED-011          | Mis campañas                                               | P3    | ✅     |
+| MED-012          | Entrega de contenido                                       | P3    | ✅     |
+| MED-013          | Carga de evidencia de publicación                          | P3    | ✅     |
+| MED-014          | Carga de métricas por corte                                | P3    | ✅     |
+| ANU-011          | Seguimiento de campaña                                     | P3    | ✅     |
+| ANU-012          | Métricas y reportes del anunciante                         | P3    | ✅     |
+| INT-001          | Captura obligatoria del panel nativo                       | P3    | ✅     |
+| INT-002          | URL del post verificable                                   | P3    | ✅     |
+| INT-005          | Validaciones de coherencia                                 | P3    | ✅     |
+| NOT-005          | Recordatorios automáticos                                  | P3    | ✅     |
+| NOT-006          | Aviso de nueva versión del paquete creativo                | P3    | ✅     |
+| PRC-003          | Multiplicador de calidad (visible al medio)                | P3    | ✅     |
+| PRC-004          | Recálculo programado con aviso previo                      | P3    | ✅     |
+| CUP-004          | Vencimiento y liberación de cupos                          | P3    | ✅     |
+| CUP-005          | Transiciones automáticas                                   | P3    | ✅     |
+| CUP-006          | Prueba de carrera automatizada                             | P3    | ✅     |
+| DSH-006          | Inicio del medio con botones directos                      | P3    | ✅     |
 | ADM-002          | Ficha y suspensión de medios                               | P4    | ⬜     |
 | ADM-007          | Validación de evidencias                                   | P4    | ⬜     |
 | ADM-008          | Validación de métricas con alertas                         | P4    | ⬜     |
@@ -170,3 +170,20 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   portales externos: el aviso de una oferta ya lleva al anunciante a su ficha), errores nuevos, proyecto E2E `pauta-medio`,
   `PieAcciones`, `BotonCopiar`, rutas y brief `fase-3.md`. Workflow de implementación con 7 paquetes (MK, MC, EV, DM, SG, E0,
   SQ).
+- 2026-10-23 · **Fase 3 terminada y en producción.** Workflow de implementación (7 paquetes: MK, MC, EV, DM, SG, E0, SQ;
+  relanzado en modo «retomar» tras el corte por límite de sesión) e integración del líder (calidad en «Mi medio › Cuentas»,
+  ancla «Cómo subir de nivel», scripts `pruebas:carrera` y `pruebas:pauta-e2e`). Revisión adversarial (4 revisores +
+  verificación): 27 hallazgos confirmados y corregidos, entre ellos capturas de métricas sin aprobar legibles por el
+  anunciante en Storage (D62), evidencia con el post de otra cuenta y URL única evadible con otra forma del enlace (D61),
+  fecha de publicación anterior a la descarga (D63, en la acción del servidor), recordatorios por publicación (D64),
+  filtros por sector, anunciante y días en el marketplace (`marketplace_facetas`), `impedimentos_aceptar` para no ofrecer
+  «Aceptar» cuando la exclusividad o el tope por medio lo impedirán, corrección de un corte personalizado (`metrica_id`),
+  foco y accesibilidad. A 390 px el selector de días se salía de la pantalla (también el selector de periodo compartido):
+  ahora respeta el alto disponible. Local: 20 suites SQL (104/104 en `humo_e2_ejecucion`), 5.203 Vitest, E2E 354 en verde
+  (0 fallas), carrera de cupos 11/11 sin deadlocks, fábricas de pauta «Todo coincide». Respaldo
+  `context/respaldos/produccion-2026-10-23-antes-e2e-*`; Andrés aplicó `20261023022211_e2_integridad_ejecucion` en
+  producción. Verificado por MCP: 50 migraciones, 58 plantillas, 57 claves, 145 transiciones, funciones nuevas, índice
+  parcial por contenido, política de Storage nueva, cron de indicadores a `1 5 * * *`, configuración de prueba intacta, 3
+  superadministradores, secreto de Vault; advisors sin ERROR (WARN nuevos esperados: `marketplace_medio`,
+  `marketplace_facetas`, `impedimentos_aceptar`, `mi_elegibilidad_marketplace` y `seguimiento_campana`, definer con permiso
+  y medio o empresa comprobados por dentro).

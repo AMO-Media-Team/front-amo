@@ -1384,7 +1384,7 @@ públicas; `archivos.max_creativo_mb` con máximo 50 (el corte del bucket); púb
 ### 3.11 Entrega 2 — fase 3: marketplace, ejecución del medio y seguimiento
 
 Migración **E2e** `20261023022211_e2_integridad_ejecucion` (RF-MED-008…014, ANU-011, ANU-012, INT-001, INT-002, INT-005,
-NOT-005, NOT-006, CUP-004…006, DSH-006, PRC-003, PRC-004), probada en la base local (20 suites; `humo_e2_ejecucion.sql`
+NOT-005, NOT-006, CUP-004…006, DSH-006, PRC-003, PRC-004), probada en la base local y aplicada en producción el 2026-10-23 (20 suites; `humo_e2_ejecucion.sql`
 104/104; carrera de cupos 11/11 sin deadlocks). Decisiones D54–D64 en §11.1.
 
 **Columnas, restricciones, índices y políticas**

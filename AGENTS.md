@@ -51,8 +51,9 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
   reportes con exportación) y consulta de operación.
 - **Entregas 2 y 3 (en curso, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
   organizaciones, alta y verificación del medio, términos, vinculación pública (fases 0 y 1); empresa
-  del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2). Siguen el marketplace
-  y la ejecución del medio, la validación, las disputas y las finanzas.
+  del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2); marketplace, Mis
+  campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3). Siguen la validación,
+  las disputas y las finanzas.
 
 ## Stack
 
@@ -103,6 +104,7 @@ src/app/(app)/                   Secciones privadas dentro del AppShell
   operacion/verificacion/        Colas de medios, anunciantes, cuentas, documentos y solicitudes (?cola=)
   operacion/{moderacion,ofertas/[id]}/   Cola de ofertas en revisión y ficha completa de la oferta
   mi-medio/                      Portal del medio: perfil, documentos, pago, cuentas y nivel
+  ofertas/  mis-campanas/          Marketplace y ficha de la oferta; tablero, ficha, contenido, evidencia y métricas del medio
   empresa/  campanas/            Portal del anunciante: empresa (datos, documentos, equipo), campañas,
                                  asistente de oferta (campanas/[id]/ofertas/nueva) y ficha de la oferta
   ir/[entidad]/[id]/             Resuelve el destino de una notificación según el rol
