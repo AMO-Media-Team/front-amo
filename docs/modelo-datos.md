@@ -1429,7 +1429,7 @@ nuevos: `AMO_IDEMPOTENCIA_INVALIDA`, `AMO_METRICA_INCOHERENTE`, `AMO_CAPTURA_REQ
 ### 3.12 Entrega 3 — fase 4: validación, verificación, disputas y suspensión
 
 Migración **E3a** `20261023171316_e3_validacion` (RF-ADM-002, ADM-007…012, INT-003, INT-004, INT-006), probada en la base
-local (21 suites; `humo_e3_validacion.sql` 140/140). Decisiones D65–D74 en §11.1.
+local (21 suites; `humo_e3_validacion.sql` 148/148) y aplicada en producción el 2026-10-23. Decisiones D65–D74 en §11.1.
 
 **Columnas, privilegios y políticas**
 

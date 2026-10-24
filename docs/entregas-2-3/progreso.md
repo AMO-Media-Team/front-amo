@@ -9,7 +9,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
-| P4   | Validación de evidencias y métricas, disputas, suspensión                               | 🔧     |
+| P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
 
@@ -63,16 +63,16 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | CUP-005          | Transiciones automáticas                                   | P3    | ✅     |
 | CUP-006          | Prueba de carrera automatizada                             | P3    | ✅     |
 | DSH-006          | Inicio del medio con botones directos                      | P3    | ✅     |
-| ADM-002          | Ficha y suspensión de medios                               | P4    | ⬜     |
-| ADM-007          | Validación de evidencias                                   | P4    | ⬜     |
-| ADM-008          | Validación de métricas con alertas                         | P4    | ⬜     |
-| ADM-009          | Verificación de la asignación (puerta a pago)              | P4    | ⬜     |
-| ADM-010          | Cancelación de asignaciones con causa                      | P4    | ⬜     |
-| ADM-011          | Apertura de disputas                                       | P4    | ⬜     |
-| ADM-012          | Bandeja y resolución de disputas                           | P4    | ⬜     |
-| INT-003          | Alerta de desviación frente al histórico propio            | P4    | ⬜     |
-| INT-004          | Alerta de alcance excesivo frente a seguidores             | P4    | ⬜     |
-| INT-006          | Revisión obligatoria y consecuencias                       | P4    | ⬜     |
+| ADM-002          | Ficha y suspensión de medios                               | P4    | ✅     |
+| ADM-007          | Validación de evidencias                                   | P4    | ✅     |
+| ADM-008          | Validación de métricas con alertas                         | P4    | ✅     |
+| ADM-009          | Verificación de la asignación (puerta a pago)              | P4    | ✅     |
+| ADM-010          | Cancelación de asignaciones con causa                      | P4    | ✅     |
+| ADM-011          | Apertura de disputas                                       | P4    | ✅     |
+| ADM-012          | Bandeja y resolución de disputas                           | P4    | ✅     |
+| INT-003          | Alerta de desviación frente al histórico propio            | P4    | ✅     |
+| INT-004          | Alerta de alcance excesivo frente a seguidores             | P4    | ✅     |
+| INT-006          | Revisión obligatoria y consecuencias                       | P4    | ✅     |
 | LIQ-001          | Generación de liquidaciones                                | P5    | ⬜     |
 | LIQ-002          | Cálculo de retenciones                                     | P5    | ⬜     |
 | LIQ-003          | Aprobación con segregación y anulación                     | P5    | ⬜     |
@@ -211,3 +211,9 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   abrir una disputa (Base UI enfocaba su enlace o lo perdía con el refresco). Respaldo
   `context/respaldos/produccion-2026-10-23-antes-e3a-*`; la simulación contra producción solo aplica
   `20261023171316_e3_validacion`.
+- 2026-10-23 · **Fase 4 en producción.** Andrés aplicó `20261023171316_e3_validacion`. Verificado por MCP (solo lectura): 51
+  migraciones, 60 plantillas, 59 claves (con `evidencias.plazo_recarga_horas` y `soporte.correo`), 145 transiciones, funciones
+  nuevas, columnas de alertas sin lectura para `authenticated`, `disputa_mensajes.autor_parte`, políticas de mensajes y de
+  Storage con `disputas.abrir` y capturas en disputa, configuración de prueba intacta, 3 superadministradores, secreto de Vault;
+  advisors sin ERROR (WARN nuevos esperados: `alertas_metricas`, `cola_metricas`, `cola_verificacion` y `mensajes_disputa`,
+  definer con permiso comprobado por dentro).

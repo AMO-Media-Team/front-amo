@@ -52,8 +52,9 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
 - **Entregas 2 y 3 (en curso, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
   organizaciones, alta y verificación del medio, términos, vinculación pública (fases 0 y 1); empresa
   del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2); marketplace, Mis
-  campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3). Siguen la validación,
-  las disputas y las finanzas.
+  campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3); validación de evidencias
+  y métricas con alertas, verificación, cancelación con causa, disputas y suspensión de medios (fase 4).
+  Siguen las finanzas y el cierre.
 
 ## Stack
 
@@ -103,6 +104,7 @@ src/app/(app)/                   Secciones privadas dentro del AppShell
   operacion/{medios,anunciantes,campanas,asignaciones}/   Consulta (listado y ficha) y decisiones del equipo AMO
   operacion/verificacion/        Colas de medios, anunciantes, cuentas, documentos y solicitudes (?cola=)
   operacion/{moderacion,ofertas/[id]}/   Cola de ofertas en revisión y ficha completa de la oferta
+  operacion/{validacion,disputas}/      Colas de validación (?cola=) y bandeja y ficha de disputas
   mi-medio/                      Portal del medio: perfil, documentos, pago, cuentas y nivel
   ofertas/  mis-campanas/          Marketplace y ficha de la oferta; tablero, ficha, contenido, evidencia y métricas del medio
   empresa/  campanas/            Portal del anunciante: empresa (datos, documentos, equipo), campañas,
