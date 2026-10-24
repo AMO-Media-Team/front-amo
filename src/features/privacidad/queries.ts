@@ -43,6 +43,7 @@ import {
   type DecisionSolicitud,
   type EstadoSolicitud,
   type PaginaSolicitudes,
+  type ResultadoSupresion,
   type RolTitular,
   type SolicitudBase,
   type SolicitudFila,
@@ -467,15 +468,17 @@ export const obtenerSolicitudInterna = cache(
       tramitadaPor: data.tramitador?.nombre ?? null,
       respondidaPor: data.respondedor?.nombre ?? null,
       supresionResultado: leerResultadoSupresion(data.supresion_resultado),
-      lineaTiempo: construirLineaTiempo(base, registros),
+      lineaTiempo: construirLineaTiempo(base, registros, {
+        titularId: data.perfil_id,
+      }),
     }
   }
 )
 
 /**
- * Datos mínimos de una solicitud para las acciones: el titular, el estado, el
- * número y el soporte (la ruta no sale del servidor). Con la sesión: el
- * titular solo ve las suyas; el equipo, todas.
+ * Datos mínimos de una solicitud para las acciones: el titular y su medio, el
+ * estado, el número, el soporte (la ruta no sale del servidor) y lo que dejó
+ * la supresión. Con la sesión: el titular solo ve las suyas; el equipo, todas.
  */
 export interface SolicitudParaAccion {
   id: string
@@ -483,7 +486,11 @@ export interface SolicitudParaAccion {
   tipo: TipoSolicitud
   estado: EstadoSolicitud
   perfilId: string | null
+  medioId: string | null
   evidenciaPath: string | null
+  supresionEjecutadaAt: string | null
+  /** `supresion_resultado` leído; `null` sin ejecutar o con otra forma. */
+  supresionResultado: ResultadoSupresion | null
 }
 
 export async function solicitudParaAccion(
@@ -492,7 +499,9 @@ export async function solicitudParaAccion(
   const supabase = await clienteSolicitud()
   const { data, error } = await supabase
     .from("solicitudes_titular")
-    .select("id, numero, tipo, estado, perfil_id, evidencia_path")
+    .select(
+      "id, numero, tipo, estado, perfil_id, medio_id, evidencia_path, supresion_ejecutada_at, supresion_resultado"
+    )
     .eq("id", id)
     .maybeSingle()
   if (error) throw error
@@ -503,7 +512,10 @@ export async function solicitudParaAccion(
     tipo: data.tipo,
     estado: data.estado,
     perfilId: data.perfil_id,
+    medioId: data.medio_id,
     evidenciaPath: data.evidencia_path,
+    supresionEjecutadaAt: data.supresion_ejecutada_at,
+    supresionResultado: leerResultadoSupresion(data.supresion_resultado),
   }
 }
 
@@ -519,13 +531,25 @@ const RECLAMOS = TIPOS_SOLICITUD.filter((tipo) => esReclamo(tipo))
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Un reclamo abierto, para el enlace de la leyenda. */
+export interface ReclamoEnTramite {
+  id: string
+  perfilId: string | null
+  /** Nombre del titular (para filtrar la bandeja si hay varios). */
+  titular: string | null
+}
+
+/** Más que esto no cambia el enlace (va a la bandeja filtrada). */
+const LIMITE_RECLAMOS = 10
+
 /**
- * ¿Hay un reclamo abierto (art. 15) del medio, la empresa o la persona? Para
- * la leyenda «Reclamo en trámite» de sus fichas. Sin filtros, `false`.
+ * Los reclamos abiertos (art. 15) del medio, la empresa o la persona, el que
+ * vence antes primero. Para la leyenda «Reclamo en trámite» de sus fichas.
+ * Sin filtros, ninguno.
  */
-export async function hayReclamoEnTramite(
+export async function reclamosEnTramite(
   filtro: FiltroReclamo
-): Promise<boolean> {
+): Promise<ReclamoEnTramite[]> {
   const condiciones = (
     [
       ["medio_id", filtro.medioId],
@@ -535,14 +559,31 @@ export async function hayReclamoEnTramite(
   ).flatMap(([columna, valor]) =>
     valor && UUID.test(valor) ? [`${columna}.eq.${valor}`] : []
   )
-  if (condiciones.length === 0) return false
+  if (condiciones.length === 0) return []
   const supabase = await clienteSolicitud()
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from("solicitudes_titular")
-    .select("id", { count: "exact", head: true })
+    .select(
+      "id, perfil_id, titular:perfiles!solicitudes_titular_perfil_id_fkey ( nombre )"
+    )
     .in("estado", [...ESTADOS_ABIERTOS])
     .in("tipo", RECLAMOS)
     .or(condiciones.join(","))
+    .order("plazo_vence", { ascending: true })
+    .order("numero", { ascending: true })
+    .limit(LIMITE_RECLAMOS)
+    .overrideTypes<
+      {
+        id: string
+        perfil_id: string | null
+        titular: { nombre: string | null } | null
+      }[],
+      { merge: false }
+    >()
   if (error) fallar("comprobar los reclamos en trámite", error)
-  return (count ?? 0) > 0
+  return data.map((fila) => ({
+    id: fila.id,
+    perfilId: fila.perfil_id,
+    titular: fila.titular?.nombre ?? null,
+  }))
 }

@@ -14,7 +14,9 @@
  *    sesión, así que el soporte de la respuesta se firma (subida y descarga)
  *    con el cliente de servicio DESPUÉS del DAL y de leer la solicitud con la
  *    sesión. La supresión borra después del commit los archivos que devuelve
- *    la BD, solo si tienen una forma conocida (`planBorrado`).
+ *    la BD, solo si tienen una forma conocida y son del titular
+ *    (`planBorrado`), y registra en la BD lo que siguió en Storage
+ *    (`registrar_archivos_supresion_srv`) para «Reintentar el borrado».
  * 5. `refresh()` para que la página muestre el cambio.
  *
  * Los errores esperados se devuelven como `ResultadoAccion`; nunca se lanzan.
@@ -55,7 +57,7 @@ import { argumentosRpc } from "@/lib/supabase/rpc"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import type { Json } from "@/types/database.types"
 
-import { textoRadicado } from "./presentacion"
+import { estaAbierta, textoRadicado } from "./presentacion"
 import { solicitudParaAccion } from "./queries"
 import {
   type EntradaAportar,
@@ -79,8 +81,20 @@ import {
   esquemaResponder,
   esquemaSolicitud,
 } from "./schemas"
-import { enLotes, leerResultadoSupresion, planBorrado } from "./supresion"
-import type { ResultadoSupresion, SupresionEjecutada } from "./tipos"
+import {
+  borrarPlan,
+  type ContextoBorrado,
+  leerResultadoSupresion,
+  pendientesReintentables,
+  planBorrado,
+  type ResultadoBorrado,
+} from "./supresion"
+import type {
+  ArchivoSupresion,
+  BorradoArchivos,
+  ResultadoSupresion,
+  SupresionEjecutada,
+} from "./tipos"
 
 const PERMISO_TITULAR = "cuenta.gestionar"
 const PERMISO_EQUIPO = "privacidad.gestionar"
@@ -91,6 +105,9 @@ const MENSAJES_PRIVACIDAD = {
   soporteAjeno:
     "El soporte no corresponde a esta solicitud. Vuelve a adjuntarlo.",
   sinCuenta: "El titular ya no tiene cuenta en AMO.",
+  sinSupresion: "La supresión de esta solicitud no se ha ejecutado.",
+  datosSoloAbierta:
+    "Los datos del titular se consultan solo mientras la solicitud está abierta.",
   radicadoDistinto:
     "El número de radicado no coincide con el de esta solicitud.",
   respuestaInvalida:
@@ -517,9 +534,12 @@ export async function firmarSoporteInterno(
 }
 
 /**
- * «Ver datos del titular» para atender una consulta: `datos_titular` del
- * titular de la solicitud, con la sesión (la BD exige `privacidad.gestionar`
- * y deja `EXPORTAR`). El titular sale de la solicitud, no del navegador.
+ * «Ver datos del titular» para atender una solicitud abierta: `datos_titular`
+ * del titular de la solicitud, con la sesión. La BD exige
+ * `privacidad.gestionar` y una solicitud del titular en trámite, y deja
+ * `EXPORTAR`; la identificación y los datos de pago del medio llegan solo con
+ * `datos_sensibles.ver` (y quedan como `REVELAR_DATO`). El titular sale de la
+ * solicitud, no del navegador.
  */
 export async function consultarDatosTitular(
   entrada: EntradaSolicitud
@@ -532,6 +552,9 @@ export async function consultarDatosTitular(
     const solicitud = await solicitudParaAccion(validacion.data.solicitudId)
     if (!solicitud) return fallo(MENSAJES_PRIVACIDAD.noEncontrada)
     if (!solicitud.perfilId) return fallo(MENSAJES_PRIVACIDAD.sinCuenta)
+    if (!estaAbierta(solicitud.estado)) {
+      return fallo(MENSAJES_PRIVACIDAD.datosSoloAbierta)
+    }
     const supabase = await crearClienteServidor()
     const { data, error } = await supabase.rpc("datos_titular", {
       p_perfil_id: solicitud.perfilId,
@@ -606,57 +629,70 @@ async function objetosBajo(
 
 /**
  * Borra de Storage lo que la supresión dejó sin fila (después del commit,
- * como servicio), por lotes. Un fallo no deshace la supresión: se cuenta como
- * pendiente para la limpieza programada.
+ * como servicio), por lotes, solo si es del titular (`planBorrado`). Un fallo
+ * no deshace la supresión: queda pendiente para reintentar.
  */
 async function borrarArchivos(
   admin: ClienteAdmin,
-  resultado: ResultadoSupresion
-): Promise<{ borrados: number; pendientes: number }> {
-  const plan = planBorrado(resultado.archivos)
-  let borrados = 0
-  let pendientes = plan.rechazados
-  const porBucket = new Map<string, string[]>()
-  for (const { bucket, prefijo } of plan.prefijos) {
-    try {
-      const rutas = await objetosBajo(admin, bucket, prefijo.replace(/\/$/, ""))
-      porBucket.set(bucket, [...(porBucket.get(bucket) ?? []), ...rutas])
-    } catch (error) {
-      informar(`listar ${bucket} para la supresión`, error)
-      pendientes += 1
-    }
+  archivos: readonly ArchivoSupresion[],
+  contexto: ContextoBorrado
+): Promise<ResultadoBorrado> {
+  const plan = planBorrado(archivos, contexto)
+  if (plan.rechazados > 0) {
+    // Solo el número: nunca las rutas (llevan ids del titular).
+    informar(
+      `planear el borrado de la supresión (${plan.rechazados} rechazados)`,
+      new Error("forma desconocida o de otra persona")
+    )
   }
-  for (const [bucket, rutas] of plan.rutas) {
+  return borrarPlan(plan, {
+    listar: (bucket, carpeta) => objetosBajo(admin, bucket, carpeta),
+    borrar: async (bucket, rutas) => {
+      if (!esBucketStorage(bucket)) throw new Error("bucket desconocido")
+      const { data, error } = await admin.storage.from(bucket).remove(rutas)
+      if (error) throw error
+      return data.length
+    },
     // El documento y, si la tiene, su miniatura.
-    const conMiniaturas = rutas.flatMap((ruta) => {
+    derivadas: (ruta) => {
       try {
-        return [ruta, rutaMiniatura(ruta)]
+        return [rutaMiniatura(ruta)]
       } catch {
-        return [ruta]
+        return []
       }
+    },
+    informar,
+  })
+}
+
+/**
+ * Deja en la BD lo que sigue en Storage (`[]`: todo borrado), para que la
+ * ficha ofrezca reintentar. Si no se pudo registrar, la BD conserva la lista
+ * anterior (al ejecutar, todos los archivos): reintentar es inocuo.
+ */
+async function registrarPendientes(
+  contexto: ContextoActor,
+  solicitudId: string,
+  pendientes: readonly ArchivoSupresion[]
+): Promise<void> {
+  const { error } = await contexto.admin.rpc(
+    "registrar_archivos_supresion_srv",
+    argumentosRpc<"registrar_archivos_supresion_srv">({
+      p_solicitud_id: solicitudId,
+      p_actor_id: contexto.actorId,
+      p_session_id: contexto.sessionId,
+      p_pendientes: pendientes.map((archivo) => ({ ...archivo })),
     })
-    porBucket.set(bucket, [...(porBucket.get(bucket) ?? []), ...conMiniaturas])
-  }
-  for (const [bucket, rutas] of porBucket) {
-    if (!esBucketStorage(bucket)) continue
-    for (const lote of enLotes([...new Set(rutas)])) {
-      const { data, error } = await admin.storage.from(bucket).remove(lote)
-      if (error) {
-        informar(`borrar en ${bucket} tras la supresión`, error)
-        pendientes += lote.length
-        continue
-      }
-      borrados += data.length
-    }
-  }
-  return { borrados, pendientes }
+  )
+  if (error) informar("registrar los archivos pendientes", error)
 }
 
 /**
  * Ejecuta la supresión de una solicitud respondida con «procede» o «procede
  * en parte». Quien confirma escribe el radicado. La BD borra la cuenta,
  * suprime o anonimiza el medio y el contacto de la empresa, y devuelve los
- * archivos que se borran de Storage después. Nadie suprime sus propios datos.
+ * archivos que se borran de Storage después; lo que no se pudo borrar queda
+ * registrado como pendiente. Nadie suprime sus propios datos.
  */
 export async function ejecutarSupresion(
   entrada: EntradaEjecutarSupresion
@@ -691,17 +727,65 @@ export async function ejecutarSupresion(
       informar("ejecutarSupresion", new Error("respuesta desconocida"))
       return fallo(MENSAJES_PRIVACIDAD.respuestaInvalida)
     }
-    const { borrados, pendientes } = await borrarArchivos(
-      contexto.admin,
-      resultado
-    )
+    // Del titular de ESTA solicitud: su avatar y los documentos de su medio.
+    const borrado = await borrarArchivos(contexto.admin, resultado.archivos, {
+      medio: resultado.medio,
+      perfilId: solicitud.perfilId,
+      medioId: resultado.medioId ?? solicitud.medioId,
+    })
+    await registrarPendientes(contexto, solicitudId, borrado.pendientes)
     return exito({
-      resultado,
-      archivosBorrados: borrados,
-      archivosPendientes: pendientes,
+      resultado: { ...resultado, archivosPendientes: borrado.pendientes },
+      archivosBorrados: borrado.borrados,
+      archivosPendientes: borrado.pendientes.length,
+      archivosRechazados: borrado.rechazados,
     })
   } catch (error) {
     return falloInesperado("ejecutarSupresion", error)
+  }
+}
+
+/**
+ * «Reintentar el borrado de archivos» de una supresión ya ejecutada: vuelve a
+ * borrar lo que quedó pendiente (`archivos_pendientes`), solo si estaba en la
+ * lista que la BD pidió borrar al ejecutarla y es del titular, y registra lo
+ * que siga en Storage. Borrar lo que ya no existe no falla: reintentar es
+ * inocuo.
+ */
+export async function reintentarBorradoArchivos(
+  entrada: EntradaSolicitud
+): Promise<ResultadoAccion<BorradoArchivos>> {
+  const actor = await requerirPermiso(PERMISO_EQUIPO)
+  const validacion = esquemaSolicitud.safeParse(entrada)
+  if (!validacion.success) return fallo(MENSAJES_PRIVACIDAD.noEncontrada)
+
+  try {
+    const solicitud = await solicitudParaAccion(validacion.data.solicitudId)
+    if (!solicitud) return fallo(MENSAJES_PRIVACIDAD.noEncontrada)
+    const resultado = solicitud.supresionResultado
+    if (!solicitud.supresionEjecutadaAt || !resultado) {
+      return fallo(MENSAJES_PRIVACIDAD.sinSupresion)
+    }
+    const registrados = resultado.archivosPendientes ?? []
+    const reintentables = pendientesReintentables(resultado)
+    const contexto = await contextoDelActor(actor)
+    // El titular ya no existe (su avatar se reconoce por la forma); el medio
+    // sigue enlazado si se anonimizó.
+    const borrado = await borrarArchivos(contexto.admin, reintentables, {
+      medio: resultado.medio,
+      perfilId: solicitud.perfilId,
+      medioId: resultado.medioId ?? solicitud.medioId,
+    })
+    await registrarPendientes(contexto, solicitud.id, borrado.pendientes)
+    refresh()
+    return exito({
+      archivosBorrados: borrado.borrados,
+      archivosPendientes: borrado.pendientes.length,
+      archivosRechazados:
+        borrado.rechazados + (registrados.length - reintentables.length),
+    })
+  } catch (error) {
+    return falloInesperado("reintentarBorradoArchivos", error)
   }
 }
 

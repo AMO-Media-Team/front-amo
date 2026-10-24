@@ -13,8 +13,13 @@ import {
   filtroDeOpciones,
 } from "@/components/data-table/estado-url"
 
-import { type Semaforo, SEMAFOROS } from "./presentacion"
-import { RUTA_PRIVACIDAD_ADMIN } from "./rutas"
+import {
+  ESTADOS_ABIERTOS,
+  type Semaforo,
+  SEMAFOROS,
+  TIPOS_RECLAMO,
+} from "./presentacion"
+import { RUTA_PRIVACIDAD_ADMIN, rutaSolicitudAdmin } from "./rutas"
 import { ESTADOS_SOLICITUD, TIPOS_SOLICITUD } from "./tipos"
 
 /** `estado` (abiertas primero), `recibida`, `vence` y `numero` (radicado). */
@@ -91,4 +96,38 @@ export function rutaBandeja(vence: readonly Semaforo[] = []): Route {
   return estadoTablaSolicitudes.serializar(RUTA_PRIVACIDAD_ADMIN, {
     vence: vence.length > 0 ? [...vence] : null,
   }) as Route
+}
+
+/**
+ * Los reclamos abiertos (art. 15) en la bandeja; con `titular`, solo los de
+ * esa persona (la búsqueda por nombre). Destino de «Reclamo en trámite»
+ * cuando hay más de uno.
+ */
+export function rutaReclamosAbiertos(titular?: string | null): Route {
+  return estadoTablaSolicitudes.serializar(RUTA_PRIVACIDAD_ADMIN, {
+    estado: [...ESTADOS_ABIERTOS],
+    tipo: [...TIPOS_RECLAMO],
+    q: titular?.trim() || null,
+  }) as Route
+}
+
+/**
+ * A dónde lleva «Reclamo en trámite»: a la ficha si hay un solo reclamo
+ * abierto; con varios, a la bandeja con los reclamos abiertos, filtrada por
+ * el titular cuando todos son de la misma persona.
+ */
+export function destinoReclamos(
+  reclamos: readonly {
+    id: string
+    perfilId: string | null
+    titular: string | null
+  }[]
+): Route {
+  const [primero] = reclamos
+  if (!primero) return rutaReclamosAbiertos()
+  if (reclamos.length === 1) return rutaSolicitudAdmin(primero.id)
+  const mismoTitular =
+    primero.perfilId !== null &&
+    reclamos.every((reclamo) => reclamo.perfilId === primero.perfilId)
+  return rutaReclamosAbiertos(mismoTitular ? primero.titular : null)
 }

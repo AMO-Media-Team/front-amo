@@ -2,7 +2,10 @@ import { ArrowUpRight, UserRoundCog } from "lucide-react"
 import type { Route } from "next"
 import Link from "next/link"
 
-import type { ModoGestion } from "@/features/campanas/rutas-gestion"
+import {
+  type ModoGestion,
+  nombreConocido,
+} from "@/features/campanas/rutas-gestion"
 import type { OpcionGestion } from "@/features/ofertas/acciones"
 import { AccionesOferta } from "@/features/ofertas/components/acciones-oferta"
 import type { EstadoOferta } from "@/features/operacion/estados"
@@ -17,7 +20,8 @@ export const TITULO_GESTION_ASISTIDA = "Gestión por cuenta del anunciante"
  * reenviarla a revisión, retirarla, cancelarla con motivo y archivarla. Va
  * separado de la decisión de moderación (otro permiso, otra
  * responsabilidad): enviar a revisión no es publicar. Dice por cuenta de quién
- * se actúa y que cada cambio queda en la bitácora y le llega a la empresa.
+ * se actúa, que cada cambio queda en la bitácora y qué cambios de estado se le
+ * avisan a la empresa (editarla, archivarla o versionar el creativo, no).
  */
 export function PanelGestionAsistida({
   oferta,
@@ -45,7 +49,9 @@ export function PanelGestionAsistida({
       descripcion={
         <>
           Actúas por cuenta de{" "}
-          {enlaceAnunciante ? (
+          {!nombreConocido(gestion.anunciante) ? (
+            gestion.anunciante
+          ) : enlaceAnunciante ? (
             <Link
               href={enlaceAnunciante}
               className="inline-flex items-center gap-0.5 rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:anillo-foco"
@@ -58,8 +64,8 @@ export function PanelGestionAsistida({
               {gestion.anunciante}
             </span>
           )}
-          . Cada cambio queda en la bitácora a tu nombre y se le avisa a la
-          empresa.
+          . Cada cambio queda en la bitácora a tu nombre; la empresa recibe un
+          aviso cuando envías, retiras o cancelas la oferta.
         </>
       }
     >

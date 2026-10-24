@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  EMPRESA_SIN_NOMBRE,
   esAsistido,
   GESTION_PROPIA,
   type ModoGestion,
+  modoAsistido,
+  nombreConocido,
   rutaEditarCampanaAsistida,
   rutaEditarOfertaAsistida,
   rutaNuevaCampanaAsistida,
@@ -108,5 +111,31 @@ describe("rutas propias de la gestión asistida", () => {
   it("esAsistido distingue los modos", () => {
     expect(esAsistido(ASISTIDO)).toBe(true)
     expect(esAsistido(GESTION_PROPIA)).toBe(false)
+  })
+})
+
+describe("modoAsistido · el nombre de la empresa", () => {
+  it("usa el nombre comercial cuando se puede leer", () => {
+    expect(modoAsistido(ANUNCIANTE, "Anunciante E2E")).toEqual(ASISTIDO)
+    expect(nombreConocido("Anunciante E2E")).toBe(true)
+  })
+
+  it("sin nombre (la RLS oculta la empresa) la nombra «la empresa»", () => {
+    for (const nombre of [null, undefined, "", "   "]) {
+      const gestion = modoAsistido(ANUNCIANTE, nombre)
+      expect(gestion.anunciante).toBe(EMPRESA_SIN_NOMBRE)
+      expect(gestion.anuncianteId).toBe(ANUNCIANTE)
+      expect(nombreConocido(gestion.anunciante)).toBe(false)
+    }
+  })
+
+  it("el genérico concuerda con las plantillas («de la», «a la», no «de el»)", () => {
+    const { anunciante } = modoAsistido(ANUNCIANTE, null)
+    expect(`Estás actuando por cuenta de ${anunciante}.`).toBe(
+      "Estás actuando por cuenta de la empresa."
+    )
+    expect(`cuando AMO verifique a ${anunciante}.`).toBe(
+      "cuando AMO verifique a la empresa."
+    )
   })
 })

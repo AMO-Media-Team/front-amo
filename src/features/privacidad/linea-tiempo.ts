@@ -4,6 +4,12 @@
  * supresión, con el actor enmascarado). Quien no tiene acceso a la bitácora
  * ve los hitos que guarda la propia solicitud (sin actores y solo el último
  * de cada clase).
+ *
+ * «Titular» se decide por la persona, no por el rol: la bitácora guarda la
+ * CLAVE del rol (un rol personalizado de anunciante no se llama ANUNCIANTE) y
+ * alguien del equipo también puede radicar sobre sus propios datos. El
+ * titular es el `perfil_id` de la solicitud o, si ya se suprimió, quien la
+ * radicó (el alta siempre la hace el titular).
  */
 import { DECISIONES, formatearDia } from "./presentacion"
 import type {
@@ -26,13 +32,9 @@ export interface RegistroBitacora {
   cambios: unknown
 }
 
-const ROLES_TITULAR = new Set(["MEDIO", "ANUNCIANTE"])
-
-function actorDe(registro: RegistroBitacora): string {
+function actorDe(registro: RegistroBitacora, titularId: string | null): string {
   if (!registro.actorId) return "Sistema"
-  if (registro.actorRol && ROLES_TITULAR.has(registro.actorRol)) {
-    return "Titular"
-  }
+  if (titularId && registro.actorId === titularId) return "Titular"
   return registro.actorEmail
     ? `Equipo AMO · ${registro.actorEmail}`
     : "Equipo AMO"
@@ -58,8 +60,11 @@ function decisionDe(valor: unknown): DecisionSolicitud | null {
     : null
 }
 
-function eventosDeRegistro(registro: RegistroBitacora): EventoSolicitud[] {
-  const base = { at: registro.at, actor: actorDe(registro) }
+function eventosDeRegistro(
+  registro: RegistroBitacora,
+  titularId: string | null
+): EventoSolicitud[] {
+  const base = { at: registro.at, actor: actorDe(registro, titularId) }
   const eventos: EventoSolicitud[] = []
   const clave = (sufijo: string) => `b${registro.id}-${sufijo}`
 
@@ -269,10 +274,13 @@ function cronologico(a: EventoSolicitud, b: EventoSolicitud): number {
 /**
  * Del más antiguo al más reciente. Con bitácora, un evento por cambio (en el
  * orden de la bitácora); sin ella (`registros` vacío), los hitos de la fila.
+ * `titularId` es el `perfil_id` de la solicitud (`null` tras la supresión: se
+ * toma quien la radicó).
  */
 export function construirLineaTiempo(
   solicitud: Hitos,
-  registros: readonly RegistroBitacora[]
+  registros: readonly RegistroBitacora[],
+  { titularId = null }: { titularId?: string | null } = {}
 ): LineaTiempoSolicitud {
   if (registros.length === 0) {
     return {
@@ -280,8 +288,13 @@ export function construirLineaTiempo(
       soloHitos: true,
     }
   }
-  const eventos = [...registros]
-    .sort((a, b) => a.id - b.id)
-    .flatMap(eventosDeRegistro)
+  const ordenados = [...registros].sort((a, b) => a.id - b.id)
+  const titular =
+    titularId ??
+    ordenados.find((registro) => registro.accion === "INSERT")?.actorId ??
+    null
+  const eventos = ordenados.flatMap((registro) =>
+    eventosDeRegistro(registro, titular)
+  )
   return { eventos, soloHitos: false }
 }

@@ -47,7 +47,7 @@ export function InsigniaGestionAsistida({
       etiqueta="Creada por el equipo AMO"
       titulo={
         voz === "propio"
-          ? "El equipo AMO la creó por cuenta de tu empresa; cada cambio que hace te llega como aviso."
+          ? "El equipo AMO la creó por cuenta de tu empresa; te avisamos cuando activa o cancela la campaña y cuando envía, retira o cancela una oferta."
           : "El equipo AMO la creó por cuenta del anunciante (gestión asistida)."
       }
       className={className}

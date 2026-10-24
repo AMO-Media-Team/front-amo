@@ -8,7 +8,7 @@ import {
   MessageSquareWarning,
   Undo2,
 } from "lucide-react"
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { DialogoConfirmacion } from "@/components/feedback/dialogo-confirmacion"
@@ -40,6 +40,11 @@ export function idSolicitudPropia(id: string): string {
 
 function enfocarSolicitud(id: string): HTMLElement | null {
   return document.getElementById(idSolicitudPropia(id))
+}
+
+/** Id del título de la tarjeta: destino del foco tras desistir o responder. */
+function idTituloSolicitud(id: string): string {
+  return `${idSolicitudPropia(id)}-titulo`
 }
 
 function Fecha({ valor }: { valor: string }) {
@@ -121,7 +126,7 @@ function TarjetaSolicitud({
   onDesistir: () => void
 }) {
   const acciones = accionesTitular(solicitud.estado)
-  const idTitulo = `${idSolicitudPropia(solicitud.id)}-titulo`
+  const idTitulo = idTituloSolicitud(solicitud.id)
   return (
     <li>
       <article
@@ -138,7 +143,11 @@ function TarjetaSolicitud({
             <p className="text-xs font-medium cifras text-muted-foreground">
               {textoRadicado(solicitud.numero)}
             </p>
-            <h3 id={idTitulo} className="text-[0.9375rem] font-semibold">
+            <h3
+              id={idTitulo}
+              tabIndex={-1}
+              className="rounded-sm text-[0.9375rem] font-semibold outline-none focus-visible:anillo-foco"
+            >
               {TIPOS[solicitud.tipo].etiqueta}
             </h3>
             <p className="text-xs text-muted-foreground">
@@ -279,7 +288,15 @@ export function MisSolicitudes({
   solicitudes: SolicitudPropia[]
   resaltada: string | null
 }) {
+  // El contenido del diálogo se conserva al cerrarlo (la animación de salida
+  // no queda sin radicado). Tras desistir o responder, el botón que abrió el
+  // diálogo desaparece: el foco va al título de la tarjeta, cuyo id vive en un
+  // ref (Base UI lee el último `focoAlCerrar` al desmontar). No a la tarjeta:
+  // Base UI enfocaría su primer botón, que puede desaparecer en ese mismo
+  // render. Al cancelar, vuelve al botón.
   const [dialogo, setDialogo] = useState<Dialogo | null>(null)
+  const [abierto, setAbierto] = useState(false)
+  const idEnfocar = useRef<string | null>(null)
 
   useEffect(() => {
     if (!resaltada) return
@@ -295,8 +312,20 @@ export function MisSolicitudes({
     })
   }, [resaltada])
 
-  function cerrar(abierto: boolean) {
-    if (!abierto) setDialogo(null)
+  function abrir(tipo: Dialogo["tipo"], solicitud: SolicitudPropia) {
+    idEnfocar.current = null
+    setDialogo({ tipo, solicitud })
+    setAbierto(true)
+  }
+
+  function cerrar(valor: boolean) {
+    if (!valor) setAbierto(false)
+  }
+
+  function focoAlCerrar(): HTMLElement | null {
+    return idEnfocar.current
+      ? document.getElementById(idTituloSolicitud(idEnfocar.current))
+      : null
   }
 
   const actual = dialogo?.solicitud
@@ -321,15 +350,15 @@ export function MisSolicitudes({
               key={solicitud.id}
               solicitud={solicitud}
               resaltada={solicitud.id === resaltada}
-              onAportar={() => setDialogo({ tipo: "aportar", solicitud })}
-              onDesistir={() => setDialogo({ tipo: "desistir", solicitud })}
+              onAportar={() => abrir("aportar", solicitud)}
+              onDesistir={() => abrir("desistir", solicitud)}
             />
           ))}
         </ul>
       )}
 
       <DialogoMotivo
-        abierto={dialogo?.tipo === "aportar"}
+        abierto={abierto && dialogo?.tipo === "aportar"}
         onAbiertoChange={cerrar}
         titulo={`Responder: solicitud ${radicado}`}
         descripcion={
@@ -340,7 +369,7 @@ export function MisSolicitudes({
         placeholder="Escribe aquí la información que te pedimos…"
         ayuda="Al enviarla, el plazo legal para responderte vuelve a contar desde hoy."
         textoConfirmar="Enviar respuesta"
-        focoAlCerrar={() => (actual ? enfocarSolicitud(actual.id) : null)}
+        focoAlCerrar={focoAlCerrar}
         onConfirmar={async (informacion) => {
           if (!actual) return fallo("La solicitud ya no está disponible.")
           const resultado = await aportarInformacion({
@@ -348,6 +377,7 @@ export function MisSolicitudes({
             informacion,
           })
           if (resultado.ok) {
+            idEnfocar.current = actual.id
             toast.success("Enviamos tu respuesta", {
               description: `Solicitud ${radicado}: el equipo la retoma.`,
             })
@@ -356,18 +386,19 @@ export function MisSolicitudes({
         }}
       />
       <DialogoConfirmacion
-        abierto={dialogo?.tipo === "desistir"}
+        abierto={abierto && dialogo?.tipo === "desistir"}
         onAbiertoChange={cerrar}
         titulo={`¿Desistir de la solicitud ${radicado}?`}
         descripcion="La cerramos sin respuesta de fondo. Si lo necesitas, puedes radicar otra después."
         textoConfirmar="Desistir"
         textoCancelar="Volver"
         destructivo
-        focoAlCerrar={() => (actual ? enfocarSolicitud(actual.id) : null)}
+        focoAlCerrar={focoAlCerrar}
         onConfirmar={async () => {
           if (!actual) return false
           const resultado = await desistirSolicitud({ solicitudId: actual.id })
           if (resultado.ok) {
+            idEnfocar.current = actual.id
             toast.success("Cerramos tu solicitud", {
               description: `Solicitud ${radicado}.`,
             })

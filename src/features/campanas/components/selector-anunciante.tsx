@@ -1,7 +1,7 @@
 "use client"
 
 import { Building2, ChevronsUpDown } from "lucide-react"
-import { useId, useMemo, useState } from "react"
+import { type Ref, useCallback, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -39,9 +39,11 @@ function NombreAnunciante({ opcion }: { opcion: OpcionAnuncianteGestion }) {
  * Empresa por cuenta de la cual el equipo AMO crea la campaña (ADM-014), con
  * búsqueda por nombre (sin tildes) y su estado de verificación a la vista: con
  * cualquiera se preparan borradores, pero activar exige la empresa
- * verificada.
+ * verificada. `ref` llega al disparador: el formulario lleva ahí el foco
+ * cuando falta la empresa.
  */
 export function SelectorAnunciante({
+  ref,
   id,
   valor,
   opciones,
@@ -50,6 +52,7 @@ export function SelectorAnunciante({
   descripcion,
   deshabilitado,
 }: {
+  ref?: Ref<HTMLButtonElement>
   id?: string
   /** Id del anunciante elegido ('' si ninguno). */
   valor: string
@@ -62,7 +65,14 @@ export function SelectorAnunciante({
 }) {
   const [abierto, setAbierto] = useState(false)
   const [texto, setTexto] = useState("")
-  const idLista = useId()
+  // cmdk fija el id de su listbox (pisa el que se le pase): se lee del nodo
+  // montado para que `aria-controls` apunte a un elemento que existe.
+  const [idLista, setIdLista] = useState<string | undefined>()
+  const refLista = useCallback((nodo: HTMLDivElement | null) => {
+    if (!nodo) return
+    setIdLista(nodo.id || undefined)
+    return () => setIdLista(undefined)
+  }, [])
   const elegido = opciones.find((opcion) => opcion.id === valor)
   const resultados = useMemo(
     () => filtrarAnunciantes(opciones, texto),
@@ -83,6 +93,7 @@ export function SelectorAnunciante({
   return (
     <Popover open={abierto} onOpenChange={cambiarAbierto}>
       <PopoverTrigger
+        ref={ref}
         render={
           <Button
             id={id}
@@ -90,7 +101,7 @@ export function SelectorAnunciante({
             variant="outline"
             role="combobox"
             aria-expanded={abierto}
-            aria-controls={abierto ? idLista : undefined}
+            aria-controls={abierto && idLista ? idLista : undefined}
             aria-invalid={invalido || undefined}
             aria-describedby={descripcion}
             disabled={deshabilitado}
@@ -116,7 +127,7 @@ export function SelectorAnunciante({
             placeholder="Nombre comercial"
             aria-label="Buscar anunciante por nombre"
           />
-          <CommandList id={idLista}>
+          <CommandList ref={refLista}>
             <CommandEmpty>Ningún anunciante coincide.</CommandEmpty>
             {resultados.length > 0 ? (
               <CommandGroup

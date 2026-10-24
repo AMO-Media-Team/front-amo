@@ -88,6 +88,8 @@ describe("selector de anunciante", () => {
 
   it("la nota de verificación solo aparece si la empresa no está verificada", () => {
     expect(notaVerificacionAsistida("VERIFICADO")).toBeNull()
+    // Sin `anunciantes.ver` no se conoce el estado: no se afirma nada.
+    expect(notaVerificacionAsistida(null)).toBeNull()
     for (const estado of ["PENDIENTE", "RECHAZADO", "SUSPENDIDO"] as const) {
       expect(notaVerificacionAsistida(estado)).toBe(
         "Puedes preparar borradores; activar y enviar a revisión exige la empresa verificada."

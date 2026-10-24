@@ -5,6 +5,7 @@ import {
   accionesTitular,
   admiteSupresion,
   categoriasDatos,
+  clasificarBloqueos,
   datosParaRol,
   enmascararIp,
   ESTADOS_INTERNO,
@@ -13,8 +14,12 @@ import {
   formatearDia,
   ORDEN_TIPOS,
   situacionPlazo,
+  textoArchivosEjecutada,
+  textoArchivosSimulacion,
+  textoBorrado,
   textoPlazoLegal,
   textoRadicado,
+  textoSolicitudesVinculacion,
   textoVencimiento,
   TIPOS,
   TIPOS_RECLAMO,
@@ -158,9 +163,41 @@ describe("accionesEquipo", () => {
       requerir: true,
       prorrogar: true,
       responder: true,
+      verDatos: true,
       simularSupresion: true,
       ejecutarSupresion: false,
     })
+  })
+
+  it("pide información solo en un reclamo y antes de prorrogarlo", () => {
+    for (const tipo of ["CONSULTA", "PRUEBA_AUTORIZACION"] as const) {
+      expect(accionesEquipo(solicitud({ tipo }), CONTEXTO).requerir).toBe(false)
+    }
+    expect(
+      accionesEquipo(solicitud({ tipo: "RECTIFICACION" }), CONTEXTO).requerir
+    ).toBe(true)
+    expect(
+      accionesEquipo(
+        solicitud({ prorrogadaAt: "2026-11-05T10:00:00Z" }),
+        CONTEXTO
+      ).requerir
+    ).toBe(false)
+  })
+
+  it("ve los datos del titular solo con la solicitud abierta y la cuenta viva", () => {
+    expect(
+      accionesEquipo(solicitud({ estado: "REQUIERE_INFORMACION" }), CONTEXTO)
+        .verDatos
+    ).toBe(true)
+    expect(
+      accionesEquipo(
+        solicitud({ estado: "RESPONDIDA", decision: "PROCEDE" }),
+        CONTEXTO
+      ).verDatos
+    ).toBe(false)
+    expect(
+      accionesEquipo(solicitud(), { ...CONTEXTO, conCuenta: false }).verDatos
+    ).toBe(false)
   })
 
   it("prorroga una sola vez y antes del vencimiento", () => {
@@ -225,6 +262,87 @@ describe("accionesEquipo", () => {
       accionesEquipo({ ...respondida, tipo: "CONSULTA" }, CONTEXTO)
         .simularSupresion
     ).toBe(false)
+  })
+})
+
+describe("textos de la supresión", () => {
+  it("dice qué pasó en Storage al ejecutar o reintentar", () => {
+    expect(
+      textoBorrado({
+        archivosBorrados: 3,
+        archivosPendientes: 0,
+        archivosRechazados: 0,
+      })
+    ).toBe("3 archivos borrados de Storage.")
+    expect(
+      textoBorrado({
+        archivosBorrados: 0,
+        archivosPendientes: 0,
+        archivosRechazados: 0,
+      })
+    ).toBe("No quedaban archivos en Storage.")
+    expect(
+      textoBorrado({
+        archivosBorrados: 1,
+        archivosPendientes: 2,
+        archivosRechazados: 1,
+      })
+    ).toBe(
+      "1 archivo borrado de Storage. 2 carpetas o archivos siguen ahí: reintenta el borrado. 1 carpeta o archivo no corresponde a este titular y no se tocó: avisa a soporte."
+    )
+  })
+
+  it("separa los deberes legales del medio de quién puede suprimir la cuenta", () => {
+    expect(
+      clasificarBloqueos([
+        "El medio tiene liquidaciones sin pagar.",
+        "Solo un superadministrador puede suprimir esta cuenta.",
+        "El medio tiene disputas abiertas.",
+        "Es el último superadministrador activo.",
+      ])
+    ).toEqual({
+      legales: [
+        "El medio tiene liquidaciones sin pagar.",
+        "El medio tiene disputas abiertas.",
+      ],
+      otros: [
+        "Solo un superadministrador puede suprimir esta cuenta.",
+        "Es el último superadministrador activo.",
+      ],
+    })
+  })
+
+  it("nunca promete una limpieza programada", () => {
+    const texto = textoBorrado({
+      archivosBorrados: 0,
+      archivosPendientes: 4,
+      archivosRechazados: 0,
+    })
+    expect(texto).not.toMatch(/limpieza/)
+    expect(texto).toBe(
+      "No se borró ningún archivo de Storage. 4 carpetas o archivos siguen ahí: reintenta el borrado."
+    )
+  })
+
+  it("lee lo que guardó la BD de una supresión ejecutada", () => {
+    expect(textoArchivosEjecutada(1, 0)).toBe("Se borraron de Storage.")
+    expect(textoArchivosEjecutada(0, 0)).toBe("No había archivos que borrar.")
+    expect(textoArchivosEjecutada(2, 1)).toBe(
+      "1 carpeta o archivo sigue en Storage: reintenta el borrado."
+    )
+    expect(textoArchivosEjecutada(2, null)).toBe(
+      "No quedó registro del borrado en Storage."
+    )
+  })
+
+  it("la simulación cuenta los archivos y las solicitudes de vinculación", () => {
+    expect(textoArchivosSimulacion(0)).toBe("No hay archivos que borrar.")
+    expect(textoArchivosSimulacion(2)).toBe(
+      "2 carpetas o archivos se borran de Storage (foto de perfil y documentos)."
+    )
+    expect(textoSolicitudesVinculacion(0)).toMatch(/^No hay solicitudes/)
+    expect(textoSolicitudesVinculacion(1)).toMatch(/^Se borra 1 solicitud/)
+    expect(textoSolicitudesVinculacion(3)).toMatch(/^Se borran 3 solicitudes/)
   })
 })
 

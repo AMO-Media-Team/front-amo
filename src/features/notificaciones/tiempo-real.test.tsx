@@ -57,7 +57,7 @@ vi.mock("./actions", () => ({
   marcarTodasLeidas: vi.fn(),
 }))
 
-const { useCanalNotificaciones } = await import("./tiempo-real")
+const { aplicarAviso, useCanalNotificaciones } = await import("./tiempo-real")
 const { CLAVES_NOTIFICACIONES } = await import("./fuente")
 const { fijarEnVivo } = await import("./en-vivo")
 
@@ -242,5 +242,77 @@ describe("useCanalNotificaciones", () => {
     })
     expect(otra.result.current).toBe(false)
     otra.unmount()
+  })
+})
+
+describe("aplicarAviso", () => {
+  it("un sondeo del conteo que salió antes del aviso no lo pisa al llegar", async () => {
+    const { cliente } = preparar()
+    let responder: (conteo: {
+      disponible: boolean
+      total: number
+    }) => void = () => {}
+    const sondeo = cliente.fetchQuery({
+      queryKey: CLAVES_NOTIFICACIONES.conteo,
+      queryFn: () =>
+        new Promise<{ disponible: boolean; total: number }>((resolver) => {
+          responder = resolver
+        }),
+      staleTime: 0,
+    })
+    expect(
+      cliente.getQueryState(CLAVES_NOTIFICACIONES.conteo)?.fetchStatus
+    ).toBe("fetching")
+
+    aplicarAviso(cliente, {
+      id: 9,
+      tipo: "oferta.publicada",
+      prioridad: 0,
+      no_leidas: 4,
+    })
+    // La respuesta vieja llega después del aviso.
+    responder({ disponible: true, total: 1 })
+    await sondeo
+
+    expect(cliente.getQueryData(CLAVES_NOTIFICACIONES.conteo)).toEqual({
+      disponible: true,
+      total: 4,
+    })
+    expect(
+      cliente.getQueryState(CLAVES_NOTIFICACIONES.conteo)?.fetchStatus
+    ).toBe("idle")
+  })
+
+  it("no cancela las demás consultas de notificaciones", async () => {
+    const { cliente } = preparar()
+    let responder: (valor: {
+      disponible: boolean
+      notificaciones: never[]
+    }) => void = () => {}
+    const lista = cliente.fetchQuery({
+      queryKey: CLAVES_NOTIFICACIONES.recientes,
+      queryFn: () =>
+        new Promise<{ disponible: boolean; notificaciones: never[] }>(
+          (resolver) => {
+            responder = resolver
+          }
+        ),
+      staleTime: 0,
+    })
+    aplicarAviso(cliente, {
+      id: 9,
+      tipo: "oferta.publicada",
+      prioridad: 0,
+      no_leidas: 4,
+    })
+    expect(
+      cliente.getQueryState(CLAVES_NOTIFICACIONES.recientes)?.fetchStatus
+    ).toBe("fetching")
+    responder({ disponible: false, notificaciones: [] })
+    await lista
+    expect(cliente.getQueryData(CLAVES_NOTIFICACIONES.recientes)).toEqual({
+      disponible: false,
+      notificaciones: [],
+    })
   })
 })

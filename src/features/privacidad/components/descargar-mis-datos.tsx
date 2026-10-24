@@ -69,7 +69,7 @@ export function DescargarMisDatos({ nombre }: { nombre: string }) {
       id="descargar-datos"
       titulo="Descargar mis datos"
       icono={Download}
-      descripcion="Una copia de tus datos personales en AMO: cuenta, organización, autorizaciones, ingresos, actividad y solicitudes."
+      descripcion="Una copia de tus datos personales en AMO: cuenta, organización, autorizaciones, ingresos, actividad, lo que enviaste en «Vincular mi medio» y tus solicitudes."
     >
       <div className="flex flex-col gap-4">
         <p className="text-sm text-pretty text-muted-foreground">

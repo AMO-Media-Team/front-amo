@@ -13,6 +13,7 @@ import { z } from "zod"
 import {
   CLAVES_CATEGORIA,
   type ClaveCategoria,
+  categoriaDe,
 } from "@/features/notificaciones/presentacion"
 import type { TipoRol } from "@/lib/auth/permisos"
 import type { Json } from "@/types/database.types"
@@ -74,6 +75,19 @@ export const CATEGORIAS_CORREO_POR_TIPO: Readonly<
     "seguridad",
     "privacidad",
   ],
+}
+
+/**
+ * Categorías que hoy sí salen por correo: las que tienen al menos una
+ * plantilla EMAIL activa (`clavesCorreoActivas`), en el orden del catálogo.
+ * `null` si no se supo (la interfaz no deshabilita nada).
+ */
+export function categoriasConCorreo(
+  claves: readonly string[] | null
+): ClaveCategoria[] | null {
+  if (!claves) return null
+  const presentes = new Set(claves.map(categoriaDe))
+  return CLAVES_CATEGORIA.filter((clave) => presentes.has(clave))
 }
 
 export function esSilenciable(

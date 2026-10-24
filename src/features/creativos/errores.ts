@@ -50,11 +50,14 @@ export const MENSAJES_CREATIVO = {
     "Solo se puede descartar una versión en preparación: la vigente y las anteriores se conservan.",
   archivoInvalido:
     "No pudimos validar el archivo. Elígelo de nuevo e inténtalo otra vez.",
-  /** La BD (`activar_creativo_srv`) exige la empresa VERIFICADA al anunciante. */
+  /**
+   * La BD (`activar_creativo_srv`) exige la empresa VERIFICADA. Sin «tu
+   * empresa»: lo leen el anunciante y el equipo AMO en la gestión asistida.
+   */
   empresaSuspendida:
-    "Tu empresa está suspendida: puedes preparar la versión nueva, pero solo podrás activarla cuando AMO reactive la cuenta. Mientras tanto, los medios siguen con la versión vigente.",
+    "La empresa está suspendida: puedes preparar la versión nueva, pero solo se podrá activar cuando AMO reactive la cuenta. Mientras tanto, los medios siguen con la versión vigente.",
   empresaSinVerificar:
-    "Tu empresa no está verificada: puedes preparar la versión nueva, pero solo podrás activarla cuando AMO la verifique. Mientras tanto, los medios siguen con la versión vigente.",
+    "La empresa no está verificada: puedes preparar la versión nueva, pero solo se podrá activar cuando AMO la verifique. Mientras tanto, los medios siguen con la versión vigente.",
 } as const
 
 const CAMBIO_SIMULTANEO =

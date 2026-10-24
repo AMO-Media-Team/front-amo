@@ -865,6 +865,19 @@ describe("AsistenteOferta · gestión asistida (ADM-014)", () => {
     expect(screen.queryByText(/tu empresa/i)).not.toBeInTheDocument()
   })
 
+  it("«Cuándo» no le habla al anunciante («tu sector»)", () => {
+    pintar({
+      gestion: ASISTIDO,
+      busqueda: `?ofertas=${IDS.ofertaA}&paso=cuando`,
+      valores: valoresCompletos(),
+      ofertas: [enCurso(IDS.ofertaA, IDS.igReel, "BORRADOR")],
+    })
+    expect(
+      screen.getByText(/no publica para otras marcas del mismo sector/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/tu sector/)).not.toBeInTheDocument()
+  })
+
   it("enviada, va a la ficha interna de la oferta y dice que queda en la cola de moderación", async () => {
     const usuario = userEvent.setup()
     acciones.enviarOfertasARevision.mockResolvedValue(

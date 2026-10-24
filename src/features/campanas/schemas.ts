@@ -175,7 +175,7 @@ function validarReglas(
     ctx.addIssue({
       code: "custom",
       path: ["fechaInicio"],
-      message: `Tienes ofertas que se publican desde el ${diaLargo(reglas.inicioMaximo)}: la campaña debe empezar ese día o antes.`,
+      message: `La campaña tiene ofertas que se publican desde el ${diaLargo(reglas.inicioMaximo)}: debe empezar ese día o antes.`,
     })
   }
   if (fechaFin < fechaInicio) {
@@ -195,13 +195,13 @@ function validarReglas(
     ctx.addIssue({
       code: "custom",
       path: ["fechaFin"],
-      message: `Tienes ofertas que se publican hasta el ${diaLargo(reglas.finMinimo)}: la campaña debe terminar ese día o después.`,
+      message: `La campaña tiene ofertas que se publican hasta el ${diaLargo(reglas.finMinimo)}: debe terminar ese día o después.`,
     })
   }
 }
 
 export function mensajePresupuestoMinimo(minimo: number): string {
-  return `El presupuesto no puede quedar por debajo de ${formatearCOP(minimo)}: es lo que ya tienen comprometido tus ofertas en revisión o publicadas y los cupos aceptados.`
+  return `El presupuesto no puede quedar por debajo de ${formatearCOP(minimo)}: es lo que ya tienen comprometido sus ofertas en revisión o publicadas y los cupos aceptados.`
 }
 
 /** Campaña nueva: sus datos y las reglas del día. */

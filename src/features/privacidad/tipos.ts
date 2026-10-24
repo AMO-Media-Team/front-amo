@@ -155,16 +155,34 @@ export interface ResultadoSupresion {
   bloqueos: string[]
   cuenta: "BORRAR"
   medio: AccionMedio
+  /** El medio sobre el que decidió la BD (el del perfil al ejecutar); `null` si no tiene. */
+  medioId: string | null
   contactoEmpresa: AccionContacto
+  /** Solicitudes de vinculación (formulario público) con su correo o de su medio que se borran. */
+  solicitudesVinculacion: number
+  /** Lo que la supresión borra de Storage (carpetas o archivos). */
   archivos: ArchivoSupresion[]
+  /**
+   * Tras ejecutarla: lo que sigue en Storage (vacío, todo borrado). `null` en
+   * la simulación o si no quedó registro.
+   */
+  archivosPendientes: ArchivoSupresion[] | null
+  /** Última vez que el servidor revisó Storage (al ejecutar o al reintentar). */
+  archivosRevisadosAt: string | null
   seConserva: string[]
   simulacion: boolean
 }
 
-/** Resultado de ejecutar la supresión, con lo que pasó en Storage. */
-export interface SupresionEjecutada {
-  resultado: ResultadoSupresion
+/** Lo que pasó en Storage al borrar (al ejecutar o al reintentar). */
+export interface BorradoArchivos {
   archivosBorrados: number
-  /** Archivos que Storage no borró (quedan para la limpieza programada). */
+  /** Carpetas o archivos que siguen en Storage: se ofrece reintentar. */
   archivosPendientes: number
+  /** La BD pidió algo que no es del titular o con otra forma: no se tocó. */
+  archivosRechazados: number
+}
+
+/** Resultado de ejecutar la supresión, con lo que pasó en Storage. */
+export interface SupresionEjecutada extends BorradoArchivos {
+  resultado: ResultadoSupresion
 }

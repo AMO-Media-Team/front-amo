@@ -105,10 +105,18 @@ async function crearAviso(
   return data.id
 }
 
-/** Ingresa en un navegador aparte y deja la campana con el canal suscrito. */
+/**
+ * Ingresa en un navegador aparte y deja la campana con el canal suscrito y el
+ * contador cargado. `data-en-vivo` es el estado del canal, no el del conteo:
+ * la suscripción puede completarse antes que la lectura del contador (la
+ * campana dice «Notificaciones», 0, mientras tanto), así que se espera a que
+ * la pantalla muestre lo mismo que la base.
+ */
 async function abrirPersona(
   abrirContexto: AbrirContexto,
-  credenciales: Credenciales
+  credenciales: Credenciales,
+  servicio: ClienteSupabase,
+  usuarioId: string
 ): Promise<Page> {
   const contexto = await abrirContexto()
   const page = await contexto.newPage()
@@ -121,6 +129,10 @@ async function abrirPersona(
   await expect(campana(page)).toHaveAttribute("data-en-vivo", "true", {
     timeout: 15_000,
   })
+  const enBase = await noLeidasEnBase(servicio, usuarioId)
+  await expect
+    .poll(() => noLeidasEnPantalla(page), { timeout: 15_000 })
+    .toBe(enBase)
   return page
 }
 
@@ -156,11 +168,12 @@ test.describe("aviso en vivo (NOT-007)", () => {
       perfilDe(servicio, credencialesA),
       perfilDe(servicio, credencialesB),
     ])
-    const a = await abrirPersona(abrirContexto, credencialesA)
-    const b = await abrirPersona(abrirContexto, credencialesB)
+    const a = await abrirPersona(abrirContexto, credencialesA, servicio, idA)
+    const b = await abrirPersona(abrirContexto, credencialesB, servicio, idB)
 
+    // Ambos contadores ya muestran lo de la base (abrirPersona): el de B es el
+    // punto de partida.
     const antesB = await noLeidasEnPantalla(b)
-    expect(antesB).toBe(await noLeidasEnBase(servicio, idB))
 
     // 1. Un aviso normal para A: solo cambia el contador.
     creados.push(

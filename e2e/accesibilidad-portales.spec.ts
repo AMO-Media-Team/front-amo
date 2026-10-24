@@ -1,3 +1,5 @@
+import { esProduccion, supabaseUrlDe } from "../scripts/bootstrap/produccion"
+import { clienteComoSuperadmin } from "../scripts/bootstrap/provision-e2e"
 import { VISTAS_LIQUIDACIONES } from "../src/features/liquidaciones/rutas"
 import { VISTAS_PAGOS_MEDIOS } from "../src/features/pagos-medios/rutas"
 import { SLUGS_REPORTE } from "../src/features/reportes/catalogo"
@@ -5,8 +7,14 @@ import type { ColaValidacion } from "../src/features/validacion/rutas"
 import type { Cola } from "../src/features/verificacion/colas"
 import type { Database } from "../src/types/database.types"
 import { infraccionesGraves } from "./utilidades/axe"
+import { entorno } from "./utilidades/cuentas"
 import { anuncianteDemo, clienteDeLectura } from "./utilidades/datos-demo"
 import type { Tema } from "./utilidades/interfaz"
+import {
+  crearMedioDesechable,
+  huellaCorreo,
+  type TitularDesechable,
+} from "./utilidades/privacidad"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
 import {
   credencialesDemo,
@@ -22,7 +30,11 @@ import {
  * 390 px). Umbral de RNF-ACC-01: ninguna infracción seria ni crítica.
  *
  * - Las fichas se toman del primer enlace de su listado o de los datos demo
- *   (clave de servicio); sin datos, la prueba se salta y dice por qué.
+ *   (clave de servicio); sin datos, la prueba se salta y dice por qué. La
+ *   demo no trae solicitudes de titulares: la ficha de una se audita sobre
+ *   una solicitud de supresión propia (titular desechable de la fábrica de
+ *   `utilidades/privacidad.ts`), creada antes y borrada después, nunca contra
+ *   producción.
  * - Las fichas con pestañas se auditan pestaña por pestaña; las de una
  *   asignación del medio, con las pantallas que enlazan (contenido, evidencia,
  *   métricas).
@@ -232,7 +244,109 @@ function asignacionDelMedio(estados: readonly EstadoAsignacion[]): Resolver {
   }
 }
 
+// ── Solicitud de un titular (CTA-007) ───────────────────────────────────────
+
+/**
+ * Marca de las solicitudes de esta suite. No es la de `cierre-privacidad`
+ * (`MARCA_SOLICITUD_E2E`): esa suite borra las suyas al empezar y al terminar,
+ * y puede correr a la vez que esta. Lo de cada proceso se borra por su id.
+ */
+const MARCA_SOLICITUD_A11Y = "[E2E accesibilidad]"
+
+/** Las que dejó una corrida cortada se limpian pasado este tiempo. */
+const VIGENCIA_SOBRANTE_MS = 2 * 60 * 60 * 1000
+
+interface SolicitudAuditada {
+  id: string | null
+  titular: TitularDesechable
+}
+
+/** La de este proceso (cada worker crea y borra la suya). */
+let solicitudAuditada: SolicitudAuditada | null = null
+
+/** Día de Bogotá a `dias` de hoy ('YYYY-MM-DD'). */
+function diaBogota(dias: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+  }).format(new Date(Date.now() + dias * 24 * 60 * 60 * 1000))
+}
+
+/**
+ * Supresión RADICADA de un titular desechable (medio y cuenta de la fábrica):
+ * la ficha muestra las acciones del equipo, «Ver datos del titular» y el panel
+ * de supresión. El plazo imita el de un reclamo (15 días hábiles).
+ */
+async function crearSolicitudAuditada(): Promise<void> {
+  const servicio = await clienteComoSuperadmin(entorno)
+  const sobrantes = new Date(Date.now() - VIGENCIA_SOBRANTE_MS).toISOString()
+  await servicio
+    .from("solicitudes_titular")
+    .delete()
+    .like("descripcion", `%${MARCA_SOLICITUD_A11Y}%`)
+    .lt("created_at", sobrantes)
+
+  const titular = await crearMedioDesechable()
+  solicitudAuditada = { id: null, titular }
+  const { data, error } = await servicio
+    .from("solicitudes_titular")
+    .insert({
+      perfil_id: titular.usuarioId,
+      email_sha256: huellaCorreo(titular.email),
+      rol_tipo: "MEDIO",
+      medio_id: titular.medioId,
+      tipo: "SUPRESION",
+      descripcion: `${MARCA_SOLICITUD_A11Y} Ya no voy a publicar en AMO: borren mi cuenta y mis datos.`,
+      datos_afectados: ["CONTACTO"],
+      plazo_vence: diaBogota(21),
+      alerta_desde: diaBogota(14),
+    })
+    .select("id")
+    .single()
+  if (error) {
+    throw new Error(`No se pudo radicar la solicitud: ${error.message}`)
+  }
+  solicitudAuditada.id = data.id
+}
+
+/**
+ * Borra la solicitud, la cuenta y el medio de este proceso. Si
+ * `cierre-privacidad` ya borró al titular (lo hace por prefijo), no falla.
+ */
+async function borrarSolicitudAuditada(): Promise<void> {
+  const creada = solicitudAuditada
+  solicitudAuditada = null
+  if (!creada) return
+  const servicio = await clienteComoSuperadmin(entorno)
+  if (creada.id) {
+    const { error } = await servicio
+      .from("solicitudes_titular")
+      .delete()
+      .eq("id", creada.id)
+    if (error) {
+      throw new Error(`No se pudo borrar la solicitud: ${error.message}`)
+    }
+  }
+  const { usuarioId, medioId } = creada.titular
+  const { error: errorCuenta } = await servicio.auth.admin.deleteUser(usuarioId)
+  if (errorCuenta && errorCuenta.status !== 404) {
+    throw new Error(`No se pudo borrar la cuenta: ${errorCuenta.message}`)
+  }
+  const { error: errorMedio } = await servicio
+    .from("medios")
+    .delete()
+    .eq("id", medioId)
+  if (errorMedio) {
+    throw new Error(`No se pudo borrar el medio: ${errorMedio.message}`)
+  }
+}
+
 // ── Pantallas ────────────────────────────────────────────────────────────────
+
+/** Datos que la demo no trae: se crean antes de la prueba y se borran al final. */
+interface DatosPropios {
+  crear: () => Promise<void>
+  borrar: () => Promise<void>
+}
 
 interface Pantalla {
   /** Nombre de la prueba: la ruta, con `[id]` si es una ficha. */
@@ -242,6 +356,8 @@ interface Pantalla {
   pestanas?: boolean
   /** Pantallas que esta enlaza y se auditan con ella (dado su `ruta`). */
   enlazadas?: (ruta: string) => RegExp
+  /** Solo fuera de producción: en producción la prueba se salta. */
+  datos?: DatosPropios
 }
 
 const pantalla = (ruta: string): Pantalla => ({ nombre: ruta, ruta })
@@ -316,8 +432,14 @@ const PANTALLAS: Readonly<Record<Portal, readonly Pantalla[]>> = {
     pantalla("/operacion/campanas/nueva"),
     pantalla("/administracion/privacidad"),
     {
+      // La demo no trae solicitudes y las de `cierre-privacidad` son
+      // efímeras: se audita una propia, en estado RADICADA.
       nombre: "/administracion/privacidad/[id]",
-      ruta: primeraFicha("/administracion/privacidad"),
+      ruta: async () =>
+        solicitudAuditada?.id
+          ? `/administracion/privacidad/${solicitudAuditada.id}`
+          : null,
+      datos: { crear: crearSolicitudAuditada, borrar: borrarSolicitudAuditada },
     },
   ],
   // Los pagos a medios piden `liquidaciones.registrar_pago`, que ADMIN no tiene.
@@ -566,6 +688,30 @@ const ABIERTOS: readonly Abierto[] = [
     },
   },
   {
+    // Lista con buscador (cmdk) en un popover. Con la lista abierta, el
+    // disparador debe apuntar al listbox que existe: cmdk le pone su propio
+    // id a la lista, y axe deja ese `aria-controls` roto «por revisar».
+    nombre: "el selector de departamento",
+    portal: "medio",
+    ruta: "/mi-medio/perfil",
+    abrir: async (page) => {
+      const disparador = page.getByRole("combobox", {
+        name: "Departamento",
+        exact: true,
+      })
+      if ((await disparador.count()) === 0 || (await disparador.isDisabled())) {
+        return null
+      }
+      await disparador.click()
+      const lista = page.getByRole("listbox", { name: "Resultados" })
+      await expect(lista).toBeVisible()
+      const idLista = await lista.getAttribute("id")
+      expect(idLista, "el listbox tiene id").toBeTruthy()
+      await expect(disparador).toHaveAttribute("aria-controls", idLista ?? "")
+      return page.getByRole("dialog").filter({ has: lista })
+    },
+  },
+  {
     nombre: "«¿Aceptas esta oferta?» (sin confirmar)",
     portal: "medio",
     ruta: primeraFicha("/ofertas"),
@@ -634,10 +780,31 @@ for (const portal of PORTALES) {
       if (portal !== "publico") test.use({ storageState: sesion(portal) })
 
       for (const actual of PANTALLAS[portal]) {
-        test(`${actual.nombre} sin infracciones graves en tema oscuro y claro`, async ({
-          page,
-        }) => {
-          await revisarPantalla(page, portal, actual)
+        const definir = () =>
+          test(`${actual.nombre} sin infracciones graves en tema oscuro y claro`, async ({
+            page,
+          }) => {
+            await revisarPantalla(page, portal, actual)
+          })
+        const { datos } = actual
+        if (!datos) {
+          definir()
+          continue
+        }
+        // Grupo propio: los datos se crean y se borran solo para esta prueba.
+        test.describe(() => {
+          // Playwright exige desestructurar los fixtures aunque no se usen.
+          test.beforeAll(async ({}, info) => {
+            info.skip(
+              esProduccion(supabaseUrlDe()),
+              `${actual.nombre} necesita datos de prueba: no se crean en producción.`
+            )
+            await datos.crear()
+          })
+          test.afterAll(async () => {
+            await datos.borrar()
+          })
+          definir()
         })
       }
 

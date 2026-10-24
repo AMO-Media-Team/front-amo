@@ -25,8 +25,10 @@ import {
 import { esEditable } from "../reglas"
 import { RUTA_MI_EMPRESA, rutaMiCampana } from "../rutas"
 import {
+  esAsistido,
   GESTION_PROPIA,
   type ModoGestion,
+  modoAsistido,
   rutasGestion,
 } from "../rutas-gestion"
 import type { EstadoAnunciante } from "../tipos"
@@ -157,16 +159,12 @@ export async function EdicionCampana(props: PropsEdicion) {
     ? await situacionEmpresa(campana.anuncianteId)
     : null
   const gestion: ModoGestion = props.asistido
-    ? {
-        modo: "asistido",
-        anuncianteId: campana.anuncianteId,
-        anunciante: empresa?.nombre ?? "el anunciante",
-      }
+    ? modoAsistido(campana.anuncianteId, empresa?.nombre)
     : GESTION_PROPIA
   const rutas = rutasGestion(gestion)
-  const aviso = props.asistido ? (
+  const aviso = esAsistido(gestion) ? (
     <AvisoModoAsistido
-      anunciante={empresa?.nombre ?? "el anunciante"}
+      anunciante={gestion.anunciante}
       estado={empresa?.estado ?? null}
       enlace={rutaAnunciante(campana.anuncianteId)}
     />

@@ -249,10 +249,10 @@ describe("FormularioNuevaCampanaAsistida", () => {
     await usuario.click(screen.getByRole("button", { name: "Crear campaña" }))
 
     expect(await screen.findByText("Elige el anunciante.")).toBeInTheDocument()
-    expect(screen.getByRole("combobox", { name: "Empresa" })).toHaveAttribute(
-      "aria-invalid",
-      "true"
-    )
+    const empresa = screen.getByRole("combobox", { name: "Empresa" })
+    expect(empresa).toHaveAttribute("aria-invalid", "true")
+    // Es el primer campo inválido: el foco va a él (ref del Controller).
+    expect(empresa).toHaveFocus()
     expect(acciones.crearCampana).not.toHaveBeenCalled()
     expect(screen.getByRole("link", { name: "Cancelar" })).toHaveAttribute(
       "href",
@@ -269,7 +269,7 @@ describe("FormularioNuevaCampanaAsistida", () => {
       />
     )
     expect(AVISO()).toHaveTextContent(
-      "Estás actuando por cuenta de Jugos del Valle. Cada cambio queda en la bitácora a tu nombre y se le avisa a la empresa."
+      "Estás actuando por cuenta de Jugos del Valle. Cada cambio queda en la bitácora a tu nombre. La empresa recibe un aviso cuando creas, activas o cancelas una campaña, y cuando envías, retiras o cancelas una oferta."
     )
     expect(AVISO()).toHaveTextContent(
       "Puedes preparar borradores; activar y enviar a revisión exige la empresa verificada."
@@ -280,6 +280,42 @@ describe("FormularioNuevaCampanaAsistida", () => {
     expect(screen.getByRole("combobox", { name: "Empresa" })).toHaveTextContent(
       "Jugos del Valle"
     )
+  })
+
+  it("con todo lleno menos la empresa, el foco va al selector «Empresa»", async () => {
+    const usuario = userEvent.setup()
+    render(
+      <FormularioNuevaCampanaAsistida
+        reglas={reglasNuevaCampana(HOY)}
+        anunciantes={ANUNCIANTES}
+        anuncianteInicial={null}
+      />
+    )
+    await usuario.type(
+      screen.getByLabelText("Nombre de la campaña"),
+      "Temporada navideña"
+    )
+    await usuario.type(screen.getByLabelText("Marca o producto"), "Café")
+    await usuario.click(screen.getByRole("button", { name: "Crear campaña" }))
+
+    expect(await screen.findByText("Elige el anunciante.")).toBeInTheDocument()
+    expect(screen.getByRole("combobox", { name: "Empresa" })).toHaveFocus()
+    expect(acciones.crearCampana).not.toHaveBeenCalled()
+  })
+
+  it("la ayuda del selector dice qué cambios se le avisan a la empresa", () => {
+    render(
+      <FormularioNuevaCampanaAsistida
+        reglas={reglasNuevaCampana(HOY)}
+        anunciantes={ANUNCIANTES}
+        anuncianteInicial={null}
+      />
+    )
+    expect(
+      screen.getByText(
+        "La empresa dueña de la campaña: la ve en «Mis campañas» y recibe un aviso cuando la creas, la activas o la cancelas."
+      )
+    ).toBeInTheDocument()
   })
 
   it("un anunciante del enlace que no está en la lista no se preselecciona", () => {

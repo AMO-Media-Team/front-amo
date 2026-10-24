@@ -29,9 +29,11 @@ import {
  *    reintento con espera creciente, el fallo definitivo y escribe
  *    `notificaciones.enviada_email_at`. El intento es la marca de turno.
  *
- * Lo que no alcanza a enviarse (tiempo o pausa pedida por el proveedor) se
- * queda sin registrar y vuelve a la cola cuando vence su turno. Nada de
- * correos, asuntos ni nombres en el log: solo conteos y códigos.
+ * Lo que no alcanza a intentarse (tiempo o pausa pedida por el proveedor) se
+ * registra como `APLAZADO`: vuelve a la cola sin gastar el intento, así un
+ * proveedor lento o con límite de tasa no agota los reintentos de correos que
+ * nunca se enviaron. Si ese registro falla, el correo vuelve cuando vence su
+ * turno. Nada de correos, asuntos ni nombres en el log: solo conteos y códigos.
  */
 
 export const LOTE_POR_DEFECTO = 20
@@ -42,13 +44,20 @@ export const PRESUPUESTO_MS = 50_000
 const MARGEN_POR_ENVIO_MS = 12_000
 /** ≤ 2 envíos por segundo: el límite por omisión de Resend. */
 export const PAUSA_ENTRE_ENVIOS_MS = 600
+/** Aplazados que se devuelven a la vez (no satura la conexión al final del lote). */
+export const APLAZADOS_EN_PARALELO = 10
 
 type ClienteAdmin = Awaited<ReturnType<typeof crearClienteAdmin>>
 export type FilaCorreo =
   Database["public"]["Functions"]["reclamar_correos_srv"]["Returns"][number]
 
-type ResultadoRegistro = "ENVIADO" | "REINTENTO" | "FALLIDO" | "IGNORADO"
+type ResultadoRegistro =
+  "ENVIADO" | "REINTENTO" | "FALLIDO" | "IGNORADO" | "APLAZADO"
 
+/**
+ * Cada correo reclamado cae en un solo conteo: la suma de los demás es
+ * `reclamados`.
+ */
 export interface ResumenCorreos {
   reclamados: number
   enviados: number
@@ -56,9 +65,9 @@ export interface ResumenCorreos {
   fallidos: number
   /** La base no aceptó el resultado: otro despachador tomó el turno. */
   ignorados: number
-  /** Sin intentar en esta corrida (tiempo o pausa): vuelven al vencer el turno. */
+  /** Sin intentar en esta corrida (tiempo o pausa): vuelven a la cola sin gastar el intento. */
   aplazados: number
-  /** No se pudo registrar el resultado (se reintenta al vencer el turno). */
+  /** No se pudo registrar el resultado (vuelve a la cola al vencer el turno). */
   sinRegistro: number
 }
 
@@ -169,27 +178,42 @@ const RESULTADO_BD: Record<ResultadoEnvio["estado"], string> = {
   fallido: "FALLIDO",
 }
 
+/** Un correo reclamado que no se alcanzó a intentar. */
+const APLAZADO = { estado: "aplazado" } as const
+
 async function registrar(
   admin: ClienteAdmin,
   fila: FilaCorreo,
-  resultado: ResultadoEnvio
+  resultado: ResultadoEnvio | typeof APLAZADO
 ): Promise<ResultadoRegistro | null> {
-  const { data, error } = await admin.rpc(
-    "registrar_envio_correo_srv",
-    argumentosRpc<"registrar_envio_correo_srv">({
-      p_id: fila.correo_id,
-      p_intento: fila.intento,
-      p_resultado: RESULTADO_BD[resultado.estado],
-      p_proveedor_id:
-        resultado.estado === "enviado" ? resultado.proveedorId : null,
-      p_error: resultado.estado === "enviado" ? null : resultado.error,
-    })
-  )
-  if (error) {
-    informar("registrar", codigoDe(error))
+  try {
+    const { data, error } = await admin.rpc(
+      "registrar_envio_correo_srv",
+      argumentosRpc<"registrar_envio_correo_srv">({
+        p_id: fila.correo_id,
+        // El intento es la marca de turno: solo quien reclamó lo registra.
+        p_intento: fila.intento,
+        p_resultado:
+          resultado.estado === "aplazado"
+            ? "APLAZADO"
+            : RESULTADO_BD[resultado.estado],
+        p_proveedor_id:
+          resultado.estado === "enviado" ? resultado.proveedorId : null,
+        p_error:
+          resultado.estado === "enviado" || resultado.estado === "aplazado"
+            ? null
+            : resultado.error,
+      })
+    )
+    if (error) {
+      informar("registrar", codigoDe(error))
+      return null
+    }
+    return data as ResultadoRegistro
+  } catch {
+    informar("registrar", "excepcion")
     return null
   }
-  return data as ResultadoRegistro
 }
 
 function contar(resumen: ResumenCorreos, registro: ResultadoRegistro | null) {
@@ -197,7 +221,26 @@ function contar(resumen: ResumenCorreos, registro: ResultadoRegistro | null) {
   else if (registro === "REINTENTO") resumen.reintentos += 1
   else if (registro === "FALLIDO") resumen.fallidos += 1
   else if (registro === "IGNORADO") resumen.ignorados += 1
+  else if (registro === "APLAZADO") resumen.aplazados += 1
   else resumen.sinRegistro += 1
+}
+
+/**
+ * Devuelve a la cola, sin gastar el intento, lo que no se alcanzó a intentar
+ * (de a `APLAZADOS_EN_PARALELO`: al final del presupuesto queda poco tiempo).
+ */
+async function aplazar(
+  admin: ClienteAdmin,
+  filas: readonly FilaCorreo[],
+  resumen: ResumenCorreos
+): Promise<void> {
+  for (let desde = 0; desde < filas.length; desde += APLAZADOS_EN_PARALELO) {
+    const tanda = filas.slice(desde, desde + APLAZADOS_EN_PARALELO)
+    const registros = await Promise.all(
+      tanda.map((fila) => registrar(admin, fila, APLAZADO))
+    )
+    for (const registro of registros) contar(resumen, registro)
+  }
 }
 
 export async function procesarColaCorreos({
@@ -231,7 +274,7 @@ export async function procesarColaCorreos({
   for (const [indice, fila] of filas.entries()) {
     const sinTiempo = reloj() - inicio + MARGEN_POR_ENVIO_MS > presupuestoMs
     if (pausado || sinTiempo) {
-      resumen.aplazados += filas.length - indice
+      await aplazar(cliente, filas.slice(indice), resumen)
       break
     }
     if (indice > 0) await esperar(pausaMs)

@@ -378,7 +378,7 @@ function CampoAnunciante({
     <SeccionFormulario
       icono={Building2}
       titulo="Anunciante"
-      descripcion="La empresa dueña de la campaña: la ve en «Mis campañas» y recibe un aviso de lo que hagas por su cuenta."
+      descripcion="La empresa dueña de la campaña: la ve en «Mis campañas» y recibe un aviso cuando la creas, la activas o la cancelas."
     >
       <Controller
         control={control}
@@ -387,6 +387,7 @@ function CampoAnunciante({
           <Field data-invalid={fieldState.invalid || undefined}>
             <FieldLabel htmlFor={id}>Empresa</FieldLabel>
             <SelectorAnunciante
+              ref={field.ref}
               id={id}
               valor={field.value}
               opciones={anunciantes}

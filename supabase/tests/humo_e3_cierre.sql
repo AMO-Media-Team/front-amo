@@ -73,6 +73,11 @@ declare
   u_mb constant uuid := '00000000-0000-4000-a000-0000000f6006';    -- MEDIO B: sin historial
   u_mc constant uuid := '00000000-0000-4000-a000-0000000f6007';    -- MEDIO C: historial terminado
   u_dm constant uuid := '00000000-0000-4000-a000-0000000f6008';    -- MEDIO demo (no recibe correo)
+  u_ma2 constant uuid := '00000000-0000-4000-a000-0000000f6009';   -- MEDIO A, segunda persona (colaborador)
+  u_fi constant uuid := '00000000-0000-4000-a000-0000000f600a';    -- FINANZAS (el ADMIN no la gestiona)
+  s_ma2 constant uuid := '00000000-0000-4000-b000-0000000f6009';
+  s_fi constant uuid := '00000000-0000-4000-b000-0000000f600a';
+  o_pub constant uuid := '00000000-0000-4000-f000-0000000f6203';   -- oferta publicada sin cupos tomados
   s_adm constant uuid := '00000000-0000-4000-b000-0000000f6001';
   s_op constant uuid := '00000000-0000-4000-b000-0000000f6002';
   s_op2 constant uuid := '00000000-0000-4000-b000-0000000f6003';
@@ -114,7 +119,8 @@ begin
   from (values (u_adm, 'humo.e3c.admin@amo.test'), (u_op, 'humo.e3c.op@amo.test'), (u_op2, 'humo.e3c.op2@amo.test'),
                (u_an, 'humo.e3c.anunciante@amo.test'), (u_ma, 'humo.e3c.medio.a@amo.test'),
                (u_mb, 'humo.e3c.medio.b@amo.test'), (u_mc, 'humo.e3c.medio.c@amo.test'),
-               (u_dm, 'humo.e3c.medio.demo@amo.test')) x (u, e);
+               (u_dm, 'humo.e3c.medio.demo@amo.test'), (u_ma2, 'humo.e3c.medio.a2@amo.test'),
+               (u_fi, 'humo.e3c.finanzas@amo.test')) x (u, e);
   insert into public.anunciantes (id, razon_social, nombre_comercial, nit, digito_verificacion, sector_id, pais_iso2,
                                   municipio_codigo, estado_verificacion, verificado_at)
   values (an_v, 'Humo E3C S.A.S.', 'Humo E3C', '900888061', private.digito_verificacion_nit('900888061'), v_sector, 'CO',
@@ -155,12 +161,22 @@ begin
   from (values (u_adm, 'ADMIN', 'Ana Administradora', null::uuid, false), (u_op, 'OPERACIONES', 'Óscar Operador', null, false),
                (u_op2, 'OPERACIONES', 'Olga Operadora', null, false), (u_an, 'ANUNCIANTE', 'Andrea Anunciante', an_v, false),
                (u_ma, 'MEDIO', 'Mario Medio', me_a, false), (u_mb, 'MEDIO', 'Berta Medio', me_b, false),
-               (u_mc, 'MEDIO', 'Carla Medio', me_c, false), (u_dm, 'MEDIO', 'Demo Medio', me_d, true)) as x (id, rol, nombre, org, demo)
+               (u_mc, 'MEDIO', 'Carla Medio', me_c, false), (u_dm, 'MEDIO', 'Demo Medio', me_d, true),
+               (u_fi, 'FINANZAS', 'Fina Finanzas', null, false)) as x (id, rol, nombre, org, demo)
   where p.id = x.id;
   insert into auth.sessions (id, user_id, created_at, updated_at, aal)
   select x.s, x.u, now(), now(), x.aal::auth.aal_level
   from (values (s_adm, u_adm, 'aal2'), (s_op, u_op, 'aal2'), (s_op2, u_op2, 'aal2'), (s_an, u_an, 'aal1'),
-               (s_ma, u_ma, 'aal1'), (s_mb, u_mb, 'aal1'), (s_mc, u_mc, 'aal1')) as x (s, u, aal);
+               (s_ma, u_ma, 'aal1'), (s_mb, u_mb, 'aal1'), (s_mc, u_mc, 'aal1'), (s_ma2, u_ma2, 'aal1'),
+               (s_fi, u_fi, 'aal2')) as x (s, u, aal);
+  -- B entró por el formulario público y tiene accesos registrados (la supresión los limpia).
+  insert into public.solicitudes_vinculacion (nombre_medio, contacto_nombre, email, celular, municipio_codigo, cuentas,
+                                              autoriza_datos, estado, medio_id, resuelta_at)
+  values ('Medio Humo E3C B', 'Berta Medio', 'humo.e3c.medio.b@amo.test', '3001112233', v_mun,
+          '[{"plataforma": "INSTAGRAM", "usuario": "humo_e3c_b", "seguidores": 45000}]', true, 'INVITADA', me_b, now());
+  insert into public.accesos (usuario_id, email_hash, evento, ip, pais_iso2, ciudad, lat, lon, user_agent)
+  values (u_mb, encode(sha256(convert_to('humo.e3c.medio.b@amo.test', 'UTF8')), 'hex'), 'LOGIN_EXITOSO', '181.50.1.2',
+          'CO', 'Cali', 3.45, -76.53, 'Mozilla/5.0');
   -- Historial: A con una asignación en curso; C con 3 casos en la ventana (2 cumplidos, 1 vencido sin publicar) y pagados.
   insert into public.campanas (id, anunciante_id, nombre, marca, fecha_inicio, fecha_fin, presupuesto_total, estado, activada_at)
   values (c_h, an_v, 'Campaña Humo E3C', 'Marca Seis', v_hoy - 60, v_hoy + 20, 90000000, 'ACTIVA', now());
@@ -173,7 +189,10 @@ begin
           'PUBLICADA', now() - interval '53 days', now() - interval '52 days'),
          (o_rev, c_h, an_v, 'Oferta en revisión', f_post, 'INSTAGRAM', 1, true, 2000000, 1, '{H24}',
           now() + interval '3 days', now() + interval '10 days', now() + interval '2 days', 'Publica la pieza.', 'Sin cambios.',
-          'EN_REVISION', now() - interval '1 day', null);
+          'EN_REVISION', now() - interval '1 day', null),
+         (o_pub, c_h, an_v, 'Oferta publicada sin cupos', f_post, 'INSTAGRAM', 1, true, 2000000, 1, '{H24}',
+          now() + interval '3 days', now() + interval '10 days', now() + interval '2 days', 'Publica la pieza.', 'Sin cambios.',
+          'PUBLICADA', now() - interval '2 days', now() - interval '1 day');
   insert into public.liquidaciones (id, medio_id, periodo_inicio, periodo_fin, cantidad_asignaciones, monto_bruto, monto_comision,
                                     monto_medio, monto_neto, estado, requiere_documento_soporte, aprobada_at, pagada_at,
                                     fecha_pago, soporte_pago_path)
@@ -314,6 +333,11 @@ begin
                                and n.entidad_id = o_rev::text)
                and exists (select 1 from public.notificaciones n where n.tipo = 'oferta.devuelta' and n.entidad_id = o_rev::text),
                null));
+  perform pg_temp.srv(format('select public.transicionar_srv(''ofertas'', %L, ''CANCELADA'', %L, %L, ''Pedido de la empresa'')',
+                             o_pub, u_op, s_op));
+  r := r || jsonb_build_object('b11_cancelar_publicada_avisa_al_anunciante',
+    pg_temp.ok(exists (select 1 from public.notificaciones n where n.usuario_id = u_an and n.tipo = 'oferta.cancelada'
+                       and n.entidad_id = o_pub::text and n.mensaje like '%Motivo: Pedido de la empresa'), null));
   perform set_config('request.jwt.claims', '', true);
   perform set_config('amo.actor_id', u_op::text, true);
   v_n := private.notificar_cola('ofertas.moderar', 'cola.oferta_revision', jsonb_build_object('oferta', 'X', 'anunciante', 'Y'),
@@ -370,6 +394,9 @@ begin
     pg_temp.ok((select plazo_vence = private.sumar_dias_habiles(v_hoy, 10) and rol_tipo = 'ANUNCIANTE'
                        and anunciante_id = an_v
                 from public.solicitudes_titular where id = st_cons), v_j));
+  v_e := pg_temp.srv_falla(format('select public.requerir_informacion_titular_srv(%L, %L, %L, %L)', st_cons, u_adm, s_adm,
+                                  'Necesitamos más datos de la consulta.'));
+  r := r || jsonb_build_object('c08b_consulta_sin_requerimiento', pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA'));
   r := r || jsonb_build_object('c09_rls_titular_e_interno',
     pg_temp.ok(pg_temp.como(c_mb, 'authenticated', 'select count(*) from public.solicitudes_titular')::int = 1
                and pg_temp.como(c_an, 'authenticated',
@@ -422,7 +449,12 @@ begin
   r := r || jsonb_build_object('c18_exportacion_ajena_bloqueada', pg_temp.es(v_e, 'AMO_NO_AUTORIZADO'));
   v_j := pg_temp.como(c_adm, 'authenticated', format('select public.datos_titular(%L)', u_mb));
   r := r || jsonb_build_object('c19_exportacion_para_atender_consulta',
-    pg_temp.ok(v_j -> 'perfil' ->> 'nombre' = 'Berta Medio', v_j));
+    pg_temp.ok(v_j -> 'perfil' ->> 'nombre' = 'Berta Medio' and v_j -> 'medio' -> 'datos_reservados' is not null
+               and jsonb_array_length(v_j -> 'solicitudes_de_vinculacion') = 1
+               and exists (select 1 from public.bitacora b where b.accion = 'REVELAR_DATO' and b.entidad = 'medios_privado'
+                           and b.entidad_id = me_b::text and b.actor_id = u_adm), v_j));
+  v_e := pg_temp.falla(c_adm, 'authenticated', format('select public.datos_titular(%L)', u_mc));
+  r := r || jsonb_build_object('c19b_sin_solicitud_no_se_consultan_sus_datos', pg_temp.es(v_e, 'AMO_NO_AUTORIZADO'));
 
   -- Supresión: B sin historial (se borra todo), C con historial terminado (se anonimiza), A con asignación en curso.
   v_j := pg_temp.srv(format('select public.suprimir_titular_srv(%L, %L, %L)', st_b, u_adm, s_adm));
@@ -447,6 +479,10 @@ begin
                and (select perfil_id is null and supresion_ejecutada_at is not null and medio_id is null
                     from public.solicitudes_titular where id = st_b)
                and exists (select 1 from public.bitacora b where b.accion = 'BORRADO_DEFINITIVO' and b.entidad_id = u_mb::text)
+               and not exists (select 1 from public.solicitudes_vinculacion where email = 'humo.e3c.medio.b@amo.test')
+               and not exists (select 1 from public.accesos where usuario_id = u_mb or ip = '181.50.1.2')
+               and (select supresion_resultado -> 'archivos_pendientes' = v_j -> 'archivos'
+                    from public.solicitudes_titular where id = st_b)
                and v_j -> 'archivos' @> jsonb_build_array(jsonb_build_object('bucket', 'documentos',
                                                                                'prefijo', 'medio/' || me_b || '/')), v_j));
 
@@ -493,6 +529,34 @@ begin
                and (select count(*) from public.campanas where anunciante_id = an_v) >= 3, v_j));
   v_e := pg_temp.srv_falla(format('select public.suprimir_titular_srv(%L, %L, %L, false)', st_an, u_adm, s_adm));
   r := r || jsonb_build_object('c29_supresion_una_vez', pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA'));
+  perform pg_temp.srv(format('select public.registrar_archivos_supresion_srv(%L, %L, %L, ''[]'')', st_b, u_adm, s_adm));
+  r := r || jsonb_build_object('c29b_archivos_confirmados',
+    (select supresion_resultado -> 'archivos_pendientes' = '[]'::jsonb from public.solicitudes_titular where id = st_b));
+
+  -- Colaborador de un medio con negocio en curso: el medio se conserva y su cuenta sí se suprime.
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.perfiles set rol_id = (select id from public.roles where clave = 'MEDIO'), estado = 'ACTIVO',
+         debe_cambiar_password = false, nombre = 'Álvaro Colaborador', medio_id = me_a
+  where id = u_ma2;
+  perform set_config('amo.modo_carga', '', true);
+  v_j := pg_temp.srv(format('select public.radicar_solicitud_titular_srv(%L, %L, ''SUPRESION'', %L)', u_ma2, s_ma2,
+                            'Ya no trabajo con este medio.'));
+  v_id3 := (v_j #>> '{}')::uuid;
+  v_j := pg_temp.srv(format('select public.suprimir_titular_srv(%L, %L, %L)', v_id3, u_adm, s_adm));
+  r := r || jsonb_build_object('c29c_colaborador_sin_bloqueos_del_medio',
+    pg_temp.ok(v_j ->> 'medio' = 'CONSERVAR' and jsonb_array_length(v_j -> 'bloqueos') = 0, v_j));
+  perform pg_temp.srv(format('select public.responder_solicitud_titular_srv(%L, %L, %L, ''PROCEDE'', %L)', v_id3, u_adm, s_adm,
+                             'Procede: suprimimos tu cuenta; el medio sigue con su equipo.'));
+  perform pg_temp.srv(format('select public.suprimir_titular_srv(%L, %L, %L, false)', v_id3, u_adm, s_adm));
+  r := r || jsonb_build_object('c29d_colaborador_suprimido_medio_intacto',
+    pg_temp.ok(not exists (select 1 from public.perfiles where id = u_ma2)
+               and exists (select 1 from public.perfiles where id = u_ma)
+               and (select deleted_at is null from public.medios where id = me_a), null));
+  v_j := pg_temp.srv(format('select public.radicar_solicitud_titular_srv(%L, %L, ''SUPRESION'', %L)', u_fi, s_fi,
+                            'Supriman mi cuenta del equipo.'));
+  v_j := pg_temp.srv(format('select public.suprimir_titular_srv(%L, %L, %L)', (v_j #>> '{}')::uuid, u_adm, s_adm));
+  r := r || jsonb_build_object('c29e_anti_escalada_anticipada',
+    pg_temp.ok(v_j -> 'bloqueos' ? 'Solo un superadministrador puede suprimir esta cuenta.', v_j));
 
   v_j := pg_temp.srv(format('select public.radicar_solicitud_titular_srv(%L, %L, ''RECTIFICACION'', %L)', u_ma, s_ma,
                             'Mi celular está mal escrito.'));
@@ -506,6 +570,12 @@ begin
   perform pg_temp.srv(format('select public.requerir_informacion_titular_srv(%L, %L, %L, %L)', st_viejo, u_adm, s_adm,
                              'Envíanos la nueva dirección completa.'));
   update public.solicitudes_titular set requerida_at = now() - interval '3 months' where id = st_viejo;
+  v_j := pg_temp.srv(format('select public.radicar_solicitud_titular_srv(%L, %L, ''RECTIFICACION'', %L)', u_ma, s_ma,
+                            'Corrijan mi nombre por favor.'));
+  update public.solicitudes_titular set recibida_at = now() - interval '20 days' where id = (v_j #>> '{}')::uuid;
+  v_e := pg_temp.srv_falla(format('select public.requerir_informacion_titular_srv(%L, %L, %L, %L)', (v_j #>> '{}')::uuid,
+                                  u_adm, s_adm, 'Envíanos el soporte del cambio.'));
+  r := r || jsonb_build_object('c30b_requerimiento_tardio_rechazado', pg_temp.es(v_e, 'AMO_FUERA_DE_VENTANA'));
   v_j := pg_temp.srv(format('select public.radicar_solicitud_titular_srv(%L, %L, ''PRUEBA_AUTORIZACION'', %L)', u_ma, s_ma,
                             'Muéstrenme la autorización que di.'));
   v_id2 := (v_j #>> '{}')::uuid;
@@ -583,6 +653,16 @@ begin
   r := r || jsonb_build_object('d10_agotados_los_intentos_falla',
     pg_temp.ok(v_txt = 'FALLIDO' and (select estado = 'FALLIDO' from private.correos_salientes where id = v_big),
                to_jsonb(v_txt)));
+  perform private.notificar(array[u_ma], 'oferta.publicada', '{}', 'ofertas', 'humo-d11', null);
+  update private.correos_salientes set proximo_intento_at = now() + interval '1 day'
+  where notificacion_id not in (select n.id from public.notificaciones n where n.entidad_id = 'humo-d11')
+    and estado in ('PENDIENTE', 'REINTENTO');
+  v_j := pg_temp.srv('select coalesce(jsonb_agg(to_jsonb(x)), ''[]'') from public.reclamar_correos_srv(5) x');
+  v_big := (v_j -> 0 ->> 'correo_id')::bigint;
+  v_txt := pg_temp.srv(format('select public.registrar_envio_correo_srv(%s, 1::smallint, ''APLAZADO'')', v_big)) #>> '{}';
+  r := r || jsonb_build_object('d10b_aplazado_no_gasta_intento',
+    pg_temp.ok(v_txt = 'APLAZADO' and (select estado = 'PENDIENTE' and intentos = 0 from private.correos_salientes
+                                        where id = v_big), v_j));
   perform set_config('amo.ctx_confiable', '', true);
   r := r || jsonb_build_object('d11_despachador_solo_servidor',
     not has_function_privilege('authenticated', 'public.reclamar_correos_srv(integer)', 'execute')

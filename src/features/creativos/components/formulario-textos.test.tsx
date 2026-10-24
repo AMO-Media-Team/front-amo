@@ -48,6 +48,16 @@ describe("FormularioTextos", () => {
     })
   })
 
+  it("las ayudas no hablan en voz del anunciante (también lo usa el equipo AMO)", () => {
+    montar()
+    expect(
+      screen.getByText(
+        "Cuentas que el medio debe etiquetar, por ejemplo la de la marca."
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/tu marca/)).toBeNull()
+  })
+
   it("guarda solo tras una pausa al escribir", async () => {
     const { usuario, onGuardar, onEstado } = montar()
     await usuario.type(

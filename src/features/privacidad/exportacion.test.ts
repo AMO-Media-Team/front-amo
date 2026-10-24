@@ -99,6 +99,27 @@ const DATOS_MEDIO = {
       campos: ["datos_pago"],
     },
   ],
+  solicitudes_de_vinculacion: [
+    {
+      medio: "Medio E2E",
+      contacto: "Titular Medio E2E",
+      correo: "e2e.medio@amo.test",
+      celular: "3000000001",
+      municipio: "Medellín",
+      cuentas: [
+        {
+          plataforma: "INSTAGRAM",
+          usuario: "medio.e2e.amo",
+          seguidores: 45000,
+        },
+        { plataforma: "TIKTOK", usuario: "@medio.e2e" },
+        { plataforma: "OTRA", usuario: "ignorada" },
+      ],
+      mensaje: "Queremos publicar en AMO.",
+      estado: "INVITADA",
+      enviada_at: "2026-10-20T09:00:00-05:00",
+    },
+  ],
   solicitudes: [
     {
       numero: 41,
@@ -123,6 +144,7 @@ describe("leerDatosTitular", () => {
     expect(datos).not.toBeNull()
     expect(datos?.accesos).toEqual([])
     expect(datos?.solicitudes).toEqual([])
+    expect(datos?.solicitudes_de_vinculacion).toEqual([])
   })
 
   it("devuelve null sin la fecha de generación", () => {
@@ -150,6 +172,7 @@ describe("libroDatosTitular", () => {
       "Accesos",
       "Actividad",
       "Consultas de tus datos",
+      "Solicitudes de vinculación",
       "Solicitudes",
     ])
     expect(libro.filtros).toEqual([{ etiqueta: "Titular", valor: "Medio E2E" }])
@@ -178,6 +201,20 @@ describe("libroDatosTitular", () => {
     ])
     expect(hoja("Accesos").filas[0][1]).toBe("Ingreso")
     expect(hoja("Actividad").filas[0][1]).toBe("Cambio de estado")
+    expect(hoja("Solicitudes de vinculación").filas[0]).toEqual([
+      expect.any(Date),
+      "Medio E2E",
+      "Titular Medio E2E",
+      "e2e.medio@amo.test",
+      "3000000001",
+      "Medellín",
+      // Intl separa «45 mil» con un espacio duro.
+      expect.stringMatching(
+        /^Instagram @medio\.e2e\.amo \(45\smil seguidores\); TikTok @medio\.e2e \(seguidores sin declarar\)$/
+      ),
+      "Queremos publicar en AMO.",
+      "Invitada",
+    ])
     expect(hoja("Solicitudes").filas[0]).toEqual([
       "N.º 41",
       "Supresión de datos",
@@ -239,6 +276,10 @@ describe("vista en pantalla de los datos del titular", () => {
     const conteos = conteosDatosTitular(datos)
     expect(conteos).toContainEqual({ etiqueta: "Cuentas sociales", total: 1 })
     expect(conteos).toContainEqual({ etiqueta: "Documentos", total: 1 })
+    expect(conteos).toContainEqual({
+      etiqueta: "Solicitudes de vinculación",
+      total: 1,
+    })
     const sinMedio = conteosDatosTitular({ ...datos, medio: null })
     expect(sinMedio.map((c) => c.etiqueta)).not.toContain("Documentos")
   })

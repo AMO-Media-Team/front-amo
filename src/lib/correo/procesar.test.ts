@@ -10,8 +10,13 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }))
 
-const { loteDe, mensajeDeFila, procesarColaCorreos, ErrorColaCorreos } =
-  await import("./procesar")
+const {
+  APLAZADOS_EN_PARALELO,
+  loteDe,
+  mensajeDeFila,
+  procesarColaCorreos,
+  ErrorColaCorreos,
+} = await import("./procesar")
 const { enviado, fallido, reintentar } = await import("./tipos")
 
 type Fila = Parameters<typeof mensajeDeFila>[0]
@@ -233,39 +238,149 @@ describe("procesarColaCorreos", () => {
     expect(resumen).toMatchObject({ reintentos: 1, enviados: 1 })
   })
 
-  it("si el proveedor pide esperar (429), deja el resto para su turno", async () => {
+  it("si el proveedor pide esperar (429), devuelve el resto a la cola sin gastar su intento", async () => {
+    const { cliente, registros } = clienteFalso({
+      filas: [fila(1), fila(2, { intento: 4 }), fila(3)],
+    })
+    const adaptador = adaptadorCon(reintentar("resend_429", true))
+    const resumen = await procesarColaCorreos({
+      adaptador,
+      admin: cliente as never,
+      ...sinEspera,
+    })
+    expect(adaptador.enviar).toHaveBeenCalledTimes(1)
+    expect(registros).toEqual([
+      {
+        p_id: 1,
+        p_intento: 1,
+        p_resultado: "REINTENTO",
+        p_proveedor_id: null,
+        p_error: "resend_429",
+      },
+      // Cada aplazado lleva su intento: la marca del turno que lo reclamó.
+      {
+        p_id: 2,
+        p_intento: 4,
+        p_resultado: "APLAZADO",
+        p_proveedor_id: null,
+        p_error: null,
+      },
+      {
+        p_id: 3,
+        p_intento: 1,
+        p_resultado: "APLAZADO",
+        p_proveedor_id: null,
+        p_error: null,
+      },
+    ])
+    expect(resumen).toEqual({
+      reclamados: 3,
+      enviados: 0,
+      reintentos: 1,
+      fallidos: 0,
+      ignorados: 0,
+      aplazados: 2,
+      sinRegistro: 0,
+    })
+  })
+
+  it("no empieza un envío sin tiempo para terminarlo: lo aplaza", async () => {
     const { cliente, registros } = clienteFalso({
       filas: [fila(1), fila(2), fila(3)],
+    })
+    let ahora = 0
+    const enviar = vi.fn(async () => {
+      ahora += 20_000
+      return enviado("re")
+    })
+    const resumen = await procesarColaCorreos({
+      adaptador: { nombre: "lento", enviar },
+      admin: cliente as never,
+      reloj: () => ahora,
+      presupuestoMs: 50_000,
+      ...sinEspera,
+    })
+    expect(enviar).toHaveBeenCalledTimes(2)
+    expect(registros.map((registro) => registro.p_resultado)).toEqual([
+      "ENVIADO",
+      "ENVIADO",
+      "APLAZADO",
+    ])
+    expect(registros[2]).toMatchObject({ p_id: 3, p_intento: 1 })
+    expect(resumen).toMatchObject({ enviados: 2, aplazados: 1 })
+  })
+
+  it("si no se puede devolver un aplazado, queda para cuando venza su turno", async () => {
+    const { cliente } = clienteFalso({
+      filas: [fila(1), fila(2), fila(3)],
+      respuestaRegistro: (registro) => {
+        if (registro.p_resultado !== "APLAZADO") return registro.p_resultado
+        // Otro despachador ya tomó el 2; el registro del 3 falla.
+        return registro.p_id === 2 ? "IGNORADO" : null
+      },
     })
     const resumen = await procesarColaCorreos({
       adaptador: adaptadorCon(reintentar("resend_429", true)),
       admin: cliente as never,
       ...sinEspera,
     })
-    expect(registros).toHaveLength(1)
-    expect(resumen).toMatchObject({ reintentos: 1, aplazados: 2 })
+    expect(resumen).toEqual({
+      reclamados: 3,
+      enviados: 0,
+      reintentos: 1,
+      fallidos: 0,
+      ignorados: 1,
+      aplazados: 0,
+      sinRegistro: 1,
+    })
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('"operacion":"registrar"')
+    )
   })
 
-  it("no empieza un envío sin tiempo para terminarlo", async () => {
-    const { cliente, registros } = clienteFalso({
-      filas: [fila(1), fila(2), fila(3)],
+  it("un registro que lanza no corta el lote: cuenta sin registro", async () => {
+    const { cliente } = clienteFalso({ filas: [fila(1), fila(2)] })
+    const rpc = cliente.rpc
+    cliente.rpc = vi.fn(async (nombre: string, argumentos: unknown) => {
+      if ((argumentos as Registro).p_id === 1) throw new Error("red")
+      return rpc(nombre, argumentos)
     })
-    let ahora = 0
     const resumen = await procesarColaCorreos({
-      adaptador: {
-        nombre: "lento",
-        enviar: vi.fn(async () => {
-          ahora += 20_000
-          return enviado("re")
-        }),
-      },
+      adaptador: adaptadorCon(),
       admin: cliente as never,
-      reloj: () => ahora,
-      presupuestoMs: 50_000,
       ...sinEspera,
     })
-    expect(registros).toHaveLength(2)
-    expect(resumen).toMatchObject({ enviados: 2, aplazados: 1 })
+    expect(resumen).toMatchObject({ sinRegistro: 1, enviados: 1 })
+  })
+
+  it("devuelve los aplazados en tandas acotadas y cuadra el resumen", async () => {
+    const filas = Array.from({ length: 26 }, (_, indice) => fila(indice + 1))
+    let enVuelo = 0
+    let maximoEnVuelo = 0
+    const { cliente, registros } = clienteFalso({ filas })
+    const rpc = cliente.rpc
+    cliente.rpc = vi.fn(async (nombre: string, argumentos: unknown) => {
+      enVuelo += 1
+      maximoEnVuelo = Math.max(maximoEnVuelo, enVuelo)
+      await Promise.resolve()
+      const respuesta = await rpc(nombre, argumentos)
+      enVuelo -= 1
+      return respuesta
+    })
+    const resumen = await procesarColaCorreos({
+      adaptador: adaptadorCon(reintentar("resend_429", true)),
+      admin: cliente as never,
+      ...sinEspera,
+    })
+    expect(maximoEnVuelo).toBe(APLAZADOS_EN_PARALELO)
+    expect(
+      registros.filter((registro) => registro.p_resultado === "APLAZADO")
+    ).toHaveLength(25)
+    const { reclamados, ...conteos } = resumen
+    expect(Object.values(conteos).reduce((suma, n) => suma + n, 0)).toBe(
+      reclamados
+    )
+    expect(resumen).toMatchObject({ reclamados: 26, aplazados: 25 })
   })
 
   it("sin filas no envía nada", async () => {

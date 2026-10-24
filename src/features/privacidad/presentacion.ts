@@ -13,11 +13,12 @@ import type { Route } from "next"
 
 import type { PresentacionEstado, Tono } from "@/features/operacion/estados"
 import type { ClavePermiso } from "@/lib/auth/permisos"
-import { formatearFecha, type EstiloFecha } from "@/lib/format"
+import { formatearFecha, formatearNumero, type EstiloFecha } from "@/lib/format"
 
 import type {
   AccionContacto,
   AccionMedio,
+  BorradoArchivos,
   DatoAfectado,
   DecisionSolicitud,
   EstadoSolicitud,
@@ -377,6 +378,8 @@ export interface AccionesEquipo {
   requerir: boolean
   prorrogar: boolean
   responder: boolean
+  /** «Ver datos del titular»: solo con la solicitud abierta y el titular con cuenta. */
+  verDatos: boolean
   simularSupresion: boolean
   ejecutarSupresion: boolean
 }
@@ -394,8 +397,12 @@ export interface ContextoAccionesEquipo {
  * Lo que el equipo puede hacer con la solicitud (`privacidad.gestionar`); la
  * BD vuelve a comprobarlo todo. Pedir información, prorrogar y responder van
  * desde Radicada o En trámite; la prórroga, una sola vez y antes del
- * vencimiento. La supresión se simula mientras no esté cerrada sin ella y se
- * ejecuta respondida con «procede» o «procede en parte».
+ * vencimiento. Pedir información solo en un reclamo (art. 15; una consulta se
+ * responde con lo que hay) y antes de prorrogarlo; la ventana de 5 días
+ * hábiles desde el recibo la cuenta la BD con los festivos y, fuera de ella,
+ * rechaza con su mensaje. Los datos del titular se consultan solo mientras la
+ * solicitud está abierta. La supresión se simula mientras no esté cerrada sin
+ * ella y se ejecuta respondida con «procede» o «procede en parte».
  */
 export function accionesEquipo(
   solicitud: Pick<
@@ -419,12 +426,14 @@ export function accionesEquipo(
     !(solicitud.estado === "RESPONDIDA" && solicitud.decision === "NO_PROCEDE")
   return {
     tramitar: solicitud.estado === "RADICADA",
-    requerir: conPlazo,
+    requerir:
+      conPlazo && esReclamo(solicitud.tipo) && solicitud.prorrogadaAt === null,
     prorrogar:
       conPlazo &&
       solicitud.prorrogadaAt === null &&
       hoy <= solicitud.plazoVence,
     responder: conPlazo,
+    verDatos: conCuenta && estaAbierta(solicitud.estado),
     simularSupresion: supresionPosible,
     ejecutarSupresion:
       supresionPosible &&
@@ -478,6 +487,87 @@ export const ACCIONES_CONTACTO: Readonly<Record<AccionContacto, string>> = {
   BORRAR:
     "Es la persona de contacto de su empresa: se borran ese nombre, correo y celular. Los datos de la empresa se conservan.",
   NINGUNO: "No es la persona de contacto de una empresa.",
+}
+
+/**
+ * Los bloqueos de la simulación: los legales o contractuales del medio
+ * (negocios, liquidaciones o disputas abiertas: Decreto 1377, art. 9) y los
+ * demás (quién puede suprimir la cuenta: un superadministrador, o el último
+ * superadministrador activo). La BD los entrega como texto listo.
+ */
+export function clasificarBloqueos(bloqueos: readonly string[]): {
+  legales: string[]
+  otros: string[]
+} {
+  const legales = bloqueos.filter((bloqueo) => /^El medio tiene /.test(bloqueo))
+  return {
+    legales,
+    otros: bloqueos.filter((bloqueo) => !legales.includes(bloqueo)),
+  }
+}
+
+/** «1 carpeta o archivo», «3 carpetas o archivos». */
+export function cantidadArchivos(cantidad: number): string {
+  return `${formatearNumero(cantidad)} ${cantidad === 1 ? "carpeta o archivo" : "carpetas o archivos"}`
+}
+
+/** Las solicitudes del formulario público «Vincular mi medio» que se borran. */
+export function textoSolicitudesVinculacion(cantidad: number): string {
+  if (cantidad === 0) {
+    return "No hay solicitudes del formulario «Vincular mi medio» con su correo ni de su medio."
+  }
+  return cantidad === 1
+    ? "Se borra 1 solicitud del formulario «Vincular mi medio» (con su correo o de su medio)."
+    : `Se borran ${formatearNumero(cantidad)} solicitudes del formulario «Vincular mi medio» (con su correo o de su medio).`
+}
+
+/** Lo que se borra de Storage, según la simulación. */
+export function textoArchivosSimulacion(cantidad: number): string {
+  if (cantidad === 0) return "No hay archivos que borrar."
+  return `${cantidadArchivos(cantidad)} ${cantidad === 1 ? "se borra" : "se borran"} de Storage (foto de perfil y documentos).`
+}
+
+/** Lo que pasó en Storage al ejecutar la supresión o al reintentar el borrado. */
+export function textoBorrado({
+  archivosBorrados,
+  archivosPendientes,
+  archivosRechazados,
+}: BorradoArchivos): string {
+  const borrados =
+    archivosBorrados === 0
+      ? archivosPendientes > 0
+        ? "No se borró ningún archivo de Storage."
+        : "No quedaban archivos en Storage."
+      : `${formatearNumero(archivosBorrados)} ${archivosBorrados === 1 ? "archivo borrado" : "archivos borrados"} de Storage.`
+  const partes = [borrados]
+  if (archivosPendientes > 0) {
+    partes.push(
+      `${cantidadArchivos(archivosPendientes)} ${archivosPendientes === 1 ? "sigue" : "siguen"} ahí: reintenta el borrado.`
+    )
+  }
+  if (archivosRechazados > 0) {
+    partes.push(
+      `${cantidadArchivos(archivosRechazados)} no ${archivosRechazados === 1 ? "corresponde" : "corresponden"} a este titular y no se ${archivosRechazados === 1 ? "tocó" : "tocaron"}: avisa a soporte.`
+    )
+  }
+  return partes.join(" ")
+}
+
+/**
+ * Los archivos de una supresión ya ejecutada: cuántos pidió borrar la BD y
+ * cuántos siguen en Storage (`null`: no quedó registro).
+ */
+export function textoArchivosEjecutada(
+  archivos: number,
+  pendientes: number | null
+): string {
+  if (pendientes === null) return "No quedó registro del borrado en Storage."
+  if (pendientes > 0) {
+    return `${cantidadArchivos(pendientes)} ${pendientes === 1 ? "sigue" : "siguen"} en Storage: reintenta el borrado.`
+  }
+  return archivos === 0
+    ? "No había archivos que borrar."
+    : "Se borraron de Storage."
 }
 
 // ── IP de una autorización ───────────────────────────────────────────────────

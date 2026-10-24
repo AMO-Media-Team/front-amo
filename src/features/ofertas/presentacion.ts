@@ -261,8 +261,9 @@ export function situacionOferta(
         descripcion: anunciante
           ? retirada
             ? "Volvió a borrador para que la ajustes. Envíala de nuevo a revisión cuando esté lista."
-            : "Complétala en el asistente y envíala a revisión. Hasta entonces solo la ven tú y tu equipo."
-          : "El anunciante aún no la envía a revisión.",
+            : "Complétala en el asistente y envíala a revisión. Hasta entonces los medios no la ven."
+          : // También la prepara el equipo AMO por cuenta del anunciante (ADM-014).
+            "Aún no se envía a revisión.",
         comentario: null,
       }
     }

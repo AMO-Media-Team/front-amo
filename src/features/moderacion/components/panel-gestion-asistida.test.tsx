@@ -1,7 +1,11 @@
 import { render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import type { ModoGestion } from "@/features/campanas/rutas-gestion"
+import {
+  EMPRESA_SIN_NOMBRE,
+  type ModoGestion,
+  modoAsistido,
+} from "@/features/campanas/rutas-gestion"
 import { accionesGestion } from "@/features/ofertas/acciones"
 import { rutaAnunciante } from "@/features/operacion/rutas"
 
@@ -38,14 +42,14 @@ const GESTION: Extract<ModoGestion, { modo: "asistido" }> = {
 
 type Estado = Parameters<typeof accionesGestion>[0]
 
-function pintar(estado: Estado, enlace = true) {
+function pintar(estado: Estado, enlace = true, gestion = GESTION) {
   return render(
     <PanelGestionAsistida
       oferta={{ id: OFERTA, campanaId: CAMPANA, titulo: "Reel", estado }}
       opciones={accionesGestion(estado, "ADMIN", OPERACIONES, {
         cuposOcupados: 0,
       })}
-      gestion={GESTION}
+      gestion={gestion}
       enlaceAnunciante={enlace ? rutaAnunciante(ANUNCIANTE) : null}
     />
   )
@@ -59,8 +63,9 @@ describe("PanelGestionAsistida", () => {
       .closest("section")
     expect(panel).not.toBeNull()
     const enPanel = within(panel as HTMLElement)
+    // Solo los cambios de estado de la oferta llegan como aviso.
     expect(panel).toHaveTextContent(
-      "Actúas por cuenta de Anunciante E2E. Cada cambio queda en la bitácora a tu nombre y se le avisa a la empresa."
+      "Actúas por cuenta de Anunciante E2E. Cada cambio queda en la bitácora a tu nombre; la empresa recibe un aviso cuando envías, retiras o cancelas la oferta."
     )
     expect(
       enPanel.getByRole("link", { name: "Anunciante E2E" })
@@ -89,6 +94,15 @@ describe("PanelGestionAsistida", () => {
   it("sin acciones para el estado no pinta nada", () => {
     const { container } = pintar("CUPOS_COMPLETOS")
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it("sin el nombre de la empresa, la nombra genéricamente y concuerda", () => {
+    pintar("BORRADOR", false, modoAsistido(ANUNCIANTE, null))
+    expect(GESTION.anunciante).not.toBe(EMPRESA_SIN_NOMBRE)
+    expect(
+      screen.getByText(/^Actúas por cuenta de la empresa\. Cada cambio/)
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /empresa/ })).toBeNull()
   })
 
   it("sin acceso a la ficha del anunciante, lo nombra sin enlace", () => {

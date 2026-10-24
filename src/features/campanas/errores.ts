@@ -12,8 +12,13 @@ import {
 
 import { type CampoCampana, mensajePresupuestoMinimo } from "./schemas"
 
+/**
+ * Bloqueo optimista. Sin «tu equipo»: con la gestión asistida (ADM-014) la
+ * campaña la cambian también el equipo AMO o el anunciante, y el texto lo leen
+ * los dos.
+ */
 export const CAMPANA_DESACTUALIZADA =
-  "Alguien de tu equipo cambió esta campaña mientras la editabas. Carga los datos vigentes y vuelve a aplicar tus cambios."
+  "Otra persona cambió esta campaña mientras la editabas. Carga los datos vigentes y vuelve a aplicar tus cambios."
 
 export const CAMPANA_NO_EDITABLE =
   "Esta campaña ya no se puede editar: solo se cambian las campañas en borrador o activas."

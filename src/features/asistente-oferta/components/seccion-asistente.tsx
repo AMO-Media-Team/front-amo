@@ -20,6 +20,7 @@ import {
   esAsistido,
   GESTION_PROPIA,
   type ModoGestion,
+  modoAsistido,
   rutasGestion,
 } from "@/features/campanas/rutas-gestion"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
@@ -133,11 +134,7 @@ async function gestionAsistida(
 ): Promise<{ gestion: ModoGestion; estado: EstadoAnunciante | null }> {
   const empresa = await situacionEmpresa(anuncianteId)
   return {
-    gestion: {
-      modo: "asistido",
-      anuncianteId,
-      anunciante: empresa?.nombre ?? "el anunciante",
-    },
+    gestion: modoAsistido(anuncianteId, empresa?.nombre),
     estado: empresa?.estado ?? null,
   }
 }

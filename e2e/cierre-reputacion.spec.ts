@@ -35,9 +35,9 @@ import { sesion } from "./utilidades/sesiones"
  *   suficiente» con «n de N negocios», y los negocios de la ventana.
  * - Proyecto «cierre» y solo la base LOCAL: el ADMIN E2E confirma un parámetro
  *   «Por validar», la insignia desaparece y la bitácora lo registra a su
- *   nombre. Al terminar se vuelve a marcar pendiente por la conexión directa de
- *   Postgres (la API no lo permite: `AMO_CONFIG_INVALIDA`); nunca corre contra
- *   develop ni producción.
+ *   nombre (`actor_id`; `actor_email` va enmascarado). Al terminar se vuelve
+ *   a marcar pendiente por la conexión directa de Postgres (la API no lo
+ *   permite: `AMO_CONFIG_INVALIDA`); nunca corre contra develop ni producción.
  */
 
 const RUTA = "/mi-medio/reputacion"
@@ -312,18 +312,30 @@ test.describe("confirmar un parámetro pendiente de validación", () => {
       })
     ).toBeFocused()
 
-    // En la base: sin la marca y con el cambio a nombre del administrador.
+    // En la base: sin la marca y con el cambio a nombre del administrador. El
+    // actor se compara por `actor_id`: `actor_email` guarda una copia
+    // enmascarada del correo (`e***@amo.test`).
     expect(await pendienteEnLaBase(servicio)).toBe(false)
+    const { data: perfil, error: errorPerfil } = await servicio
+      .from("perfiles")
+      .select("id")
+      .eq("email", admin.email)
+      .single()
+    if (errorPerfil) {
+      throw new Error(
+        `No se encontró la cuenta ${admin.email}: ejecuta \`pnpm bootstrap:e2e\`. ${errorPerfil.message}`
+      )
+    }
     const { data: rastro, error } = await servicio
       .from("bitacora")
-      .select("actor_email, cambios")
+      .select("actor_id, cambios")
       .eq("entidad", "configuracion")
       .eq("entidad_id", PARAMETRO.clave)
       .gte("created_at", desde)
       .order("created_at", { ascending: false })
       .limit(1)
     if (error) throw new Error(`No se pudo leer la bitácora: ${error.message}`)
-    expect(rastro[0]?.actor_email).toBe(admin.email)
+    expect(rastro[0]?.actor_id).toBe(perfil.id)
     expect(JSON.stringify(rastro[0]?.cambios)).toContain("pendiente_validacion")
 
     // Sobrevive a una recarga: salió de la base de datos.

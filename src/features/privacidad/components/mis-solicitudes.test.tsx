@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -150,5 +150,100 @@ describe("MisSolicitudes", () => {
     expect(
       screen.getByRole("article", { name: "Consulta de datos" })
     ).toHaveFocus()
+  })
+
+  it("tras desistir el foco va al título de la tarjeta (el botón desaparece); al volver, al botón", async () => {
+    const usuario = userEvent.setup()
+    const { rerender } = render(
+      <MisSolicitudes solicitudes={[solicitud()]} resaltada={null} />
+    )
+    const desistir = screen.getByRole("button", { name: /Desistir/ })
+    await usuario.click(desistir)
+    let dialogo = await screen.findByRole("alertdialog")
+    await usuario.click(within(dialogo).getByRole("button", { name: "Volver" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(desistir).toHaveFocus()
+
+    // El servidor vuelve a pintar la solicitud cerrada (refresh()).
+    acciones.desistirSolicitud.mockImplementation(async () => {
+      rerender(
+        <MisSolicitudes
+          solicitudes={[
+            solicitud({
+              estado: "DESISTIDA",
+              desistidaAt: "2026-10-22T15:00:00Z",
+            }),
+          ]}
+          resaltada={null}
+        />
+      )
+      return exito()
+    })
+    await usuario.click(desistir)
+    dialogo = await screen.findByRole("alertdialog")
+    expect(dialogo).toHaveAccessibleName("¿Desistir de la solicitud N.º 41?")
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Desistir" })
+    )
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    expect(screen.queryByRole("button", { name: /Desistir/ })).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", {
+          level: 3,
+          name: "Rectificación de datos",
+        })
+      ).toHaveFocus()
+    )
+  })
+
+  it("tras enviar la respuesta el foco va al título de la tarjeta", async () => {
+    const usuario = userEvent.setup()
+    const requerida = solicitud({
+      estado: "REQUIERE_INFORMACION",
+      requerimiento: "Indícanos el número correcto.",
+      requeridaAt: "2026-10-21T15:00:00Z",
+    })
+    const { rerender } = render(
+      <MisSolicitudes solicitudes={[requerida]} resaltada={null} />
+    )
+    acciones.aportarInformacion.mockImplementation(async () => {
+      rerender(
+        <MisSolicitudes
+          solicitudes={[
+            {
+              ...requerida,
+              estado: "EN_TRAMITE",
+              informacionAportada: "Es el 300 123 4567.",
+              informacionAt: "2026-10-22T15:00:00Z",
+            },
+          ]}
+          resaltada={null}
+        />
+      )
+      return exito()
+    })
+    await usuario.click(
+      screen.getByRole("button", {
+        name: "Responder el requerimiento de la solicitud N.º 41",
+      })
+    )
+    const dialogo = await screen.findByRole("alertdialog")
+    await usuario.type(
+      within(dialogo).getByLabelText("Tu respuesta"),
+      "Es el 300 123 4567."
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Enviar respuesta" })
+    )
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", {
+          level: 3,
+          name: "Rectificación de datos",
+        })
+      ).toHaveFocus()
+    )
   })
 })

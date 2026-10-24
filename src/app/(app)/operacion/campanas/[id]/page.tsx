@@ -12,10 +12,7 @@ import {
   puedeCrearOfertas,
   puedeEditarCampana,
 } from "@/features/campanas/reglas"
-import {
-  type ModoGestion,
-  rutasGestion,
-} from "@/features/campanas/rutas-gestion"
+import { modoAsistido, rutasGestion } from "@/features/campanas/rutas-gestion"
 import { EsqueletoIndicadores } from "@/features/operacion/components/esqueletos"
 import { Diferida, UUID } from "@/features/operacion/components/ficha"
 import {
@@ -73,11 +70,10 @@ async function gestionDeCampana(
     gestionaCampanas && tieneAlgunPermiso(usuario, ["anunciantes.ver"])
       ? await situacionEmpresa(campana.anuncianteId)
       : null
-  const gestion: ModoGestion = {
-    modo: "asistido",
-    anuncianteId: campana.anuncianteId,
-    anunciante: campana.anunciante ?? empresa?.nombre ?? "el anunciante",
-  }
+  const gestion = modoAsistido(
+    campana.anuncianteId,
+    campana.anunciante ?? empresa?.nombre
+  )
   const acciones = gestionaCampanas
     ? accionesCampana({
         estado: campana.estado,

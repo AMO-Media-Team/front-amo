@@ -6,7 +6,8 @@ import { InsigniaEstado } from "@/features/operacion/components/distintivos"
 import { ESTADOS_ANUNCIANTE } from "@/features/operacion/estados"
 import { cn } from "@/lib/utils"
 
-import { notaVerificacionAsistida } from "../gestion"
+import { AVISOS_GESTION_ASISTIDA, notaVerificacionAsistida } from "../gestion"
+import { nombreConocido } from "../rutas-gestion"
 import type { EstadoAnunciante } from "../tipos"
 
 /** Nombre accesible de la nota (las pruebas la buscan por él). */
@@ -14,11 +15,13 @@ export const ETIQUETA_AVISO_ASISTIDO = "Gestión asistida"
 
 /**
  * Aviso de las pantallas de la gestión asistida (ADM-014): quien la ve actúa
- * por cuenta de un anunciante, cada cambio queda en la bitácora a su nombre y
- * se le avisa a la empresa. Si la empresa no está verificada, dice hasta
- * dónde se puede llegar (borradores sí; activar y enviar a revisión, no). La
- * nota de verificación es una región viva: en el alta cambia al elegir otra
- * empresa. Sin anunciante elegido, pide elegirlo.
+ * por cuenta de un anunciante y cada cambio queda en la bitácora a su nombre;
+ * la empresa recibe aviso de los cambios de estado (no de las ediciones). Si
+ * la empresa no está verificada, dice hasta dónde se puede llegar (borradores
+ * sí; activar y enviar a revisión, no); si no se pudo leer su estado, no
+ * afirma nada. La nota de verificación es una región viva: en el alta cambia
+ * al elegir otra empresa. Sin anunciante elegido, pide elegirlo. Sin su
+ * nombre (`EMPRESA_SIN_NOMBRE`), la nombra genéricamente y sin resaltar.
  */
 export function AvisoModoAsistido({
   anunciante,
@@ -52,7 +55,9 @@ export function AvisoModoAsistido({
         {anunciante ? (
           <p className="text-pretty">
             Estás actuando por cuenta de{" "}
-            {enlace ? (
+            {!nombreConocido(anunciante) ? (
+              anunciante
+            ) : enlace ? (
               <Link
                 href={enlace}
                 className="inline-flex items-center gap-0.5 rounded-sm font-semibold text-foreground underline underline-offset-4 outline-none focus-visible:anillo-foco"
@@ -63,24 +68,22 @@ export function AvisoModoAsistido({
             ) : (
               <span className="font-semibold">{anunciante}</span>
             )}
-            . Cada cambio queda en la bitácora a tu nombre y se le avisa a la
-            empresa.
+            . Cada cambio queda en la bitácora a tu nombre.{" "}
+            {AVISOS_GESTION_ASISTIDA}
           </p>
         ) : (
           <p className="text-pretty">
             Elige la empresa por cuenta de la cual actúas. Cada cambio queda en
-            la bitácora a tu nombre y se le avisa a la empresa.
+            la bitácora a tu nombre. {AVISOS_GESTION_ASISTIDA}
           </p>
         )}
         <div
           aria-live="polite"
           className="flex flex-wrap items-center gap-x-2 gap-y-1 not-empty:mt-1.5"
         >
-          {nota ? (
+          {nota && estado ? (
             <>
-              {estado ? (
-                <InsigniaEstado catalogo={ESTADOS_ANUNCIANTE} estado={estado} />
-              ) : null}
+              <InsigniaEstado catalogo={ESTADOS_ANUNCIANTE} estado={estado} />
               <span className="text-pretty text-muted-foreground">{nota}</span>
             </>
           ) : null}

@@ -89,4 +89,52 @@ describe("SeccionAvisosCorreo", () => {
     ).toBeChecked()
     expect(screen.getAllByRole("checkbox")).toHaveLength(3)
   })
+
+  it("una categoría sin plantilla de correo activa se deshabilita y lo explica", async () => {
+    const usuario = userEvent.setup()
+    const { onCambiar } = pintar({
+      tipoRol: "ADMIN",
+      correoHabilitado: true,
+      categoriasConCorreo: ["seguridad", "privacidad", "ofertas"],
+    })
+    const pendientes = screen.getByRole("checkbox", {
+      name: "Pendientes del equipo",
+    })
+    expect(pendientes).not.toBeChecked()
+    expect(pendientes).toHaveAttribute("aria-disabled", "true")
+    expect(pendientes).toHaveAccessibleDescription(
+      /El equipo AMO aún no envía estos avisos por correo/
+    )
+    expect(screen.getByText("Sin correo por ahora")).toBeInTheDocument()
+
+    await usuario.click(pendientes)
+    expect(onCambiar).not.toHaveBeenCalled()
+    // Las que sí salen siguen como siempre.
+    expect(screen.getByRole("checkbox", { name: "Seguridad" })).toBeChecked()
+    expect(screen.getAllByText("Siempre activo")).toHaveLength(2)
+  })
+
+  it("deshabilita solo las que no salen por correo", () => {
+    pintar({
+      silenciadas: ["pagos"],
+      categoriasConCorreo: ["ofertas", "seguridad", "privacidad"],
+    })
+    for (const nombre of ["Pagos y facturas", "Disputas"]) {
+      expect(screen.getByRole("checkbox", { name: nombre })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      )
+    }
+    expect(
+      screen.getByRole("checkbox", { name: "Ofertas y campañas" })
+    ).not.toHaveAttribute("aria-disabled")
+  })
+
+  it("si no se sabe qué plantillas están activas, no deshabilita ninguna", () => {
+    pintar({ tipoRol: "ADMIN", categoriasConCorreo: null })
+    expect(
+      screen.getByRole("checkbox", { name: "Pendientes del equipo" })
+    ).toBeChecked()
+    expect(screen.queryByText("Sin correo por ahora")).toBeNull()
+  })
 })

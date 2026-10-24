@@ -82,7 +82,7 @@ function textosCancelacion(estado: EstadoOferta, gestion: ModoGestion) {
         ? "¿Cancelar la oferta publicada?"
         : "¿Cancelar la oferta?",
       descripcion: publicada
-        ? `Deja de estar disponible en el marketplace y los medios ya no podrán tomar cupos. ${gestion.anunciante} recibe un aviso con el motivo. No se puede deshacer.`
+        ? `Deja de estar disponible en el marketplace, los medios ya no podrán tomar cupos y ${gestion.anunciante} recibe un aviso con el motivo. No se puede deshacer.`
         : `Se descarta por cuenta de ${gestion.anunciante}, que recibe un aviso con el motivo, y ya no se podrá enviar a revisión. No se puede deshacer.`,
       ayuda:
         "Lo recibe la empresa en el aviso; queda en el historial de la oferta y en la bitácora.",
@@ -304,7 +304,7 @@ export function AccionesOferta({
           titulo="¿Archivar la oferta?"
           descripcion={
             asistido
-              ? `Deja de verse en la campaña, también para ${gestion.anunciante}; su historial se conserva. No se puede deshacer.`
+              ? `Deja de verse en la campaña, también para ${gestion.anunciante}; su historial se conserva. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
               : "Deja de verse en la campaña; el equipo AMO conserva su historial. No se puede deshacer."
           }
           textoConfirmar="Archivar oferta"

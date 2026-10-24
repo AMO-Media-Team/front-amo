@@ -5,6 +5,8 @@ import {
   filtroVencimiento,
   radicadoBuscado,
   rutaBandeja,
+  destinoReclamos,
+  rutaReclamosAbiertos,
 } from "./bandeja"
 
 const HOY = "2026-11-10"
@@ -70,5 +72,46 @@ describe("estado de la bandeja en la URL", () => {
       "/administracion/privacidad?vence=vencida,hoy"
     )
     expect(rutaBandeja()).toBe("/administracion/privacidad")
+  })
+
+  it("enlaza a los reclamos abiertos, de un titular si se indica", async () => {
+    const ruta = rutaReclamosAbiertos("Ana María")
+    const [camino, consulta = ""] = ruta.split("?")
+    expect(camino).toBe("/administracion/privacidad")
+    const estado = await estadoTablaSolicitudes.cargar(
+      Promise.resolve(Object.fromEntries(new URLSearchParams(consulta)))
+    )
+    expect(estado.estado).toEqual([
+      "RADICADA",
+      "EN_TRAMITE",
+      "REQUIERE_INFORMACION",
+    ])
+    expect(estado.tipo).toEqual([
+      "ACTUALIZACION",
+      "RECTIFICACION",
+      "SUPRESION",
+      "REVOCATORIA",
+    ])
+    expect(estado.q).toBe("Ana María")
+    expect(rutaReclamosAbiertos(null)).not.toMatch(/[?&]q=/)
+  })
+
+  it("«Reclamo en trámite» va a la ficha si hay uno y a la bandeja si hay varios", () => {
+    const ana = { perfilId: "p-ana", titular: "Ana" }
+    expect(destinoReclamos([{ id: "s-1", ...ana }])).toBe(
+      "/administracion/privacidad/s-1"
+    )
+    expect(
+      destinoReclamos([
+        { id: "s-1", ...ana },
+        { id: "s-2", ...ana },
+      ])
+    ).toBe(rutaReclamosAbiertos("Ana"))
+    expect(
+      destinoReclamos([
+        { id: "s-1", ...ana },
+        { id: "s-2", perfilId: "p-luis", titular: "Luis" },
+      ])
+    ).toBe(rutaReclamosAbiertos(null))
   })
 })

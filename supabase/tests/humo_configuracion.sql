@@ -108,10 +108,10 @@ begin
   -- evidencias.plazo_recarga_horas y soporte.correo; e3_finanzas suma 6 plantillas (cola.liquidacion_por_aprobar,
   -- cola.liquidaciones_por_aprobar, cola.factura_medio_cargada, liquidacion.factura_requerida, factura.nota_credito,
   -- factura.anulada) y 6 claves
-  -- (facturacion.esquema, tributario.numeracion_documento_soporte y los datos de AMO como adquiriente). e3_cierre suma 10
-  -- plantillas de la aplicación (gestión asistida y titular de datos), una de correo por cada una de la aplicación
-  -- (74 de correo, más las 2 de Auth que ya había) y 9 claves (privacidad.* y correo.*).
-  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_150', v_n = 150);
+  -- (facturacion.esquema, tributario.numeracion_documento_soporte y los datos de AMO como adquiriente). e3_cierre suma 11
+  -- plantillas de la aplicación (gestión asistida, oferta cancelada y titular de datos), una de correo por cada una de
+  -- la aplicación (75 de correo, más las 2 de Auth que ya había) y 9 claves (privacidad.* y correo.*).
+  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_152', v_n = 152);
   select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_74', v_n = 74);
   select count(*) into v_n from public.terminos_versiones where tipo = 'POLITICA_DATOS' and version like 'humo-%';
                                                                        r := r || jsonb_build_object('a2_admin_ve_borradores', v_n = 2);

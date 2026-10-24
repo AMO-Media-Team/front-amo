@@ -1,7 +1,7 @@
 "use client"
 
 import { Eye, FileJson, FileSpreadsheet, UserSearch } from "lucide-react"
-import { useState, useTransition } from "react"
+import { useId, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -32,19 +32,39 @@ import {
   NOMBRES_FORMATO,
 } from "./descarga-datos"
 
+/** Por qué no se pueden consultar ahora (o `null` si se puede). */
+function motivoSinConsulta(
+  titular: string | null,
+  disponible: boolean
+): string | null {
+  if (titular === null) return "El titular ya no tiene cuenta."
+  if (!disponible) {
+    return "Se consultan solo mientras la solicitud está abierta (recibida, en trámite o esperando al titular)."
+  }
+  return null
+}
+
 /**
- * «Ver datos del titular» para atender una consulta (art. 14): el servidor
- * llama a `datos_titular` con la sesión (queda `EXPORTAR` en la bitácora) y
- * el diálogo muestra el resumen; las listas completas van en la descarga
- * (JSON o Excel), que reutiliza lo ya consultado.
+ * «Ver datos del titular» para atender una solicitud abierta (art. 14): el
+ * servidor llama a `datos_titular` con la sesión (queda `EXPORTAR` en la
+ * bitácora) y el diálogo muestra el resumen; las listas completas van en la
+ * descarga (JSON o Excel), que reutiliza lo ya consultado. La identificación
+ * y los datos de pago del medio solo llegan a quien tiene `datos_sensibles.ver`
+ * (y quedan como consulta de datos reservados).
  */
 export function VerDatosTitular({
   solicitud,
   titular,
+  disponible,
+  veReservados,
 }: {
   solicitud: { id: string; numero: number }
   /** Nombre del titular (para el archivo); `null` si ya no tiene cuenta. */
   titular: string | null
+  /** La solicitud está abierta (`accionesEquipo().verDatos`). */
+  disponible: boolean
+  /** Quien consulta tiene `datos_sensibles.ver`. */
+  veReservados: boolean
 }) {
   const [cargando, iniciar] = useTransition()
   const [datos, setDatos] = useState<{
@@ -52,6 +72,8 @@ export function VerDatosTitular({
     leidos: DatosTitular
   } | null>(null)
   const [descargando, setDescargando] = useState<FormatoDatos | null>(null)
+  const idMotivo = useId()
+  const motivo = motivoSinConsulta(titular, disponible)
 
   function consultar() {
     iniciar(async () => {
@@ -90,15 +112,17 @@ export function VerDatosTitular({
     <TarjetaFicha
       titulo="Datos del titular"
       icono={UserSearch}
-      descripcion="Lo que AMO trata de esta persona, para atender una consulta. Queda en la bitácora."
+      descripcion="Lo que AMO trata de esta persona, para atender su solicitud. Queda en la bitácora."
     >
       <Button
         type="button"
         variant="outline"
         size="lg"
         className="w-full"
-        disabled={cargando || titular === null}
+        disabled={cargando || motivo !== null}
+        focusableWhenDisabled={motivo !== null}
         aria-busy={cargando || undefined}
+        aria-describedby={motivo ? idMotivo : undefined}
         onClick={consultar}
       >
         {cargando ? (
@@ -108,9 +132,17 @@ export function VerDatosTitular({
         )}
         Ver datos del titular
       </Button>
-      {titular === null ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          El titular ya no tiene cuenta.
+      {motivo ? (
+        <p
+          id={idMotivo}
+          className="mt-2 text-xs text-pretty text-muted-foreground"
+        >
+          {motivo}
+        </p>
+      ) : !veReservados ? (
+        <p className="mt-2 text-xs text-pretty text-muted-foreground">
+          Sin el permiso de datos sensibles no verás su identificación ni los
+          datos de pago y tributarios de su medio.
         </p>
       ) : null}
 
@@ -124,8 +156,10 @@ export function VerDatosTitular({
           <DialogHeader>
             <DialogTitle>Datos del titular</DialogTitle>
             <DialogDescription>
-              Solicitud {textoRadicado(solicitud.numero)}. La cuenta de pago y
-              el documento se muestran resumidos.
+              Solicitud {textoRadicado(solicitud.numero)}.{" "}
+              {veReservados
+                ? "La cuenta de pago y el documento se muestran resumidos."
+                : "Tu rol no ve datos sensibles: la identificación y los datos de pago y tributarios del medio no se incluyen."}
             </DialogDescription>
           </DialogHeader>
           {datos ? (

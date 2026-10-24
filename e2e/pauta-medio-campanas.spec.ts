@@ -128,7 +128,10 @@ test.describe("mis campañas · solo lectura", () => {
       page.getByRole("heading", { name: "Lo que sigue" })
     ).toBeVisible()
     await expect(page.getByRole("heading", { name: "Tu pago" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Historia" })).toBeVisible()
+    // Exacto: la demo tiene ofertas cuyo título empieza por «Historia de…».
+    await expect(
+      page.getByRole("heading", { name: "Historia", exact: true })
+    ).toBeVisible()
     // Una campaña terminada no ofrece desistir ni otra acción.
     await expect(
       page.getByRole("region", { name: "Acciones de la campaña" })

@@ -214,7 +214,9 @@ insert into public.plantillas_notificacion (clave, canal, nombre, asunto, cuerpo
    array['accion', 'campana', 'motivo']),
   ('oferta.gestion_asistida', 'APP', 'El equipo AMO gestionó tu oferta', null,
    'El equipo AMO {{accion}} la oferta «{{oferta}}» por cuenta de tu empresa.{{motivo}}',
-   array['accion', 'oferta', 'motivo'])
+   array['accion', 'oferta', 'motivo']),
+  ('oferta.cancelada', 'APP', 'El equipo AMO canceló tu oferta', null,
+   'El equipo AMO canceló la oferta publicada «{{oferta}}». Motivo: {{motivo}}', array['oferta', 'motivo'])
 on conflict (clave, canal) do nothing;
 
 -- La bitácora de campañas, ofertas, cupos y creativos marca la acción asistida con el anunciante propietario.
@@ -427,6 +429,13 @@ begin
             and exists (select 1 from public.campanas c where c.id = new.campana_id and c.estado <> 'CANCELADA') then
         perform private.notificar(private.usuarios_anunciante(new.anunciante_id), 'oferta.caducada',
           jsonb_build_object('oferta', new.titulo), 'ofertas', new.id::text, null, 1::smallint);
+      elsif old.estado not in ('BORRADOR', 'DEVUELTA', 'EN_REVISION') and new.estado = 'CANCELADA'
+            and current_setting('amo.actor_tipo', true) = 'ADMIN'
+            and not exists (select 1 from public.campanas c where c.id = new.campana_id and c.estado = 'CANCELADA') then
+        perform private.notificar(private.usuarios_anunciante(new.anunciante_id), 'oferta.cancelada',
+          jsonb_build_object('oferta', new.titulo,
+                             'motivo', coalesce(v_motivo, new.comentario_moderacion, 'sin observaciones')),
+          'ofertas', new.id::text, null, 2::smallint);
       elsif new.estado = 'VENCIDA' then
         perform private.notificar(private.usuarios_anunciante(new.anunciante_id), 'oferta.vencida',
           jsonb_build_object('oferta', new.titulo), 'ofertas', new.id::text, null, 1::smallint);
@@ -930,6 +939,17 @@ declare s public.solicitudes_titular; v_texto text := btrim(coalesce(p_requerimi
 begin
   perform private.validar_actor(p_actor_id, 'privacidad.gestionar', p_session_id);
   s := private.solicitud_titular_para(p_id, array['RADICADA', 'EN_TRAMITE']::public.solicitud_titular_estado[]);
+  -- Ley 1581, art. 15: el reclamo incompleto se requiere dentro de los 5 días (hábiles) siguientes al recibo. Una
+  -- consulta (art. 14) no admite requerimiento ni desistimiento, y un plazo ya prorrogado o vencido no se reinicia.
+  if s.tipo in ('CONSULTA', 'PRUEBA_AUTORIZACION') then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Una consulta no admite requerimiento: respóndela con lo que tienes dentro del plazo.';
+  end if;
+  if s.prorrogada_at is not null
+     or private.hoy() > private.sumar_dias_habiles((s.recibida_at at time zone 'America/Bogota')::date, 5) then
+    raise exception using errcode = 'P0001', message = 'AMO_FUERA_DE_VENTANA',
+      detail = 'El requerimiento se hace dentro de los 5 días hábiles siguientes al recibo del reclamo y antes de prorrogarlo.';
+  end if;
   if char_length(v_texto) < 10 then
     raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO',
       detail = 'Explica qué información necesitas (al menos 10 caracteres).';
@@ -1067,7 +1087,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_n integer := 0; x record; v_hoy date := private.hoy();
 begin
   for x in select s.id, s.numero, s.perfil_id from public.solicitudes_titular s
-           where s.estado = 'REQUIERE_INFORMACION'
+           where s.estado = 'REQUIERE_INFORMACION' and s.tipo not in ('CONSULTA', 'PRUEBA_AUTORIZACION')
              and s.requerida_at + make_interval(months => private.config_entero('privacidad.desistimiento_meses'))
                  <= private.ahora()
            for update skip locked loop
@@ -1102,13 +1122,23 @@ declare
   v_obj uuid := coalesce(p_perfil_id, (select auth.uid()));
   v_p public.perfiles;
   v_desde timestamptz := private.ahora() - interval '365 days';
+  v_interno boolean := v_obj is distinct from (select auth.uid());
+  v_reservados boolean;
   r jsonb;
 begin
   if v_uid is null or not coalesce(private.acceso_valido(), false)
-     or (v_obj <> v_uid and not private.tiene_permiso('privacidad.gestionar')) then
+     or (v_interno and not private.tiene_permiso('privacidad.gestionar')) then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO',
       detail = 'No tienes permiso para consultar esta información.';
   end if;
+  -- El equipo solo consulta los datos de un titular para atender una solicitud suya en trámite; los datos reservados
+  -- exigen además datos_sensibles.ver y quedan como REVELAR_DATO (el titular los ve en su exportación).
+  if v_interno and not exists (select 1 from public.solicitudes_titular s
+                               where s.perfil_id = v_obj and s.estado in ('RADICADA', 'EN_TRAMITE', 'REQUIERE_INFORMACION')) then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO',
+      detail = 'Solo se consultan los datos de un titular que tiene una solicitud en trámite.';
+  end if;
+  v_reservados := not v_interno or private.tiene_permiso('datos_sensibles.ver');
   select * into v_p from public.perfiles p where p.id = v_obj;
   if not found then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'El titular no existe.';
@@ -1124,7 +1154,7 @@ begin
     'identificacion', (select jsonb_build_object('tipo_documento', pp.tipo_documento,
                                                  'numero_documento', pp.numero_documento_resumen,
                                                  'fecha_nacimiento', pp.fecha_nacimiento, 'direccion', pp.direccion)
-                       from public.perfiles_privado pp where pp.perfil_id = v_obj),
+                       from public.perfiles_privado pp where pp.perfil_id = v_obj and v_reservados),
     'medio', (select jsonb_build_object(
         'nombre', m.nombre, 'tipo', m.tipo, 'municipio', mu.nombre, 'estado', m.estado,
         'nivel_verificacion', m.nivel_verificacion, 'creado_at', m.created_at,
@@ -1134,7 +1164,7 @@ begin
             'direccion', mp.direccion, 'metodo_pago', mp.metodo_pago, 'cuenta_de_pago', mp.datos_pago_resumen,
             'declarante', mp.es_declarante, 'obligado_a_facturar', mp.obligado_facturar,
             'responsable_de_iva', mp.responsable_iva)
-          from public.medios_privado mp where mp.medio_id = m.id),
+          from public.medios_privado mp where mp.medio_id = m.id and v_reservados),
         'cuentas_sociales', (select coalesce(jsonb_agg(jsonb_build_object(
               'plataforma', c.plataforma, 'usuario', c.handle, 'enlace', c.url, 'seguidores', c.seguidores_verificados,
               'verificada', c.verificada, 'ultima_verificacion', c.fecha_ultima_verificacion) order by c.created_at), '[]')
@@ -1178,12 +1208,33 @@ begin
           and ((b.entidad = 'perfiles_privado' and b.entidad_id = v_obj::text)
                or (v_p.medio_id is not null and b.entidad = 'medios_privado' and b.entidad_id = v_p.medio_id::text))
         order by b.created_at desc limit 500) x),
+    'solicitudes_de_vinculacion', (select coalesce(jsonb_agg(jsonb_build_object(
+          'medio', sv.nombre_medio, 'contacto', sv.contacto_nombre, 'correo', sv.email, 'celular', sv.celular,
+          'municipio', mu.nombre, 'cuentas', sv.cuentas, 'mensaje', sv.mensaje, 'estado', sv.estado,
+          'enviada_at', sv.created_at) order by sv.created_at desc), '[]')
+      from public.solicitudes_vinculacion sv left join public.municipios mu on mu.codigo = sv.municipio_codigo
+      where (v_p.medio_id is not null and sv.medio_id = v_p.medio_id) or sv.email = v_p.email::text::extensions.citext),
     'solicitudes', (select coalesce(jsonb_agg(jsonb_build_object(
           'numero', s.numero, 'tipo', s.tipo, 'estado', s.estado, 'recibida_at', s.recibida_at, 'vence', s.plazo_vence,
           'decision', s.decision, 'respondida_at', s.respondida_at) order by s.recibida_at desc), '[]')
       from public.solicitudes_titular s where s.perfil_id = v_obj));
   perform private.registrar_en_bitacora('EXPORTAR', 'perfiles', v_obj::text, null,
-    jsonb_build_object('alcance', 'datos_titular', 'propio', v_obj = v_uid), null, null, null, v_p.es_demo);
+    jsonb_build_object('alcance', 'datos_titular', 'propio', not v_interno), null, null, null, v_p.es_demo);
+  if v_interno and v_reservados then
+    perform private.registrar_en_bitacora('REVELAR_DATO', 'perfiles_privado', v_obj::text, null,
+      jsonb_build_object('tabla', 'perfiles_privado', 'id', v_obj,
+                         'campos', jsonb_build_array('tipo_documento', 'numero_documento_resumen', 'fecha_nacimiento',
+                                                     'direccion'), 'motivo', 'solicitud del titular'),
+      null, null, null, v_p.es_demo);
+    if v_p.medio_id is not null then
+      perform private.registrar_en_bitacora('REVELAR_DATO', 'medios_privado', v_p.medio_id::text, null,
+        jsonb_build_object('tabla', 'medios_privado', 'id', v_p.medio_id,
+                           'campos', jsonb_build_array('titular_nombre', 'tipo_documento', 'numero_documento_resumen',
+                                                       'celular', 'email_contacto', 'direccion', 'metodo_pago',
+                                                       'datos_pago_resumen'), 'motivo', 'solicitud del titular'),
+        null, null, null, v_p.es_demo);
+    end if;
+  end if;
   return r;
 end $$;
 revoke all on function public.datos_titular(uuid) from public, anon, authenticated;
@@ -1203,8 +1254,11 @@ declare
   s public.solicitudes_titular;
   v_p public.perfiles;
   v_medio uuid;
-  v_otros integer := 0;
+  v_activos integer := 0;
+  v_inactivos integer := 0;
   v_historial boolean := false;
+  v_archivos_anon jsonb := '[]'::jsonb;
+  v_vinculacion integer := 0;
   v_bloqueos text[] := '{}';
   v_accion_medio text := 'NINGUNA';
   v_archivos jsonb := '[]'::jsonb;
@@ -1238,12 +1292,17 @@ begin
   select * into v_p from public.perfiles p where p.id = s.perfil_id for update;
   v_medio := v_p.medio_id;
 
-  -- Deber legal o contractual de conservar (Decreto 1377 de 2013, art. 9): negocio en curso o dinero pendiente.
+  -- Deber legal o contractual de conservar (Decreto 1377 de 2013, art. 9): negocio en curso o dinero pendiente. Solo
+  -- bloquea cuando la supresión altera el medio: si otra persona activa lo sigue operando, solo se borra la cuenta.
   if v_medio is not null then
-    select count(*) into v_otros from public.perfiles p
-    where p.medio_id = v_medio and p.id <> v_p.id and p.deleted_at is null and p.estado <> 'DESACTIVADO';
+    select count(*) filter (where p.deleted_at is null and p.estado <> 'DESACTIVADO'),
+           count(*) filter (where p.deleted_at is not null or p.estado = 'DESACTIVADO')
+      into v_activos, v_inactivos
+    from public.perfiles p where p.medio_id = v_medio and p.id <> v_p.id;
     v_historial := exists (select 1 from public.asignaciones a where a.medio_id = v_medio)
                    or exists (select 1 from public.liquidaciones l where l.medio_id = v_medio);
+  end if;
+  if v_medio is not null and v_activos = 0 then
     if exists (select 1 from public.asignaciones a where a.medio_id = v_medio
                and a.estado not in ('PAGADA', 'RECHAZADA', 'VENCIDA_SIN_PUBLICAR', 'CANCELADA')) then
       v_bloqueos := v_bloqueos || 'El medio tiene asignaciones en curso o por pagar.'::text;
@@ -1255,7 +1314,15 @@ begin
                where a.medio_id = v_medio and d.estado in ('ABIERTA', 'EN_REVISION')) then
       v_bloqueos := v_bloqueos || 'El medio tiene disputas abiertas.'::text;
     end if;
-    v_accion_medio := case when v_otros > 0 then 'CONSERVAR' when v_historial then 'ANONIMIZAR' else 'BORRAR' end;
+  end if;
+  if v_medio is not null then
+    -- Un perfil desactivado sigue enlazado al medio (FK restrictiva): el medio no se puede borrar, se anonimiza.
+    v_accion_medio := case when v_activos > 0 then 'CONSERVAR'
+                           when v_historial or v_inactivos > 0 then 'ANONIMIZAR' else 'BORRAR' end;
+  end if;
+  -- La guarda de perfiles (anti-escalada) rechazaría el borrado: se anticipa en la simulación.
+  if not private.puede_gestionar(p_actor_id, v_p.id, v_p.rol_id) then
+    v_bloqueos := v_bloqueos || 'Solo un superadministrador puede suprimir esta cuenta.'::text;
   end if;
   if exists (select 1 from public.perfiles p join public.roles r on r.id = p.rol_id
              where p.id = v_p.id and r.clave = 'SUPERADMIN')
@@ -1267,17 +1334,24 @@ begin
   if v_p.avatar_path is not null then
     v_archivos := v_archivos || jsonb_build_object('bucket', 'avatares', 'prefijo', 'perfil/' || v_p.id::text || '/');
   end if;
-  if v_accion_medio = 'BORRAR' then
-    v_archivos := v_archivos || jsonb_build_object('bucket', 'documentos', 'prefijo', 'medio/' || v_medio::text || '/');
-  elsif v_accion_medio = 'ANONIMIZAR' then
-    v_archivos := v_archivos || coalesce((select jsonb_agg(jsonb_build_object('bucket', 'documentos', 'ruta', d.archivo_path))
-                                          from public.documentos_medio d
-                                          where d.medio_id = v_medio and d.archivo_path is not null
-                                            and d.tipo in ('PRUEBA_VIDA', 'CERT_BANCARIA', 'CERT_BILLETERA')), '[]'::jsonb);
+  if v_medio is not null then
+    v_archivos_anon := coalesce((select jsonb_agg(jsonb_build_object('bucket', 'documentos', 'ruta', d.archivo_path))
+                                 from public.documentos_medio d
+                                 where d.medio_id = v_medio and d.archivo_path is not null
+                                   and d.tipo in ('PRUEBA_VIDA', 'CERT_BANCARIA', 'CERT_BILLETERA')), '[]'::jsonb);
   end if;
+  if v_accion_medio = 'BORRAR' then
+    v_archivos := v_archivos || jsonb_build_object('bucket', 'documentos', 'prefijo', 'medio/' || v_medio::text || '/')
+                             || jsonb_build_object('bucket', 'avatares', 'prefijo', 'medio/' || v_medio::text || '/');
+  elsif v_accion_medio = 'ANONIMIZAR' then
+    v_archivos := v_archivos || v_archivos_anon;
+  end if;
+  select count(*) into v_vinculacion from public.solicitudes_vinculacion sv
+  where sv.email = v_p.email or (v_accion_medio in ('BORRAR', 'ANONIMIZAR') and sv.medio_id = v_medio);
 
   v_res := jsonb_build_object(
     'solicitud', s.numero,
+    'medio_id', v_medio,
     'bloqueos', to_jsonb(v_bloqueos),
     'cuenta', 'BORRAR',
     'medio', v_accion_medio,
@@ -1285,9 +1359,11 @@ begin
                                 select 1 from public.anunciantes_privado ap
                                 where ap.anunciante_id = v_p.anunciante_id and ap.contacto_email = v_p.email)
                              then 'BORRAR' else 'NINGUNO' end,
+    'solicitudes_vinculacion', v_vinculacion,
     'archivos', v_archivos,
     'se_conserva', jsonb_build_array(
       'La bitácora de auditoría, con el correo enmascarado.',
+      'El registro de accesos sin IP, ubicación, navegador ni correo (solo fecha, evento y país, para estadísticas de seguridad).',
       'Las aceptaciones de términos y de la política de datos, como prueba de la autorización.',
       'Los datos tributarios del medio y los documentos soporte emitidos, por el deber de conservación contable.',
       'Esta solicitud y su respuesta, como evidencia del cumplimiento.'));
@@ -1300,6 +1376,12 @@ begin
   end if;
 
   perform set_config('amo.motivo', format('Supresión de datos del titular (solicitud N.º %s)', s.numero), true);
+  delete from public.solicitudes_vinculacion sv
+  where sv.email = v_p.email or (v_accion_medio in ('BORRAR', 'ANONIMIZAR') and sv.medio_id = v_medio);
+  update public.accesos
+  set email_hash = null, ip = null, lat = null, lon = null, ciudad = null, municipio_codigo = null, user_agent = null,
+      navegador = null, sistema_operativo = null, dispositivo = null, session_id = null
+  where usuario_id = v_p.id;
   if v_p.anunciante_id is not null then
     update public.anunciantes_privado
     set contacto_nombre = null, contacto_email = null, contacto_celular = null
@@ -1322,25 +1404,53 @@ begin
       delete from public.cuentas_sociales c where c.medio_id = v_medio;
       delete from public.medios m where m.id = v_medio;
     exception when foreign_key_violation then
-      -- Algo lo sigue referenciando: se anonimiza como un medio con historial.
+      -- Algo lo sigue referenciando: se anonimiza como un medio con historial (y solo se borran esos archivos).
       update public.medios_privado
       set celular = null, email_contacto = null, direccion = null, metodo_pago = null, datos_pago_cifrados = null,
           datos_pago_resumen = null
       where medio_id = v_medio;
+      delete from public.documentos_medio
+      where medio_id = v_medio and tipo in ('PRUEBA_VIDA', 'CERT_BANCARIA', 'CERT_BILLETERA');
       update public.medios set deleted_at = coalesce(deleted_at, private.ahora()),
                                motivo_estado = 'Supresión de datos del titular'
       where id = v_medio;
-      v_res := jsonb_set(v_res, '{medio}', '"ANONIMIZAR"');
+      v_res := jsonb_set(jsonb_set(v_res, '{medio}', '"ANONIMIZAR"'), '{archivos}',
+                         (select coalesce(jsonb_agg(a), '[]'::jsonb) from jsonb_array_elements(v_res -> 'archivos') a
+                          where a ->> 'bucket' = 'avatares' and a ->> 'prefijo' like 'perfil/%') || v_archivos_anon);
     end;
   end if;
+  -- Los archivos los borra el servidor después del commit; quedan pendientes hasta que confirme el borrado.
   update public.solicitudes_titular
-  set supresion_ejecutada_at = private.ahora(), supresion_resultado = v_res - 'archivos'
+  set supresion_ejecutada_at = private.ahora(),
+      supresion_resultado = v_res || jsonb_build_object('archivos_pendientes', v_res -> 'archivos')
   where id = s.id;
   perform set_config('amo.motivo', coalesce(v_prev_motivo, ''), true);
   return v_res;
 end $$;
 revoke all on function public.suprimir_titular_srv(uuid, uuid, uuid, boolean) from public, anon, authenticated;
 grant execute on function public.suprimir_titular_srv(uuid, uuid, uuid, boolean) to service_role;
+
+-- El servidor informa qué archivos de la supresión siguen en Storage (lista vacía: todos borrados). La ficha ofrece
+-- «Reintentar el borrado» mientras queden pendientes.
+create function public.registrar_archivos_supresion_srv(p_solicitud_id uuid, p_actor_id uuid, p_session_id uuid,
+                                                         p_pendientes jsonb)
+returns void
+language plpgsql volatile security definer set search_path = '' as $$
+begin
+  perform private.validar_actor(p_actor_id, 'privacidad.gestionar', p_session_id);
+  if p_pendientes is null or jsonb_typeof(p_pendientes) <> 'array' or jsonb_array_length(p_pendientes) > 500 then
+    raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA', detail = 'Lista de archivos no válida.';
+  end if;
+  update public.solicitudes_titular
+  set supresion_resultado = supresion_resultado || jsonb_build_object('archivos_pendientes', p_pendientes,
+                                                                      'archivos_revisados_at', private.ahora())
+  where id = p_solicitud_id and supresion_ejecutada_at is not null;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA', detail = 'La supresión no se ha ejecutado.';
+  end if;
+end $$;
+revoke all on function public.registrar_archivos_supresion_srv(uuid, uuid, uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.registrar_archivos_supresion_srv(uuid, uuid, uuid, jsonb) to service_role;
 
 -- 3.7 Plantillas ----------------------------------------------------------------------------------------------------
 
@@ -1449,7 +1559,7 @@ language plpgsql volatile security definer set search_path = '' as $$
 begin
   if not private.contexto_confiable() or not private.config_booleano('correo.habilitado') then return; end if;
   update private.correos_salientes q set estado = 'DESCARTADO', bloqueado_hasta = null
-  where q.estado in ('PENDIENTE', 'REINTENTO')
+  where (q.estado in ('PENDIENTE', 'REINTENTO') or (q.estado = 'ENVIANDO' and q.bloqueado_hasta < private.ahora()))
     and (not exists (select 1 from public.plantillas_notificacion t
                      where t.clave = q.clave and t.canal = 'EMAIL' and t.activa)
          or not exists (select 1 from public.perfiles p
@@ -1479,7 +1589,8 @@ end $$;
 revoke all on function public.reclamar_correos_srv(integer) from public, anon, authenticated;
 grant execute on function public.reclamar_correos_srv(integer) to service_role;
 
--- Resultado de un envío. El intento es la marca de turno: un despachador que perdió el turno no pisa a otro.
+-- Resultado de un envío (o APLAZADO: no se alcanzó a intentar). El intento es la marca de turno: un despachador que
+-- perdió el turno no pisa a otro.
 create function public.registrar_envio_correo_srv(p_id bigint, p_intento smallint, p_resultado text,
                                                   p_proveedor_id text default null, p_error text default null)
 returns text
@@ -1489,11 +1600,19 @@ begin
   if not private.contexto_confiable() then
     raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'Solo el servidor registra envíos.';
   end if;
-  if p_resultado not in ('ENVIADO', 'REINTENTO', 'FALLIDO') then
+  if p_resultado not in ('ENVIADO', 'REINTENTO', 'FALLIDO', 'APLAZADO') then
     raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA', detail = 'Resultado de envío no válido.';
   end if;
   select * into q from private.correos_salientes x where x.id = p_id for update;
   if not found or q.estado <> 'ENVIANDO' or q.intentos <> p_intento then return 'IGNORADO'; end if;
+  if p_resultado = 'APLAZADO' then
+    -- El despachador no alcanzó a intentarlo (tiempo o límite del proveedor): vuelve a la cola sin gastar el intento.
+    update private.correos_salientes
+    set estado = case when q.intentos > 1 then 'REINTENTO' else 'PENDIENTE' end, intentos = q.intentos - 1,
+        bloqueado_hasta = null
+    where id = p_id;
+    return 'APLAZADO';
+  end if;
   if p_resultado = 'ENVIADO' then
     update private.correos_salientes
     set estado = 'ENVIADO', enviado_at = private.ahora(), proveedor_id = left(p_proveedor_id, 120), bloqueado_hasta = null,
@@ -1755,6 +1874,208 @@ begin
   return v_conteo;
 end $$;
 revoke all on function private.limpiar_pruebas(uuid[], uuid[]) from public, anon, authenticated, service_role;
+
+-- GEO-010 / RNF-REN-02: la serie mensual del detalle se calcula con una lectura agrupada por mes por métrica (antes,
+-- private.geo_valores por cada mes y métrica: hasta 218 llamadas). Mismo resultado (comparado en la base demo).
+CREATE OR REPLACE FUNCTION public.detalle_zona_geo(p_nivel text, p_codigo text, p_desde date, p_hasta date)
+ RETURNS TABLE(seccion text, clave text, nombre text, detalle text, unidad text, periodo date, valor numeric, n integer, valor_anterior numeric, variacion numeric, valor_por_100k numeric, orden integer)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+ SET "TimeZone" TO 'America/Bogota'
+AS $function$
+declare
+  g record;
+  v_nmin integer := private.config_entero('analitica.n_minimo_tasas');
+  v_codigo text := upper(btrim(coalesce(p_codigo, '')));
+  v_zona text;
+  v_depto char(2);
+  v_muni char(5);
+  v_poblacion integer;
+  v_accesos boolean;
+  v_metricas jsonb;
+begin
+  perform private.exigir_permiso('analitica.mapa');
+  if p_nivel is null or p_nivel not in ('pais', 'departamento', 'municipio') then
+    raise exception using errcode = 'P0001', message = 'AMO_METRICA_NIVEL_INVALIDO',
+      detail = 'El nivel del mapa no es válido.', hint = coalesce(p_nivel, 'null');
+  end if;
+  select * into g from private.rango_kpi(p_desde, p_hasta);
+
+  -- La zona debe existir en su nivel. p_departamento de geo_valores acota el trabajo a su departamento.
+  if p_nivel = 'pais' then
+    select pa.nombre into v_zona from public.paises pa where pa.iso2::text = v_codigo;
+  elsif p_nivel = 'departamento' then
+    select d.nombre, d.codigo, d.poblacion into v_zona, v_depto, v_poblacion
+    from public.departamentos d where d.codigo::text = v_codigo;
+  else
+    select mu.nombre, mu.departamento_codigo, mu.codigo into v_zona, v_depto, v_muni
+    from public.municipios mu where mu.codigo::text = v_codigo;
+  end if;
+  if v_zona is null then
+    raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
+      detail = 'La zona no existe en este nivel del mapa.', hint = p_nivel || ' ' || left(v_codigo, 12);
+  end if;
+
+  v_accesos := private.tiene_permiso('accesos.ver');
+  -- Métricas del nivel, en el orden del explorador. tasa ⇒ n mínimo y sin «por 100 mil».
+  select jsonb_agg(to_jsonb(x) order by x.ord) into v_metricas
+  from (values ('medios', 1, 'conteo', false), ('gmv', 2, 'COP', false), ('alcance', 3, 'personas', false),
+               ('cumplimiento', 4, '%', true), ('campanas', 5, 'conteo', false), ('asignaciones', 6, 'conteo', false),
+               ('anunciantes', 7, 'conteo', false), ('accesos', 8, 'conteo', false), ('audiencia', 9, 'personas', false))
+       as x (metrica, ord, unidad, tasa)
+  where (x.metrica <> 'audiencia' or p_nivel = 'pais') and (x.metrica <> 'accesos' or v_accesos);
+
+  -- 1. KPI del periodo y del periodo anterior de igual duración.
+  return query
+  with val as (
+    select x.metrica, x.ord, x.unidad, x.tasa,
+           case when x.tasa then (case when coalesce(a.n, 0) >= v_nmin then a.valor end) else coalesce(a.valor, 0) end as actual,
+           coalesce(a.n, 0) as n_actual,
+           case when x.metrica = 'audiencia' then null
+                when x.tasa then (case when coalesce(b.n, 0) >= v_nmin then b.valor end)
+                else coalesce(b.valor, 0) end as anterior
+    from jsonb_to_recordset(v_metricas) as x (metrica text, ord integer, unidad text, tasa boolean)
+    left join lateral (select v.valor, v.n from private.geo_valores(p_nivel, x.metrica, g.ini, g.fin, v_depto) v
+                       where v.codigo = v_codigo) a on true
+    left join lateral (select v.valor, v.n from private.geo_valores(p_nivel, x.metrica, g.ini_ant, g.fin_ant, v_depto) v
+                       where v.codigo = v_codigo) b on true
+  )
+  select 'kpi'::text, v.metrica, v_zona, null::text, v.unidad, null::date, round(v.actual, 6), v.n_actual,
+         round(v.anterior, 6),
+         case when v.anterior is null or v.anterior = 0 or v.actual is null then null
+              else round((v.actual - v.anterior) / v.anterior, 6) end,
+         case when p_nivel = 'departamento' and not v.tasa and v_poblacion > 0
+              then round(v.actual / v_poblacion * 100000, 2) end,
+         v.ord
+  from val v
+  order by v.ord;
+
+  -- 2. Serie mensual (meses de Bogotá recortados al periodo; como máximo los 36 más recientes), con una lectura
+  --    agrupada por mes por métrica (GEO-010: antes se invocaba geo_valores por cada mes y métrica).
+  return query
+  with meses as (
+    select ms.mes::date as mes,
+           private.inicio_dia(greatest(ms.mes::date, p_desde)) as ini,
+           private.inicio_dia(least((ms.mes + interval '1 month')::date, p_hasta + 1)) as fin
+    from generate_series(date_trunc('month', p_desde::timestamp), p_hasta::timestamp, interval '1 month') ms (mes)
+    where ms.mes >= date_trunc('month', p_hasta::timestamp) - interval '35 months'
+  ), rango as (
+    select min(m.ini) as ini, max(m.fin) as fin from meses m
+  ), asig as (
+    select date_trunc('month', a.aceptada_at)::date as mes, sum(a.monto_bruto) as gmv, count(*) as asignaciones,
+           count(distinct a.campana_id) as campanas
+    from rango r
+    join public.asignaciones a on a.aceptada_at >= r.ini and a.aceptada_at < r.fin
+    join public.medios m on m.id = a.medio_id
+    where private.consume_cupo(a.estado, a.estado_previo_disputa)
+      and (p_nivel <> 'pais' or v_codigo = 'CO')
+      and (p_nivel <> 'departamento' or m.departamento_codigo = v_depto)
+      and (p_nivel <> 'municipio' or m.municipio_codigo = v_muni)
+    group by 1
+  ), alc as (
+    select date_trunc('month', d.verificada_at)::date as mes, sum(d.alcance) as alcance, count(*) as n
+    from rango r
+    cross join lateral private.desempeno_verificadas(r.ini, r.fin) d
+    join public.medios m on m.id = d.medio_id
+    where d.alcance is not null
+      and (p_nivel <> 'pais' or v_codigo = 'CO')
+      and (p_nivel <> 'departamento' or m.departamento_codigo = v_depto)
+      and (p_nivel <> 'municipio' or m.municipio_codigo = v_muni)
+    group by 1
+  ), cum as (
+    select date_trunc('month', a.fecha_limite_publicacion)::date as mes,
+           avg(case when private.cumplimiento_ok(a.estado, a.causa_cancelacion, a.publicada_at, a.evidencia_validada_at,
+                                                 a.fecha_limite_publicacion) then 1 else 0 end)::numeric as tasa,
+           count(*) as n
+    from rango r
+    join public.asignaciones a on a.fecha_limite_publicacion >= r.ini and a.fecha_limite_publicacion < r.fin
+    join public.medios m on m.id = a.medio_id
+    where a.aceptada_at is not null
+      and private.cumplimiento_aplica(a.estado, a.estado_previo_disputa, a.causa_cancelacion, a.aceptada_at,
+                                      a.fecha_limite_publicacion)
+      and (p_nivel <> 'pais' or v_codigo = 'CO')
+      and (p_nivel <> 'departamento' or m.departamento_codigo = v_depto)
+      and (p_nivel <> 'municipio' or m.municipio_codigo = v_muni)
+    group by 1
+  ), anu as (
+    select x.mes, count(*) as n
+    from (select distinct date_trunc('month', a.aceptada_at)::date as mes, a.anunciante_id
+          from rango r
+          join public.asignaciones a on a.aceptada_at >= r.ini and a.aceptada_at < r.fin
+          where private.consume_cupo(a.estado, a.estado_previo_disputa)) x
+    join public.anunciantes an on an.id = x.anunciante_id
+    left join public.municipios mu on mu.codigo = an.municipio_codigo
+    where an.estado_verificacion = 'VERIFICADO'
+      and case p_nivel when 'pais' then an.pais_iso2::text = v_codigo
+                       when 'departamento' then an.pais_iso2 = 'CO' and mu.departamento_codigo = v_depto
+                       else an.pais_iso2 = 'CO' and an.municipio_codigo = v_muni end
+    group by x.mes
+  ), acc as (
+    select date_trunc('month', x.created_at)::date as mes, count(*) as n
+    from rango r
+    join public.accesos x on x.created_at >= r.ini and x.created_at < r.fin
+    where v_accesos and x.evento = 'LOGIN_EXITOSO'
+      and case p_nivel when 'pais' then x.pais_iso2::text = v_codigo
+                       when 'departamento' then x.pais_iso2 = 'CO' and x.departamento_codigo = v_depto
+                       else x.pais_iso2 = 'CO' and x.municipio_codigo = v_muni end
+    group by 1
+  ), med as (
+    -- Foto al cierre de cada mes: verificados hoy y verificados antes del fin del mes.
+    select ms.mes,
+           (select count(*) from public.medios m
+            where m.estado = 'VERIFICADO' and m.deleted_at is null and m.verificado_at < ms.fin
+              and (p_nivel <> 'pais' or v_codigo = 'CO')
+              and (p_nivel <> 'departamento' or m.departamento_codigo = v_depto)
+              and (p_nivel <> 'municipio' or m.municipio_codigo = v_muni)) as n
+    from meses ms
+  ), val as (
+    select x.metrica, x.ord, x.unidad, x.tasa, ms.mes,
+           case x.metrica when 'gmv' then s.gmv when 'asignaciones' then s.asignaciones::numeric
+                          when 'campanas' then s.campanas::numeric when 'alcance' then al.alcance
+                          when 'cumplimiento' then cu.tasa when 'anunciantes' then an.n::numeric
+                          when 'accesos' then ac.n::numeric when 'medios' then md.n::numeric end as valor,
+           (case x.metrica when 'gmv' then s.asignaciones when 'asignaciones' then s.asignaciones
+                           when 'campanas' then s.campanas when 'alcance' then al.n when 'cumplimiento' then cu.n
+                           when 'anunciantes' then an.n when 'accesos' then ac.n when 'medios' then md.n end)::integer as n
+    from jsonb_to_recordset(v_metricas) as x (metrica text, ord integer, unidad text, tasa boolean)
+    cross join meses ms
+    left join asig s on s.mes = ms.mes
+    left join alc al on al.mes = ms.mes
+    left join cum cu on cu.mes = ms.mes
+    left join anu an on an.mes = ms.mes
+    left join acc ac on ac.mes = ms.mes
+    left join med md on md.mes = ms.mes
+    where x.metrica <> 'audiencia'
+  )
+  select 'serie'::text, v.metrica, null::text, null::text, v.unidad, v.mes,
+         case when v.tasa then (case when coalesce(v.n, 0) >= v_nmin then round(v.valor, 6) end)
+              else coalesce(round(v.valor, 6), 0) end,
+         coalesce(v.n, 0), null::numeric, null::numeric, null::numeric, v.ord
+  from val v
+  order by v.ord, v.mes;
+
+  -- 3. Medios con más GMV comprometido en la zona (ubicación = municipio del medio).
+  return query
+  select 'medio'::text, t.id::text, t.medio, t.lugar, 'COP'::text, null::date, t.gmv, t.asignaciones, null::numeric,
+         null::numeric, null::numeric, t.puesto
+  from (
+    select m.id, m.nombre as medio, mu.nombre || ' (' || d.nombre_corto || ')' as lugar, sum(a.monto_bruto) as gmv,
+           count(*)::integer as asignaciones,
+           (row_number() over (order by sum(a.monto_bruto) desc, count(*) desc, m.nombre, m.id))::integer as puesto
+    from public.asignaciones a
+    join public.medios m on m.id = a.medio_id
+    left join public.municipios mu on mu.codigo = m.municipio_codigo
+    left join public.departamentos d on d.codigo = mu.departamento_codigo
+    where a.aceptada_at >= g.ini and a.aceptada_at < g.fin and private.consume_cupo(a.estado, a.estado_previo_disputa)
+      and (p_nivel <> 'pais' or v_codigo = 'CO')
+      and (p_nivel <> 'departamento' or m.departamento_codigo = v_depto)
+      and (p_nivel <> 'municipio' or m.municipio_codigo = v_muni)
+    group by m.id, m.nombre, mu.nombre, d.nombre_corto
+  ) t
+  where t.puesto <= 5
+  order by t.puesto;
+end $function$;
 
 -- 7. Permiso privacidad.gestionar, jobs y plantillas de correo -------------------------------------------------------
 

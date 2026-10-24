@@ -39,6 +39,9 @@ export const PREFIJO_MEDIO_PRIVACIDAD = "Medio Privacidad E2E"
 /** Marca de las solicitudes que radica la prueba (va en la descripción). */
 export const MARCA_SOLICITUD_E2E = "[E2E privacidad]"
 
+/** Ids por consulta `in` (la URL de PostgREST tiene un límite). */
+const LOTE_IDS = 100
+
 export interface TitularDesechable extends Credenciales {
   usuarioId: string
   medioId: string
@@ -109,8 +112,10 @@ export async function crearMedioDesechable(): Promise<TitularDesechable> {
 
 /**
  * Borra lo que dejaron las corridas: las cuentas desechables (si la prueba no
- * las suprimió), sus medios y las solicitudes marcadas. La bitácora es de
- * solo inserción y se queda.
+ * las suprimió), sus medios, las solicitudes marcadas y los avisos que esas
+ * solicitudes dejaron al equipo (las cuentas internas son compartidas: un
+ * aviso huérfano llevaría a una solicitud que ya no existe). La bitácora es
+ * de solo inserción y se queda.
  */
 export async function borrarTitularesDesechables(): Promise<void> {
   const cliente = await servicio()
@@ -125,12 +130,31 @@ export async function borrarTitularesDesechables(): Promise<void> {
       fallo("No se pudo borrar una cuenta desechable", errorBorrado)
   }
 
-  const { error: errorSolicitudes } = await cliente
+  const { data: solicitudes, error: errorMarcadas } = await cliente
     .from("solicitudes_titular")
-    .delete()
+    .select("id")
     .like("descripcion", `%${MARCA_SOLICITUD_E2E}%`)
-  if (errorSolicitudes) {
-    fallo("No se pudieron borrar las solicitudes de prueba", errorSolicitudes)
+  if (errorMarcadas) {
+    fallo("No se pudieron listar las solicitudes de prueba", errorMarcadas)
+  }
+  const ids = solicitudes.map(({ id }) => id)
+  for (let desde = 0; desde < ids.length; desde += LOTE_IDS) {
+    const lote = ids.slice(desde, desde + LOTE_IDS)
+    const { error: errorAvisos } = await cliente
+      .from("notificaciones")
+      .delete()
+      .eq("entidad", "solicitudes_titular")
+      .in("entidad_id", lote)
+    if (errorAvisos) {
+      fallo("No se pudieron borrar los avisos de las solicitudes", errorAvisos)
+    }
+    const { error: errorSolicitudes } = await cliente
+      .from("solicitudes_titular")
+      .delete()
+      .in("id", lote)
+    if (errorSolicitudes) {
+      fallo("No se pudieron borrar las solicitudes de prueba", errorSolicitudes)
+    }
   }
 
   const { data: medios, error: errorMedios } = await cliente
@@ -165,6 +189,8 @@ export interface SolicitudLeida {
   plazoVence: string
   emailSha256: string
   supresionEjecutadaAt: string | null
+  /** `supresion_resultado.archivos_pendientes` (`undefined` sin ejecutar). */
+  archivosPendientes: unknown
 }
 
 /** La solicitud con ese radicado (como servicio). */
@@ -175,7 +201,7 @@ export async function leerSolicitudPorNumero(
   const { data, error } = await cliente
     .from("solicitudes_titular")
     .select(
-      "id, numero, estado, perfil_id, recibida_at, plazo_vence, email_sha256, supresion_ejecutada_at"
+      "id, numero, estado, perfil_id, recibida_at, plazo_vence, email_sha256, supresion_ejecutada_at, supresion_resultado"
     )
     .eq("numero", numero)
     .single()
@@ -189,6 +215,12 @@ export async function leerSolicitudPorNumero(
     plazoVence: data.plazo_vence,
     emailSha256: data.email_sha256,
     supresionEjecutadaAt: data.supresion_ejecutada_at,
+    archivosPendientes:
+      data.supresion_resultado &&
+      typeof data.supresion_resultado === "object" &&
+      !Array.isArray(data.supresion_resultado)
+        ? data.supresion_resultado.archivos_pendientes
+        : undefined,
   }
 }
 
@@ -203,6 +235,32 @@ export async function avisosAlEquipo(solicitudId: string): Promise<number> {
     .eq("entidad_id", solicitudId)
   if (error) fallo("No se pudieron contar los avisos al equipo", error)
   return count ?? 0
+}
+
+/**
+ * Cuántas autorizaciones de la cuenta muestra Cuenta → Privacidad con su
+ * texto («Leer el texto»): las aceptaciones de versiones publicadas con
+ * contenido. Otra suite (`terminos.spec.ts`) publica versiones y acepta por
+ * todas las cuentas de medio mientras esta corre; nada las borra, así que el
+ * número solo puede crecer.
+ */
+export async function autorizacionesConTexto(email: string): Promise<number> {
+  const cliente = await servicio()
+  const { data: perfil, error: errorPerfil } = await cliente
+    .from("perfiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle()
+  if (errorPerfil) fallo("No se pudo leer la cuenta", errorPerfil)
+  if (!perfil) return 0
+  const { data, error } = await cliente
+    .from("aceptaciones_terminos")
+    .select("id, version:terminos_versiones!inner ( publicada, contenido_md )")
+    .eq("perfil_id", perfil.id)
+    .eq("version.publicada", true)
+    .neq("version.contenido_md", "")
+  if (error) fallo("No se pudieron leer las autorizaciones", error)
+  return data.length
 }
 
 /** ¿Sigue existiendo el perfil? (la supresión borra la cuenta). */

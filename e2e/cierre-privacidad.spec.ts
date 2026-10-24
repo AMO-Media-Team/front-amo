@@ -2,6 +2,7 @@ import { infraccionesGraves } from "./utilidades/axe"
 import { ingresar } from "./utilidades/cuentas"
 import { esperarSinDesbordeHorizontal, fijarTema } from "./utilidades/interfaz"
 import {
+  autorizacionesConTexto,
   avisosAlEquipo,
   borrarTitularesDesechables,
   crearMedioDesechable,
@@ -20,15 +21,19 @@ import {
   type Page,
   test,
 } from "./utilidades/prueba"
-import { sesion } from "./utilidades/sesiones"
+import { credencialesDemo, sesion } from "./utilidades/sesiones"
 
 /**
  * Derechos del titular de datos (CTA-007, Ley 1581 de 2012; paquete PV)
  * contra `pnpm build && pnpm start`:
  *
  * - Solo lectura (escritorio, tablet y móvil): Cuenta → Privacidad del medio
- *   E2E y la bandeja «Datos personales» del equipo se leen sin desbordar y sin
- *   infracciones graves de accesibilidad, en los dos temas.
+ *   demo y la bandeja «Datos personales» del equipo se leen sin desbordar y
+ *   sin infracciones graves de accesibilidad, en los dos temas (sin
+ *   animaciones de entrada: axe daría un contraste falso a medio aparecer).
+ *   Las autorizaciones del medio dependen de lo que haya publicado
+ *   `terminos.spec.ts` (en la base local recién creada no hay ninguna): se
+ *   consultan por servicio antes de esperar el botón o el mensaje vacío.
  * - Escribe (solo en el proyecto «cierre», en serie), con una cuenta
  *   DESECHABLE (medio sin historial creado por la fábrica): el medio radica
  *   una supresión (criterio de CTA-007: queda registrada con su fecha y el
@@ -45,10 +50,18 @@ function avisoEstado(page: Page, titulo: string | RegExp): Locator {
   return page.getByRole("region", { name: titulo })
 }
 
+/** Las autorizaciones con texto de la cuenta de la sesión «medio» (el medio demo). */
+function autorizacionesDelMedio(): Promise<number> {
+  return autorizacionesConTexto(credencialesDemo("MEDIO").email)
+}
+
 // ── Solo lectura ─────────────────────────────────────────────────────────────
 
 test.describe("privacidad del titular · solo lectura", () => {
-  test.use({ storageState: sesion("medio") })
+  test.use({
+    storageState: sesion("medio"),
+    contextOptions: { reducedMotion: "reduce" },
+  })
 
   test("Cuenta → Privacidad muestra los datos, las autorizaciones y las solicitudes", async ({
     page,
@@ -57,6 +70,7 @@ test.describe("privacidad del titular · solo lectura", () => {
       info.project.name === PROYECTO_CIERRE,
       "Solo lectura: la cubren escritorio, tablet y móvil."
     )
+    const conTexto = await autorizacionesDelMedio()
     await page.goto("/cuenta/perfil")
     await page
       .getByRole("navigation", { name: "Secciones de mi cuenta" })
@@ -81,16 +95,21 @@ test.describe("privacidad del titular · solo lectura", () => {
         page.getByRole("heading", { level: 2, name: titulo })
       ).toBeVisible()
     }
-    // El medio corrige su pago él mismo; la cuenta E2E aceptó los términos.
+    // El medio corrige su pago él mismo.
     await expect(
       page.getByRole("link", { name: "Corregir en Pago" })
     ).toHaveAttribute("href", "/mi-medio/pago")
-    await expect(
-      page
-        .getByRole("region", { name: "Autorizaciones" })
-        .getByRole("button", { name: /^Leer el texto/ })
-        .first()
-    ).toBeVisible()
+    // Sus autorizaciones, con su texto. Si al consultar no tenía ninguna,
+    // `terminos.spec.ts` pudo aceptar una por él entretanto: vale cualquiera
+    // de los dos estados (nada las borra, así que con alguna no hay duda).
+    const autorizaciones = page.getByRole("region", { name: "Autorizaciones" })
+    const leer = autorizaciones
+      .getByRole("button", { name: /^Leer el texto/ })
+      .first()
+    const sinAutorizaciones = autorizaciones.getByText(
+      /^No tienes autorizaciones registradas/
+    )
+    await expect(conTexto > 0 ? leer : leer.or(sinAutorizaciones)).toBeVisible()
     await expect(
       page
         .getByRole("radiogroup", { name: "¿Qué quieres pedir?" })
@@ -115,6 +134,10 @@ test.describe("privacidad del titular · solo lectura", () => {
       info.project.name === PROYECTO_CIERRE,
       "Solo lectura: la cubren escritorio, tablet y móvil."
     )
+    test.skip(
+      (await autorizacionesDelMedio()) === 0,
+      "El medio demo aún no aceptó una versión con texto (en la base local, hasta que `terminos.spec.ts` publica una)."
+    )
     await page.goto(RUTA_CUENTA)
     await esperarStreaming(page)
     const boton = page
@@ -132,7 +155,10 @@ test.describe("privacidad del titular · solo lectura", () => {
 })
 
 test.describe("bandeja de datos personales · solo lectura", () => {
-  test.use({ storageState: sesion("interno") })
+  test.use({
+    storageState: sesion("interno"),
+    contextOptions: { reducedMotion: "reduce" },
+  })
 
   test("la bandeja se lee con el semáforo y los filtros en la URL", async ({
     page,
@@ -273,6 +299,19 @@ test.describe("derechos del titular · supresión de punta a punta", () => {
         await expect(avisoEstado(admin, /^Radicada · /)).toBeVisible()
       })
 
+      await test.step("con la solicitud abierta consulta los datos del titular", async () => {
+        const ver = admin.getByRole("button", { name: "Ver datos del titular" })
+        await ver.click()
+        const datos = admin.getByRole("dialog", { name: "Datos del titular" })
+        await expect(datos).toBeVisible()
+        await expect(
+          datos.getByRole("region", { name: "Registros" })
+        ).toContainText("Solicitudes de vinculación")
+        await admin.keyboard.press("Escape")
+        await expect(datos).toBeHidden()
+        await expect(ver).toBeFocused()
+      })
+
       await test.step("la toma en trámite y la responde: procede", async () => {
         await admin.getByRole("button", { name: "Tomar en trámite" }).click()
         await admin
@@ -300,6 +339,10 @@ test.describe("derechos del titular · supresión de punta a punta", () => {
           .click()
         await expect(dialogo).toBeHidden()
         await expect(avisoEstado(admin, "Respondida: procede")).toBeVisible()
+        // Respondida, ya no se consultan sus datos (la BD tampoco lo deja).
+        await expect(
+          admin.getByRole("button", { name: "Ver datos del titular" })
+        ).toHaveAccessibleDescription(/solo mientras la solicitud está abierta/)
       })
 
       await test.step("simula y ejecuta la supresión escribiendo el radicado", async () => {
@@ -310,6 +353,11 @@ test.describe("derechos del titular · supresión de punta a punta", () => {
         // Medio sin negocios: se borra completo.
         await expect(
           admin.getByText(/El medio no tiene negocios: se borran el medio/)
+        ).toBeVisible()
+        await expect(
+          admin.getByText(
+            /^No hay solicitudes del formulario «Vincular mi medio»/
+          )
         ).toBeVisible()
 
         await admin.getByRole("button", { name: "Ejecutar supresión" }).click()
@@ -324,6 +372,16 @@ test.describe("derechos del titular · supresión de punta a punta", () => {
           .click()
         await expect(confirmar).toBeHidden()
         await expect(admin.getByText("Supresión ejecutada.")).toBeVisible()
+        await expect(avisoEstado(admin, "Supresión ejecutada")).toBeFocused()
+        // El medio desechable no tenía archivos: nada queda pendiente.
+        await expect(
+          admin.getByText("No quedaban archivos en Storage.")
+        ).toBeVisible()
+        await expect(
+          admin.getByRole("button", {
+            name: "Reintentar el borrado de archivos",
+          })
+        ).toHaveCount(0)
       })
     } finally {
       await contexto.close()
@@ -334,6 +392,8 @@ test.describe("derechos del titular · supresión de punta a punta", () => {
       const solicitud = await leerSolicitudPorNumero(numero)
       expect(solicitud.perfilId).toBeNull()
       expect(solicitud.supresionEjecutadaAt).not.toBeNull()
+      // El servidor registró que no quedó nada en Storage.
+      expect(solicitud.archivosPendientes).toEqual([])
       // La solicitud se conserva como evidencia, con la huella del correo.
       expect(solicitud.emailSha256).toBe(huellaCorreo(cuenta.email))
 

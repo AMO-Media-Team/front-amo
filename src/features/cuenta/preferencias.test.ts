@@ -6,6 +6,7 @@ import {
   CATEGORIAS_CORREO_OBLIGATORIAS,
   CATEGORIAS_CORREO_POR_TIPO,
   CATEGORIAS_SILENCIABLES,
+  categoriasConCorreo,
   esquemaCambiosPreferencias,
   esSilenciable,
   fusionarPreferencias,
@@ -160,5 +161,30 @@ describe("categorías de correo", () => {
       normalizarSilenciadas(["pagos", "x", "ofertas", "privacidad", "pagos"])
     ).toEqual(["ofertas", "pagos"])
     expect(normalizarSilenciadas(null)).toEqual([])
+  })
+})
+
+describe("categoriasConCorreo", () => {
+  it("agrupa las plantillas EMAIL activas por categoría, en el orden del catálogo", () => {
+    expect(
+      categoriasConCorreo([
+        "titular.respuesta",
+        "oferta.publicada",
+        "usuario.invitado",
+        "campana.cancelada",
+        "desconocida.algo",
+      ])
+    ).toEqual(["ofertas", "seguridad", "privacidad"])
+  })
+
+  it("sin plantillas de colas activas, «pendientes» no sale por correo", () => {
+    expect(
+      categoriasConCorreo(["seguridad.alerta_pais_inusual"])
+    ).not.toContain("pendientes")
+    expect(categoriasConCorreo([])).toEqual([])
+  })
+
+  it("null si no se pudo leer (la interfaz no deshabilita nada)", () => {
+    expect(categoriasConCorreo(null)).toBeNull()
   })
 })

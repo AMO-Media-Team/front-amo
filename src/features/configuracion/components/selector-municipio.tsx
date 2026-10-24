@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronsUpDown, MapPin } from "lucide-react"
-import { useEffect, useId, useState, useTransition } from "react"
+import { useCallback, useEffect, useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -55,7 +55,13 @@ export function SelectorMunicipio({
   const [consultando, iniciar] = useTransition()
   // También cuenta como búsqueda en curso la pausa entre la tecla y la consulta.
   const buscando = consultando || texto !== consulta
-  const idLista = useId()
+  // cmdk fija el id de su listbox (pisa el que se le pase a CommandList): se
+  // lee del nodo para que `aria-controls` apunte a la lista que existe.
+  const [idLista, setIdLista] = useState<string>()
+  const registrarLista = useCallback(
+    (nodo: HTMLDivElement | null) => setIdLista(nodo?.id || undefined),
+    []
+  )
 
   useEffect(() => {
     if (!abierto) return
@@ -90,7 +96,7 @@ export function SelectorMunicipio({
             variant="outline"
             role="combobox"
             aria-expanded={abierto}
-            aria-controls={idLista}
+            aria-controls={abierto ? idLista : undefined}
             aria-invalid={invalido || undefined}
             disabled={deshabilitado}
             className={cn("w-full justify-between font-normal", className)}
@@ -115,7 +121,7 @@ export function SelectorMunicipio({
             onValueChange={setTexto}
             placeholder="Nombre o código DIVIPOLA…"
           />
-          <CommandList id={idLista}>
+          <CommandList ref={registrarLista}>
             {buscando && resultados.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                 <Spinner aria-label="Buscando" />

@@ -163,13 +163,13 @@ describe("esquemaEditarCampana", () => {
       errores(esquema.safeParse({ ...EDICION, fechaInicio: "2026-11-06" }))
         .fechaInicio
     ).toEqual([
-      "Tienes ofertas que se publican desde el 5 de noviembre de 2026: la campaña debe empezar ese día o antes.",
+      "La campaña tiene ofertas que se publican desde el 5 de noviembre de 2026: debe empezar ese día o antes.",
     ])
     expect(
       errores(esquema.safeParse({ ...EDICION, fechaFin: "2026-12-19" }))
         .fechaFin
     ).toEqual([
-      "Tienes ofertas que se publican hasta el 20 de diciembre de 2026: la campaña debe terminar ese día o después.",
+      "La campaña tiene ofertas que se publican hasta el 20 de diciembre de 2026: debe terminar ese día o después.",
     ])
   })
 

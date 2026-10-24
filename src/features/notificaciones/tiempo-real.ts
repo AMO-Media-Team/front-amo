@@ -75,8 +75,19 @@ function invalidarListas(cliente: QueryClient): Promise<void> {
   })
 }
 
-/** Aplica un aviso a la caché: contador exacto de la base. */
+/**
+ * Aplica un aviso a la caché: contador exacto de la base. Antes cancela un
+ * sondeo del conteo en curso (foco de la ventana, otra vista que se monta):
+ * su respuesta salió antes del aviso y, si llegara después, lo pisaría con el
+ * número anterior hasta el siguiente sondeo (5 min con el canal conectado).
+ * La cancelación revierte el estado al instante, así que el valor del aviso
+ * queda encima.
+ */
 export function aplicarAviso(cliente: QueryClient, aviso: AvisoEnVivo): void {
+  void cliente.cancelQueries({
+    queryKey: CLAVES_NOTIFICACIONES.conteo,
+    exact: true,
+  })
   cliente.setQueryData<ConteoNoLeidas>(CLAVES_NOTIFICACIONES.conteo, {
     disponible: true,
     total: aviso.no_leidas,

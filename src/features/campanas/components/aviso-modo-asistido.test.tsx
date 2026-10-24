@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react"
 import type { Route } from "next"
 import { describe, expect, it } from "vitest"
 
+import { EMPRESA_SIN_NOMBRE } from "../rutas-gestion"
 import {
   AvisoModoAsistido,
   ETIQUETA_AVISO_ASISTIDO,
@@ -15,7 +16,7 @@ function aviso() {
 }
 
 describe("AvisoModoAsistido", () => {
-  it("dice por cuenta de quién se actúa, la bitácora y el aviso a la empresa", () => {
+  it("dice por cuenta de quién se actúa, la bitácora y qué cambios se le avisan a la empresa", () => {
     render(
       <AvisoModoAsistido
         anunciante="Café Sierra Alta"
@@ -23,9 +24,11 @@ describe("AvisoModoAsistido", () => {
         enlace={FICHA}
       />
     )
+    // Solo los cambios de estado llegan como aviso (no editar ni archivar).
     expect(aviso()).toHaveTextContent(
-      "Estás actuando por cuenta de Café Sierra Alta. Cada cambio queda en la bitácora a tu nombre y se le avisa a la empresa."
+      "Estás actuando por cuenta de Café Sierra Alta. Cada cambio queda en la bitácora a tu nombre. La empresa recibe un aviso cuando creas, activas o cancelas una campaña, y cuando envías, retiras o cancelas una oferta."
     )
+    expect(aviso()).not.toHaveTextContent(/se le avisa a la empresa/)
     expect(
       within(aviso()).getByRole("link", { name: "Café Sierra Alta" })
     ).toHaveAttribute("href", FICHA)
@@ -40,6 +43,17 @@ describe("AvisoModoAsistido", () => {
     )
     expect(aviso()).toHaveTextContent("En verificación")
     // Sin permiso para la ficha, el nombre no enlaza.
+    expect(within(aviso()).queryByRole("link")).toBeNull()
+  })
+
+  it("sin el nombre ni el estado (sin anunciantes.ver), concuerda y no afirma nada", () => {
+    render(<AvisoModoAsistido anunciante={EMPRESA_SIN_NOMBRE} estado={null} />)
+    expect(aviso()).toHaveTextContent(
+      /^Estás actuando por cuenta de la empresa\. Cada cambio queda/
+    )
+    expect(aviso()).not.toHaveTextContent(/de el|a el /)
+    // Sin estado conocido no dice que la empresa no está verificada.
+    expect(aviso()).not.toHaveTextContent(/exige la empresa verificada/)
     expect(within(aviso()).queryByRole("link")).toBeNull()
   })
 

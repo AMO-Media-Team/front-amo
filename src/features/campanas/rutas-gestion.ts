@@ -39,6 +39,31 @@ export type ModoGestion =
 
 export const GESTION_PROPIA: ModoGestion = { modo: "propio" }
 
+/**
+ * Cómo se nombra la empresa cuando quien actúa no puede leer su nombre (la
+ * RLS oculta `anunciantes` sin `anunciantes.ver`). Concuerda con las
+ * plantillas: «por cuenta de la empresa», «verifique a la empresa», «la
+ * empresa recibe un aviso». Ninguna plantilla la pone al inicio de una frase.
+ */
+export const EMPRESA_SIN_NOMBRE = "la empresa"
+
+/** Gestión asistida por cuenta de un anunciante, con su nombre si se conoce. */
+export function modoAsistido(
+  anuncianteId: string,
+  nombre: string | null | undefined
+): Extract<ModoGestion, { modo: "asistido" }> {
+  return {
+    modo: "asistido",
+    anuncianteId,
+    anunciante: nombre?.trim() || EMPRESA_SIN_NOMBRE,
+  }
+}
+
+/** El nombre es el de la empresa (no el genérico de `EMPRESA_SIN_NOMBRE`). */
+export function nombreConocido(anunciante: string): boolean {
+  return anunciante !== EMPRESA_SIN_NOMBRE
+}
+
 export function esAsistido(
   gestion: ModoGestion
 ): gestion is Extract<ModoGestion, { modo: "asistido" }> {

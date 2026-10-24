@@ -5101,6 +5101,15 @@ export type Database = {
           motivo: string
         }[]
       }
+      registrar_archivos_supresion_srv: {
+        Args: {
+          p_actor_id: string
+          p_pendientes: Json
+          p_session_id: string
+          p_solicitud_id: string
+        }
+        Returns: undefined
+      }
       registrar_cuds_srv: {
         Args: {
           p_actor_id: string

@@ -82,8 +82,8 @@ function descripcionArchivo(
 ): string {
   if (esAsistido(gestion)) {
     return estado === "BORRADOR"
-      ? `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}, y ya no se podrá activar. No se puede deshacer.`
-      : `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}; su historial se conserva. No se puede deshacer.`
+      ? `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}, y ya no se podrá activar. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
+      : `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}; su historial se conserva. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
   }
   return estado === "BORRADOR"
     ? "Sale de «Mis campañas» junto con sus ofertas y ya no podrás activarla. No se puede deshacer."

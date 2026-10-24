@@ -470,6 +470,43 @@
   letter-spacing: -0.01em;
 }
 
+/* Valor de un detalle en las tarjetas de la tabla genérica (`VistaTarjetas`,
+   < 768 px). A 390 px cada columna mide unos 155 px: un texto que no parte
+   línea (`whitespace-nowrap`) o una insignia larga se salía de la tarjeta y
+   de la pantalla, y uno con `truncate` (pensado para la columna de la tabla)
+   se cortaba. Aquí envuelven sin perder texto (WCAG 1.4.10); las
+   insignias de alto fijo crecen con su texto y, con 12 px de radio, en una
+   línea siguen siendo píldoras. Los botones conservan su forma. */
+@utility valor-tarjeta {
+  min-width: 0;
+  overflow-wrap: break-word;
+
+  &
+    :is(.whitespace-nowrap, .truncate, [data-slot="badge"]):not(
+      button,
+      [data-slot="button"]
+    ) {
+    max-width: 100%;
+    flex-shrink: 1;
+    white-space: normal;
+  }
+
+  &
+    :is([data-slot="badge"], .rounded-full.whitespace-nowrap):not(
+      button,
+      [data-slot="button"]
+    ) {
+    height: auto;
+    border-radius: 0.75rem;
+  }
+
+  /* Las insignias de AMO (h-6, sin relleno vertical) mantienen sus 24 px en
+     una línea; la de shadcn ya trae el suyo. */
+  & .rounded-full.whitespace-nowrap:not(button, [data-slot="button"]) {
+    padding-block: 0.25rem;
+  }
+}
+
 /* ── Toasts (sonner richColors) con los tokens semánticos ────────────────── */
 
 html [data-sonner-toaster][data-sonner-theme] {

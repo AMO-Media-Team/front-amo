@@ -85,7 +85,8 @@ export interface AccionesSolicitudProps {
 
 /**
  * Las acciones del equipo sobre la solicitud (`privacidad.gestionar`):
- * tomarla en trámite, pedir información (reclamo incompleto, art. 15),
+ * tomarla en trámite, pedir información (solo en un reclamo incompleto y sin
+ * prórroga, art. 15; la ventana de 5 días hábiles la comprueba la BD),
  * prorrogar una vez antes del vencimiento y responder. La BD vuelve a
  * comprobarlo todo y un fallo se muestra dentro del diálogo. Tras el cambio,
  * el foco va al aviso del estado, que anuncia el nuevo.
@@ -177,10 +178,10 @@ export function AccionesSolicitud({
         abierto={dialogo === "requerir"}
         onAbiertoChange={cerrar}
         titulo="Pedir información al titular"
-        descripcion="Si la solicitud llegó incompleta, pídele lo que falta. El plazo se detiene hasta que responda y, si no lo hace en el plazo de desistimiento, se cierra sola."
+        descripcion="Si el reclamo llegó incompleto, pídele lo que falta. El plazo se detiene hasta que responda y, si no lo hace en el plazo de desistimiento, se cierra solo."
         etiqueta="Qué necesitas"
         placeholder="Ej.: indícanos qué dato está equivocado y cuál es el correcto…"
-        ayuda="El art. 15 de la Ley 1581 pide hacerlo dentro de los 5 días siguientes al recibo. Lo recibe el titular y queda en la bitácora."
+        ayuda="El art. 15 de la Ley 1581 lo permite dentro de los 5 días hábiles siguientes al recibo y antes de prorrogar el plazo; después, la base de datos lo rechaza. Lo recibe el titular y queda en la bitácora."
         sugerencias={SUGERENCIAS_REQUERIMIENTO}
         textoConfirmar="Pedir información"
         focoAlCerrar={focoAlCerrar}

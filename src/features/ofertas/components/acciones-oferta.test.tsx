@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { exito, fallo } from "@/lib/result"
 
-import type { ModoGestion } from "@/features/campanas/rutas-gestion"
+import {
+  type ModoGestion,
+  modoAsistido,
+} from "@/features/campanas/rutas-gestion"
 
 import { accionesGestion } from "../acciones"
 import { situacionOferta } from "../presentacion"
@@ -30,9 +33,10 @@ const OFERTA = "0192f3a4-5b6c-7d8e-9f01-0000000000f1"
 const CAMPANA = "0192f3a4-5b6c-7d8e-9f01-0000000000c1"
 const PROPIAS = ["ofertas.gestionar_propias"]
 const OPERACIONES = ["ofertas.gestionar", "ofertas.moderar", "ofertas.ver"]
+const ANUNCIANTE_ID = "e2e00000-0000-4000-8000-00000000a001"
 const ASISTIDO: ModoGestion = {
   modo: "asistido",
-  anuncianteId: "e2e00000-0000-4000-8000-00000000a001",
+  anuncianteId: ANUNCIANTE_ID,
   anunciante: "Café Sierra Alta",
 }
 
@@ -488,11 +492,38 @@ describe("AccionesOferta · gestión asistida (ADM-014)", () => {
     )
   })
 
+  it("sin el nombre de la empresa, los textos concuerdan («la empresa», nunca al inicio de frase)", async () => {
+    const usuario = userEvent.setup()
+    render(
+      <AccionesOferta
+        ofertaId={OFERTA}
+        campanaId={CAMPANA}
+        titulo="Reel de Halloween"
+        estado="PUBLICADA"
+        opciones={[{ accion: "cancelar", requiereMotivo: true, bloqueo: null }]}
+        gestion={modoAsistido(ANUNCIANTE_ID, null)}
+        disposicion="columna"
+      />
+    )
+    await usuario.click(screen.getByRole("button", { name: "Cancelar oferta" }))
+    const dialogo = screen.getByRole("alertdialog", {
+      name: "¿Cancelar la oferta publicada?",
+    })
+    expect(dialogo).toHaveTextContent(
+      /los medios ya no podrán tomar cupos y la empresa recibe un aviso con el motivo/
+    )
+    expect(dialogo).not.toHaveTextContent(/\. la empresa|de el anunciante/)
+  })
+
   it("archivada, vuelve a la ficha interna de la campaña", async () => {
     const usuario = renderizarAsistido("CANCELADA")
     await usuario.click(screen.getByRole("button", { name: "Archivar oferta" }))
     const dialogo = screen.getByRole("alertdialog")
     expect(dialogo).toHaveTextContent(/también para Café Sierra Alta/)
+    // Archivar no es un cambio de estado: no se le avisa a la empresa.
+    expect(dialogo).toHaveTextContent(
+      /Archivar no le llega como aviso a la empresa/
+    )
     await usuario.click(
       within(dialogo).getByRole("button", { name: "Archivar oferta" })
     )

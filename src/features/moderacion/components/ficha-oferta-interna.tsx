@@ -2,7 +2,7 @@ import { ClipboardCheck } from "lucide-react"
 
 import { EnlaceBotonExterno } from "@/components/layout/enlace-boton"
 import { puedeGestionarOfertasAsistidas } from "@/features/campanas/gestion"
-import type { ModoGestion } from "@/features/campanas/rutas-gestion"
+import { modoAsistido } from "@/features/campanas/rutas-gestion"
 import { accionesGestion, ESTADOS_EDITABLES } from "@/features/ofertas/acciones"
 import { AvisoEstadoOferta } from "@/features/ofertas/components/aviso-estado-oferta"
 import { CabeceraOferta } from "@/features/ofertas/components/cabecera-oferta"
@@ -45,11 +45,7 @@ function gestionAsistida(oferta: OfertaCompleta, usuario: UsuarioSesion) {
   const opciones = accionesGestion(oferta.estado, "ADMIN", permisos, {
     cuposOcupados: oferta.cupos.ocupados,
   }).filter((opcion) => opcion.accion !== "editar" || asistente)
-  const gestion: Extract<ModoGestion, { modo: "asistido" }> = {
-    modo: "asistido",
-    anuncianteId: oferta.anunciante.id,
-    anunciante: oferta.anunciante.nombre ?? "el anunciante",
-  }
+  const gestion = modoAsistido(oferta.anunciante.id, oferta.anunciante.nombre)
   return { opciones, gestion, asistente }
 }
 

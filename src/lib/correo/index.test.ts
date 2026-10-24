@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const estado = vi.hoisted(() => ({
   env: {} as Record<string, string | undefined>,
   config: { data: null as unknown, error: null as unknown },
+  plantillas: { data: null as unknown, error: null as unknown },
+  filtrosPlantillas: [] as [string, unknown][],
   adminFalla: false,
 }))
 
@@ -12,17 +14,33 @@ vi.mock("@/lib/supabase/admin", () => ({
   crearClienteAdmin: async () => {
     if (estado.adminFalla) throw new Error("sin clave")
     return {
-      from: () => ({
-        select: () => ({
-          eq: () => ({ maybeSingle: async () => estado.config }),
-        }),
-      }),
+      from: (tabla: string) =>
+        tabla === "plantillas_notificacion"
+          ? {
+              select: () => ({
+                eq: (columna: string, valor: unknown) => {
+                  estado.filtrosPlantillas.push([columna, valor])
+                  return {
+                    eq: async (otra: string, otroValor: unknown) => {
+                      estado.filtrosPlantillas.push([otra, otroValor])
+                      return estado.plantillas
+                    },
+                  }
+                },
+              }),
+            }
+          : {
+              select: () => ({
+                eq: () => ({ maybeSingle: async () => estado.config }),
+              }),
+            },
     }
   },
 }))
 
 const { obtenerAdaptadorCorreo } = await import("./index")
-const { comoHabilitado, envioCorreoHabilitado } = await import("./estado")
+const { clavesCorreoActivas, comoHabilitado, envioCorreoHabilitado } =
+  await import("./estado")
 
 const MENSAJE = {
   para: "persona@ejemplo.co",
@@ -66,6 +84,7 @@ describe("obtenerAdaptadorCorreo", () => {
 
 describe("envioCorreoHabilitado", () => {
   beforeEach(() => {
+    estado.env = { AMO_CORREO_PROVEEDOR: "registro" }
     estado.adminFalla = false
     estado.config = { data: null, error: null }
   })
@@ -87,5 +106,48 @@ describe("envioCorreoHabilitado", () => {
     expect(await envioCorreoHabilitado()).toBeNull()
     estado.adminFalla = true
     expect(await envioCorreoHabilitado()).toBeNull()
+  })
+
+  it("sin proveedor en el servidor los correos no salen aunque esté encendido", async () => {
+    estado.config = { data: { valor: true }, error: null }
+    estado.env = { AMO_CORREO_PROVEEDOR: "desactivado" }
+    expect(await envioCorreoHabilitado()).toBe(false)
+    estado.env = { AMO_CORREO_PROVEEDOR: "resend" }
+    expect(await envioCorreoHabilitado()).toBe(false)
+    estado.env = {
+      AMO_CORREO_PROVEEDOR: "resend",
+      RESEND_API_KEY: "re_x",
+      AMO_CORREO_REMITENTE: "avisos@amo.co",
+    }
+    expect(await envioCorreoHabilitado()).toBe(true)
+  })
+})
+
+describe("clavesCorreoActivas", () => {
+  beforeEach(() => {
+    estado.adminFalla = false
+    estado.filtrosPlantillas = []
+  })
+
+  it("lee solo las plantillas EMAIL activas", async () => {
+    estado.plantillas = {
+      data: [{ clave: "oferta.publicada" }, { clave: "titular.respuesta" }],
+      error: null,
+    }
+    expect(await clavesCorreoActivas()).toEqual([
+      "oferta.publicada",
+      "titular.respuesta",
+    ])
+    expect(estado.filtrosPlantillas).toEqual([
+      ["canal", "EMAIL"],
+      ["activa", true],
+    ])
+  })
+
+  it("null si no se puede leer", async () => {
+    estado.plantillas = { data: null, error: { code: "42501" } }
+    expect(await clavesCorreoActivas()).toBeNull()
+    estado.adminFalla = true
+    expect(await clavesCorreoActivas()).toBeNull()
   })
 })

@@ -104,11 +104,21 @@ export function filtrarAnunciantes<
 /**
  * Lo que puede hacer el equipo AMO según la verificación de la empresa: con
  * cualquier estado prepara borradores; activar la campaña y enviar ofertas a
- * revisión exigen la empresa VERIFICADO (la BD lo exige a todo actor).
+ * revisión exigen la empresa VERIFICADO (la BD lo exige a todo actor). Si no
+ * se pudo leer el estado (`null`, sin `anunciantes.ver`), no se afirma nada:
+ * decide la BD.
  */
 export function notaVerificacionAsistida(
   estado: EstadoAnunciante | null
 ): string | null {
-  if (estado === "VERIFICADO") return null
+  if (estado === null || estado === "VERIFICADO") return null
   return "Puedes preparar borradores; activar y enviar a revisión exige la empresa verificada."
 }
+
+/**
+ * Lo que la empresa recibe como aviso de la gestión asistida: solo los
+ * cambios de estado (`fn_avisar_gestion_asistida`). Editar, archivar o
+ * versionar el paquete creativo queda en la bitácora, sin aviso.
+ */
+export const AVISOS_GESTION_ASISTIDA =
+  "La empresa recibe un aviso cuando creas, activas o cancelas una campaña, y cuando envías, retiras o cancelas una oferta."

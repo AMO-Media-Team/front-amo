@@ -151,3 +151,55 @@ describe("construirLineaTiempo sin bitácora", () => {
     expect(eventos[2].detalle).toMatch(/27 de nov/)
   })
 })
+
+describe("construirLineaTiempo: quién es el titular", () => {
+  it("lo reconoce por la persona aunque tenga un rol personalizado", () => {
+    const { eventos } = construirLineaTiempo(HITOS, [
+      registro(1, {
+        accion: "INSERT",
+        estadoNuevo: "RADICADA",
+        actorId: TITULAR,
+        actorEmail: "t***@empresa.test",
+        actorRol: "E2E_ROLES_ANUNCIANTE_HEREDADO",
+        cambios: { plazo_vence: "2026-11-17" },
+      }),
+      registro(2, {
+        estadoAnterior: "RADICADA",
+        estadoNuevo: "DESISTIDA",
+        actorId: TITULAR,
+        actorEmail: "t***@empresa.test",
+        actorRol: "E2E_ROLES_ANUNCIANTE_HEREDADO",
+      }),
+    ])
+    expect(eventos.map((evento) => evento.actor)).toEqual([
+      "Titular",
+      "Titular",
+    ])
+    expect(eventos[1].detalle).toBe("El titular desistió de la solicitud.")
+  })
+
+  it("con el titular de la solicitud, alguien del equipo con rol de medio no es el titular", () => {
+    const { eventos } = construirLineaTiempo(
+      HITOS,
+      [
+        registro(2, {
+          estadoAnterior: "REQUIERE_INFORMACION",
+          estadoNuevo: "EN_TRAMITE",
+          actorId: TITULAR,
+          actorRol: "SUPERADMIN",
+        }),
+        registro(3, {
+          estadoAnterior: "EN_TRAMITE",
+          estadoNuevo: "RESPONDIDA",
+          actorRol: "MEDIO",
+          cambios: { decision: { antes: null, despues: "PROCEDE" } },
+        }),
+      ],
+      { titularId: TITULAR }
+    )
+    expect(eventos.map((evento) => evento.actor)).toEqual([
+      "Titular",
+      "Equipo AMO · e***@amo.test",
+    ])
+  })
+})

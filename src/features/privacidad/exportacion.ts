@@ -19,9 +19,16 @@ import {
   ESTADOS_MEDIO,
   TIPOS_MEDIO,
 } from "@/features/operacion/estados"
+import { arroba, NOMBRES_PLATAFORMA } from "@/features/vinculacion/cuentas"
+import {
+  ESTADOS_SOLICITUD as ESTADOS_VINCULACION,
+  leerCuentasDeclaradas,
+  textoSeguidores,
+} from "@/features/vinculacion/presentacion"
 import type { HojaExcel, LibroExcel, ValorCelda } from "@/lib/export/excel"
 import { parsearFecha } from "@/lib/fechas"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
+import type { Json } from "@/types/database.types"
 
 import {
   DECISIONES,
@@ -58,6 +65,7 @@ const esquemaDatosTitular = z.object({
   accesos: lista(z.record(z.string(), valor)),
   actividad: lista(z.record(z.string(), valor)),
   consultas_de_tus_datos_reservados: lista(z.record(z.string(), valor)),
+  solicitudes_de_vinculacion: lista(z.record(z.string(), valor)),
   solicitudes: lista(z.record(z.string(), valor)),
 })
 
@@ -290,8 +298,28 @@ export function conteosDatosTitular(
       etiqueta: "Consultas de sus datos reservados",
       total: datos.consultas_de_tus_datos_reservados.length,
     },
+    {
+      etiqueta: "Solicitudes de vinculación",
+      total: datos.solicitudes_de_vinculacion.length,
+    },
     { etiqueta: "Solicitudes", total: datos.solicitudes.length },
   ]
+}
+
+/** «Instagram @medio (45 mil seguidores); TikTok @medio (Seguidores sin declarar)». */
+function cuentasDeclaradas(valor: unknown): string | null {
+  const cuentas = leerCuentasDeclaradas((valor ?? null) as Json)
+  if (cuentas.length === 0) return null
+  return cuentas
+    .map(
+      (cuenta) =>
+        `${NOMBRES_PLATAFORMA[cuenta.plataforma]} ${arroba(cuenta.usuario)} (${
+          cuenta.seguidores === null
+            ? "seguidores sin declarar"
+            : textoSeguidores(cuenta.seguidores)
+        })`
+    )
+    .join("; ")
 }
 
 // ── Libro ────────────────────────────────────────────────────────────────────
@@ -427,6 +455,34 @@ function hojasLista(datos: DatosTitular): HojaExcel[] {
         Array.isArray(c.campos)
           ? c.campos.map((campo) => humanizar(String(campo))).join(", ")
           : texto(c.campos),
+      ]),
+    },
+    {
+      nombre: "Solicitudes de vinculación",
+      titulo: "Lo que enviaste en «Vincular mi medio»",
+      descripcion:
+        "Las solicitudes del formulario público con tu correo o de tu medio.",
+      columnas: [
+        { titulo: "Enviada", formato: "fechaHora" },
+        { titulo: "Medio" },
+        { titulo: "Contacto" },
+        { titulo: "Correo" },
+        { titulo: "Celular" },
+        { titulo: "Municipio" },
+        { titulo: "Cuentas" },
+        { titulo: "Mensaje" },
+        { titulo: "Estado" },
+      ],
+      filas: datos.solicitudes_de_vinculacion.map((v) => [
+        fecha(v.enviada_at),
+        texto(v.medio),
+        texto(v.contacto),
+        texto(v.correo),
+        texto(v.celular),
+        texto(v.municipio),
+        cuentasDeclaradas(v.cuentas),
+        texto(v.mensaje),
+        de(ESTADOS_VINCULACION, v.estado),
       ]),
     },
     {

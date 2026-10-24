@@ -32,7 +32,8 @@ import {
  * - La cuenta ADMIN E2E abre «Nueva campaña» desde la ficha de «Anunciante
  *   E2E» (VERIFICADO): llega con la empresa elegida y el aviso de la gestión
  *   asistida; la campaña nace en borrador, marcada «Creada por el equipo AMO»,
- *   y la activa. La bitácora queda con el operador como actor y
+ *   y la activa. La bitácora queda con el operador como actor (`actor_id`:
+ *   `actor_email` guarda el correo enmascarado) y
  *   `metadatos = {modo: ASISTIDO, anunciante_id}`.
  * - Desde la ficha interna arma una oferta en el asistente asistido (reel de
  *   Instagram), carga el video y la envía a revisión: llega a la ficha interna
@@ -160,13 +161,32 @@ async function siguiente(page: Page): Promise<void> {
 }
 
 /**
+ * Id del perfil de la cuenta ADMIN E2E: la bitácora identifica al actor por
+ * `actor_id` (su `actor_email` es una copia enmascarada, `e***@amo.test`).
+ */
+async function idPerfilAdmin(): Promise<string> {
+  const { email } = credenciales("ADMIN")
+  const { data, error } = await crearClienteServicio(entorno)
+    .from("perfiles")
+    .select("id")
+    .eq("email", email)
+    .single()
+  if (error) {
+    throw new Error(
+      `No se encontró la cuenta ${email}: ejecuta \`pnpm bootstrap:e2e\`. ${error.message}`
+    )
+  }
+  return data.id
+}
+
+/**
  * Cambios de una entidad en la bitácora (alta, ediciones y transiciones; no
  * las consultas ni las exportaciones), del más antiguo al más reciente.
  */
 async function bitacoraDe(entidad: "campanas" | "ofertas", id: string) {
   const { data, error } = await crearClienteServicio(entorno)
     .from("bitacora")
-    .select("actor_email, accion, metadatos")
+    .select("actor_id, accion, metadatos")
     .eq("entidad", entidad)
     .eq("entidad_id", id)
     .in("accion", ["INSERT", "UPDATE", "TRANSICION"])
@@ -217,7 +237,6 @@ test.describe("gestión asistida por cuenta del anunciante", () => {
     page,
   }) => {
     const hoy = hoyEnBogota()
-    const admin = credenciales("ADMIN")
     await ingresarComoAdmin(
       page,
       rutaFichaAnunciante(ANUNCIANTE_E2E, "campanas")
@@ -235,7 +254,7 @@ test.describe("gestión asistida por cuenta del anunciante", () => {
         url.searchParams.get("anunciante") === ANUNCIANTE_E2E.id
     )
     await expect(avisoAsistido(page)).toContainText(
-      `Estás actuando por cuenta de ${ANUNCIANTE_E2E.nombre}. Cada cambio queda en la bitácora a tu nombre y se le avisa a la empresa.`
+      `Estás actuando por cuenta de ${ANUNCIANTE_E2E.nombre}. Cada cambio queda en la bitácora a tu nombre. La empresa recibe un aviso cuando creas, activas o cancelas una campaña, y cuando envías, retiras o cancelas una oferta.`
     )
     const formulario = page.getByRole("form", {
       name: "Nueva campaña por cuenta de un anunciante",
@@ -279,10 +298,11 @@ test.describe("gestión asistida por cuenta del anunciante", () => {
     ).toBeFocused()
 
     // Bitácora: el operador es el actor y el anunciante, el propietario.
+    const operador = await idPerfilAdmin()
     const filas = await bitacoraDe("campanas", campanaId)
     expect(filas.length).toBeGreaterThanOrEqual(2)
     for (const fila of filas) {
-      expect(fila.actor_email).toBe(admin.email)
+      expect(fila.actor_id).toBe(operador)
       expect(fila.metadatos).toMatchObject({
         modo: "ASISTIDO",
         anunciante_id: ANUNCIANTE_E2E.id,
@@ -371,7 +391,7 @@ test.describe("gestión asistida por cuenta del anunciante", () => {
       .getByRole("heading", { name: "Gestión por cuenta del anunciante" })
       .locator("xpath=ancestor::section[1]")
     await expect(gestion).toContainText(
-      `Actúas por cuenta de ${ANUNCIANTE_E2E.nombre}`
+      `Actúas por cuenta de ${ANUNCIANTE_E2E.nombre}. Cada cambio queda en la bitácora a tu nombre; la empresa recibe un aviso cuando envías, retiras o cancelas la oferta.`
     )
     await expect(
       gestion.getByRole("button", { name: "Retirar de revisión" })
@@ -383,10 +403,11 @@ test.describe("gestión asistida por cuenta del anunciante", () => {
     await esperarSinDesbordeHorizontal(page)
 
     // Bitácora de la oferta: asistida, a nombre del operador.
+    const operador = await idPerfilAdmin()
     const filas = await bitacoraDe("ofertas", ofertaId)
     expect(filas.length).toBeGreaterThanOrEqual(2)
     for (const fila of filas) {
-      expect(fila.actor_email).toBe(credenciales("ADMIN").email)
+      expect(fila.actor_id).toBe(operador)
       expect(fila.metadatos).toMatchObject({
         modo: "ASISTIDO",
         anunciante_id: ANUNCIANTE_E2E.id,

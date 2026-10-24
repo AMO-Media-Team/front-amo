@@ -31,6 +31,7 @@ import { formatearFecha } from "@/lib/format"
 
 import {
   accionesEquipo,
+  cantidadArchivos,
   claseDe,
   DECISIONES,
   esSemaforo,
@@ -64,13 +65,22 @@ interface Aviso {
 function avisoDe(solicitud: SolicitudInterna, hoy: string): Aviso {
   const situacion = situacionPlazo(solicitud, hoy)
   if (solicitud.supresionEjecutadaAt) {
-    return {
-      tono: "neutro",
-      icono: Eraser,
-      titulo: "Supresión ejecutada",
-      detalle:
-        "La cuenta del titular se borró. La solicitud se conserva como evidencia del cumplimiento.",
-    }
+    const pendientes =
+      solicitud.supresionResultado?.archivosPendientes?.length ?? 0
+    return pendientes > 0
+      ? {
+          tono: "aviso",
+          icono: Eraser,
+          titulo: "Supresión ejecutada",
+          detalle: `La cuenta del titular se borró, pero ${cantidadArchivos(pendientes)} ${pendientes === 1 ? "sigue" : "siguen"} en Storage: reintenta el borrado en «Supresión de datos».`,
+        }
+      : {
+          tono: "neutro",
+          icono: Eraser,
+          titulo: "Supresión ejecutada",
+          detalle:
+            "La cuenta del titular se borró. La solicitud se conserva como evidencia del cumplimiento.",
+        }
   }
   switch (solicitud.estado) {
     case "RESPONDIDA":
@@ -375,6 +385,8 @@ export function FichaSolicitud({
           <VerDatosTitular
             solicitud={{ id: solicitud.id, numero: solicitud.numero }}
             titular={titular.perfilId ? (titular.nombre ?? "") : null}
+            disponible={acciones.verDatos}
+            veReservados={tieneAlgunPermiso(usuario, ["datos_sensibles.ver"])}
           />
 
           {admiteSupresion ? (
