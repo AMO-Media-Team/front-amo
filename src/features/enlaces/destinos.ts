@@ -121,11 +121,20 @@ function destinoInterno(
     case "asignaciones":
     case "publicaciones":
     case "metricas":
+      return asignacion ? r(`/operacion/asignaciones/${asignacion}`) : null
     case "disputas":
+      // La bandeja de disputas para quien la ve; si no, la ficha de la asignación.
+      if (permisos.includes("disputas.ver"))
+        return r(`/operacion/disputas/${id}`)
       return asignacion ? r(`/operacion/asignaciones/${asignacion}`) : null
     case "liquidaciones":
+      // La ficha de Finanzas para quien ve liquidaciones; si no, el medio.
+      if (permisos.includes("liquidaciones.ver"))
+        return r(`/finanzas/liquidaciones/${id}`)
       return medio ? r(`/operacion/medios/${medio}`) : null
     case "facturas":
+      if (permisos.includes("facturas.ver"))
+        return r(`/finanzas/facturas/${id}`)
       return relacionados.anuncianteId
         ? r(
             `/operacion/anunciantes/${relacionados.anuncianteId}?pestana=cartera`
@@ -157,10 +166,16 @@ function destinoMedio(
       return r(`/mis-campanas/${id}`)
     case "publicaciones":
     case "metricas":
-    case "disputas":
       return relacionados.asignacionId
         ? r(`/mis-campanas/${relacionados.asignacionId}`)
         : r("/mis-campanas")
+    case "disputas":
+      return relacionados.asignacionId
+        ? r(`/mis-campanas/${relacionados.asignacionId}/disputa`)
+        : r("/mis-campanas")
+    case "liquidaciones":
+      // El medio no lee la tabla (la RLS lo impide); la página lo hace por RPC.
+      return r(`/ganancias/${id}`)
     default:
       return INICIO
   }
@@ -187,8 +202,7 @@ function destinoAnunciante(
         : r("/campanas")
     case "asignaciones":
     case "publicaciones":
-    case "metricas":
-    case "disputas": {
+    case "metricas": {
       const asignacion =
         entidad === "asignaciones" ? id : relacionados.asignacionId
       return relacionados.campanaId && asignacion
@@ -197,6 +211,14 @@ function destinoAnunciante(
           )
         : r("/campanas")
     }
+    case "disputas":
+      return relacionados.campanaId && relacionados.asignacionId
+        ? r(
+            `/campanas/${relacionados.campanaId}/asignaciones/${relacionados.asignacionId}/disputa`
+          )
+        : r("/campanas")
+    case "facturas":
+      return r(`/facturas/${id}`)
     default:
       return INICIO
   }
@@ -219,11 +241,22 @@ export function destinoDe(
   }
 }
 
+/**
+ * Avisos de lote sin fila propia (`cola.liquidaciones_por_aprobar`: el corte por periodo generó varias
+ * liquidaciones): llevan a la vista que los resuelve. Solo los reciben quienes pueden aprobar.
+ */
+const ENLACES_SIN_FILA: Partial<Record<EntidadEnlace, Route>> = {
+  liquidaciones: r("/finanzas/liquidaciones?vista=borrador"),
+}
+
 /** Enlace a guardar en la interfaz para una notificación sin `url`. */
 export function enlaceNotificacion(
   entidad: string | null,
   entidadId: string | null
 ): Route | null {
+  if (entidad && !entidadId && esEntidadEnlace(entidad)) {
+    return ENLACES_SIN_FILA[entidad] ?? null
+  }
   if (!entidad || !entidadId || !esEntidadEnlace(entidad)) return null
   return r(`/ir/${entidad}/${encodeURIComponent(entidadId)}`)
 }

@@ -11,7 +11,12 @@ const MEDIO = "01a10e25-2747-7f83-a554-575643ab26dc"
 
 describe("organizacionDe", () => {
   it("los roles internos no pertenecen a ninguna organización", () => {
-    for (const rol of ["SUPERADMIN", "ADMIN"] as const) {
+    for (const rol of [
+      "SUPERADMIN",
+      "ADMIN",
+      "OPERACIONES",
+      "FINANZAS",
+    ] as const) {
       expect(organizacionDe({ rol, medioId: MEDIO })).toEqual({
         anunciante_id: null,
         medio_id: null,
@@ -56,6 +61,8 @@ describe("exigeTotp", () => {
   it("solo los roles internos enrolan verificación en dos pasos", () => {
     expect(exigeTotp("SUPERADMIN")).toBe(true)
     expect(exigeTotp("ADMIN")).toBe(true)
+    expect(exigeTotp("OPERACIONES")).toBe(true)
+    expect(exigeTotp("FINANZAS")).toBe(true)
     expect(exigeTotp("ANUNCIANTE")).toBe(false)
     expect(exigeTotp("MEDIO")).toBe(false)
   })

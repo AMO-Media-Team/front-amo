@@ -276,12 +276,14 @@ export function presentarValor(
         : sin
     }
     case "TEXTO":
-      return typeof valor === "string"
-        ? {
-            texto: etiquetaOpcion(valor, contexto.etiquetas),
-            equivalencia: null,
-          }
-        : sin
+      if (typeof valor !== "string") return sin
+      return {
+        texto:
+          valor === ""
+            ? "Sin definir"
+            : etiquetaOpcion(valor, contexto.etiquetas),
+        equivalencia: null,
+      }
     case "LISTA_TEXTO":
       if (!Array.isArray(valor)) return sin
       return {

@@ -47,11 +47,14 @@ async function CuerpoAsignacion({
   asignacion,
   ahoraServidor,
   puedeEjecutar,
+  puedeDisputar,
   puedeAceptar,
 }: {
   asignacion: AsignacionMedio
   ahoraServidor: number
   puedeEjecutar: boolean
+  /** Reclamar una vencida (`disputas.abrir`). */
+  puedeDisputar: boolean
   /** Desistir pide el mismo permiso que aceptar. */
   puedeAceptar: boolean
 }) {
@@ -75,6 +78,7 @@ async function CuerpoAsignacion({
         paso={paso}
         ahoraServidor={ahoraServidor}
         puedeEjecutar={puedeEjecutar}
+        puedeDisputar={puedeDisputar}
         conBotonEnPie={accion !== null}
         desistirHasta={desistirHasta}
       />
@@ -144,6 +148,7 @@ export default async function PaginaAsignacionMedio({
             puedeEjecutar={tieneAlgunPermiso(usuario, [
               "asignaciones.ejecutar",
             ])}
+            puedeDisputar={tieneAlgunPermiso(usuario, ["disputas.abrir"])}
             puedeAceptar={tieneAlgunPermiso(usuario, ["ofertas.aceptar"])}
           />
         </Suspense>

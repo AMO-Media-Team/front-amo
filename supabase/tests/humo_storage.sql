@@ -106,12 +106,15 @@ begin
   insert into public.liquidaciones (id, medio_id, periodo_inicio, periodo_fin, cantidad_asignaciones, monto_bruto, monto_comision,
                                     monto_medio, monto_retenciones, monto_neto, estado, requiere_documento_soporte)
   values (l1, me_a, private.hoy() - 15, private.hoy() - 1, 0, 0, 0, 0, 0, 0, 'BORRADOR', true);
+  -- E3 (fase 5): medio y anunciante leen en `soportes` solo lo que su fila referencia.
+  update public.liquidaciones set soporte_pago_path = 'liquidacion/' || l1 || '/s.pdf' where id = l1;
   insert into public.resoluciones_dian (id, tipo, prefijo, numero_resolucion, fecha_resolucion, rango_desde, rango_hasta,
                                         consecutivo_actual, vigente_desde, activa)
   values (rs1, 'FACTURA_VENTA', 'HDIE', '18760000010', '2026-01-01', 1, 1000, 1, '2026-01-01', false);
   insert into public.facturas (id, anunciante_id, resolucion_id, prefijo, consecutivo, fecha_emision, fecha_vencimiento,
-                               subtotal, iva, pagado, estado, emitida_at)
-  values (f1, an_a, rs1, 'HDIE', 1, private.hoy(), private.hoy() + 30, 100000, 19000, 0, 'EMITIDA', now());
+                               subtotal, iva, pagado, estado, emitida_at, archivo_path)
+  values (f1, an_a, rs1, 'HDIE', 1, private.hoy(), private.hoy() + 30, 100000, 19000, 0, 'EMITIDA', now(),
+          'factura/' || f1 || '/f.pdf');
   perform set_config('amo.modo_carga', '', true);
   perform set_config('storage.allow_delete_query', 'true', true);
   c_adm1 := jsonb_build_object('sub', u_adm, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_adm1)::text;

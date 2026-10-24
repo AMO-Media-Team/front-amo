@@ -17,7 +17,7 @@ import {
   activarPerfil,
   actualizarPerfil,
   type ClienteSupabase,
-  crearClientePublico,
+  crearClienteUsuario,
   type EntornoBootstrap,
   ErrorBootstrap,
   idDeRol,
@@ -54,12 +54,18 @@ async function crearOperador(
   return { usuarioId: data.user.id, email, password }
 }
 
+/** El operador con su sesión aal2 abierta (para escribir como él con la RLS de su rol). */
+interface OperadorHabilitado {
+  operador: OperadorTemporal
+  cliente: ClienteSupabase
+}
+
 /** Rol, activación y sesión aal2 (como la gestión de usuarios y el primer ingreso). */
 async function habilitarOperador(
   entorno: EntornoBootstrap,
   servicio: ClienteSupabase,
   cuenta: CuentaOperador
-): Promise<OperadorTemporal> {
+): Promise<OperadorHabilitado> {
   await actualizarPerfil(servicio, cuenta.usuarioId, {
     nombre: "Operador temporal E2E",
     rol_id: await idDeRol(servicio, "SUPERADMIN"),
@@ -68,7 +74,8 @@ async function habilitarOperador(
   })
   await activarPerfil(servicio, cuenta.usuarioId)
 
-  const cliente = crearClientePublico(entorno)
+  // Con las cabeceras de contexto confiable, como el cliente del servidor de la app.
+  const cliente = crearClienteUsuario(entorno)
   const ingreso = await cliente.auth.signInWithPassword({
     email: cuenta.email,
     password: cuenta.password,
@@ -85,7 +92,10 @@ async function habilitarOperador(
       `No se pudo leer la sesión del operador temporal: ${error?.message ?? "sin claims"}`
     )
   }
-  return { usuarioId: cuenta.usuarioId, sesionId: data.claims.session_id }
+  return {
+    operador: { usuarioId: cuenta.usuarioId, sesionId: data.claims.session_id },
+    cliente,
+  }
 }
 
 async function retirarOperador(
@@ -106,17 +116,24 @@ async function retirarOperador(
 /**
  * Ejecuta `accion` con un operador temporal. `servicio` debe actuar como el
  * superadministrador (`clienteComoSuperadmin`): solo un SUPERADMIN asigna ese
- * rol. El operador se borra siempre; si la acción falló, prevalece su error.
+ * rol. `accion` recibe además el cliente con la sesión aal2 del operador, para
+ * escribir como el equipo AMO con la RLS (p. ej. un mensaje de disputa). El
+ * operador se borra siempre; si la acción falló, prevalece su error.
  */
 export async function conOperadorTemporal<T>(
   entorno: EntornoBootstrap,
   servicio: ClienteSupabase,
-  accion: (operador: OperadorTemporal) => Promise<T>
+  accion: (operador: OperadorTemporal, cliente: ClienteSupabase) => Promise<T>
 ): Promise<T> {
   const cuenta = await crearOperador(servicio)
   let resultado: T
   try {
-    resultado = await accion(await habilitarOperador(entorno, servicio, cuenta))
+    const { operador, cliente } = await habilitarOperador(
+      entorno,
+      servicio,
+      cuenta
+    )
+    resultado = await accion(operador, cliente)
   } catch (error) {
     await retirarOperador(servicio, cuenta).catch((errorRetiro: unknown) => {
       process.stderr.write(

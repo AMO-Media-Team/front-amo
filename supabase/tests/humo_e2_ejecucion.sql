@@ -291,7 +291,8 @@ begin
       ('l02_sin_medio', c_sm, 'SIN_MEDIO', 'Tu cuenta no está vinculada a un medio.'),
       ('l03_pendiente', c_mp, 'MEDIO_PENDIENTE', 'Tu medio aún no está verificado: completa el alta y envíalo a verificación.'),
       ('l04_rechazado', c_mr, 'MEDIO_RECHAZADO', 'La verificación de tu medio fue rechazada: corrige lo indicado y vuelve a enviarla.'),
-      ('l05_suspendido', c_ms, 'MEDIO_SUSPENDIDO', 'Tu medio está suspendido: mientras tanto no verás ofertas nuevas.'),
+      -- Desde e3_validacion el detalle incluye el motivo de la suspensión si lo hay (este medio no tiene).
+      ('l05_suspendido', c_ms, 'MEDIO_SUSPENDIDO', 'Tu medio está suspendido. Mientras tanto no verás ofertas nuevas.'),
       ('l06_sin_cuenta_vigente', c_mv, 'SIN_CUENTA_VIGENTE',
        'Ninguna de tus cuentas tiene la verificación de seguidores al día: reverifícala en Mi medio › Cuentas.'),
       ('l07_bajo_umbral', c_md, 'BAJO_UMBRAL',

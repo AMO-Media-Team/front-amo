@@ -5,7 +5,7 @@
  */
 import type { PresentacionEstado, Tono } from "@/features/operacion/estados"
 
-import type { EstadoAsignacion } from "./tipos"
+import type { CausaCancelacion, EstadoAsignacion } from "./tipos"
 
 export type { PresentacionEstado, Tono }
 
@@ -77,6 +77,51 @@ export const ESTADOS_PARA_MEDIO: Readonly<
     "peligro",
     "El equipo AMO canceló tu participación en esta campaña."
   ),
+}
+
+/**
+ * Qué significa para el medio que el equipo AMO cancelara su participación,
+ * según la causa (ADM-010): una cancelación por fraude o por incumplimiento
+ * suyo no se paga; las demás solo lo liberan de la campaña.
+ */
+export function consecuenciaCancelacion(
+  causa: CausaCancelacion | null | undefined
+): string {
+  switch (causa) {
+    case "FRAUDE":
+      return "Según los términos que aceptaste, esta publicación no se paga."
+    case "INCUMPLIMIENTO_MEDIO":
+      return "Se canceló por incumplimiento: esta publicación no se paga y cuenta en tu cumplimiento."
+    default:
+      return "El equipo AMO canceló tu participación en esta campaña. Ya no tienes que publicar ni cargar nada más."
+  }
+}
+
+/** Lo que el medio aún está cumpliendo (también en disputa): lo que una suspensión deja en pie. */
+const EN_CURSO: readonly EstadoAsignacion[] = [
+  "ACEPTADA",
+  "CONTENIDO_ENTREGADO",
+  "PUBLICADA",
+  "EVIDENCIA_VALIDADA",
+  "METRICAS_CARGADAS",
+  "EN_DISPUTA",
+]
+
+export function estaEnCurso(estado: EstadoAsignacion): boolean {
+  return EN_CURSO.includes(estado)
+}
+
+/**
+ * Estado con que el medio sigue trabajando: durante una disputa, el que tenía
+ * al abrirla (D72: los cortes de métricas siguen corriendo y se cargan).
+ */
+export function estadoDeTrabajo(asignacion: {
+  estado: EstadoAsignacion
+  estadoPrevioDisputa?: EstadoAsignacion | null
+}): EstadoAsignacion {
+  return asignacion.estado === "EN_DISPUTA" && asignacion.estadoPrevioDisputa
+    ? asignacion.estadoPrevioDisputa
+    : asignacion.estado
 }
 
 // ── Segmentos del tablero ────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import { formatearFechaHora } from "@/lib/format"
 
 import { descargarContenido } from "../actions"
 import { resumenArchivos, type SituacionContenido } from "../contenido"
+import { rutaAsignacionMedio } from "../rutas"
 import { TEXTO_BOTON_ACCION } from "../siguiente-accion"
 import type { AccionMedio, DescargaContenido, VersionContenido } from "../tipos"
 import { ArchivosContenido } from "./archivos-contenido"
@@ -332,9 +333,16 @@ export function PanelContenido({
         <EstadoVacio
           icono={TimerOff}
           titulo="Venció el plazo para descargar"
-          descripcion={`La fecha límite para publicar era el ${formatearFechaHora(fechaLimitePublicacion)}. Si crees que es un error, escríbele al equipo AMO.`}
+          descripcion={`La fecha límite para publicar era el ${formatearFechaHora(fechaLimitePublicacion)}. Si publicaste a tiempo y no se registró, puedes reclamarlo desde la campaña mientras el plazo para reclamar siga abierto.`}
           className="flex-none py-12"
-        />
+        >
+          <EnlaceBoton
+            href={rutaAsignacionMedio(asignacionId)}
+            variant="outline"
+          >
+            Ir a la campaña
+          </EnlaceBoton>
+        </EstadoVacio>
       )
     case "sin_creativo":
       return (

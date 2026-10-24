@@ -26,11 +26,14 @@ export function TarjetaAsignacionMedio({
   tarjeta,
   ahoraServidor,
   puedeEjecutar,
+  puedeDisputar,
   indice = 0,
 }: {
   tarjeta: TarjetaAsignacion
   ahoraServidor: number
   puedeEjecutar: boolean
+  /** `disputas.abrir`: el botón para reclamar una vencida. */
+  puedeDisputar: boolean
   /** Posición en la lista: escalona la animación de entrada. */
   indice?: number
 }) {
@@ -83,6 +86,7 @@ export function TarjetaAsignacionMedio({
         paso={tarjeta.paso}
         ahoraServidor={ahoraServidor}
         puedeEjecutar={puedeEjecutar}
+        puedeDisputar={puedeDisputar}
         className="rounded-xl border bg-background/50 p-3"
       />
 

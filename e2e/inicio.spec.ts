@@ -245,12 +245,12 @@ test.describe("panel del medio", () => {
       return
     }
     // El medio trabaja desde el celular: barra inferior fija con lo del día a
-    // día (Inicio, Ofertas, Campañas y Mi medio, en ese orden).
+    // día (Inicio, Ofertas, Campañas y Ganancias, en ese orden; Mi medio pasa al menú).
     await expect(barraInferior.getByRole("link")).toHaveText([
       "Inicio",
       "Ofertas",
       "Campañas",
-      "Mi medio",
+      "Ganancias",
     ])
     await esperarSinDesbordeHorizontal(page)
     await barraInferior.getByRole("link", { name: "Ofertas" }).click()

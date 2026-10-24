@@ -6,8 +6,10 @@ import {
   armarTablero,
   compararTarjetas,
   conteoDelTablero,
+  esReclamable,
   tarjetaDe,
   ultimaActividad,
+  vencidasPorLeer,
 } from "./tablero"
 import type { AccionMedio } from "./tipos"
 
@@ -138,5 +140,70 @@ describe("armarTablero", () => {
     )
     expect(compararTarjetas(reciente, vieja, AHORA)).toBeLessThan(0)
     expect(compararTarjetas(vieja, reciente, AHORA)).toBeGreaterThan(0)
+  })
+})
+
+describe("vencidas cuya disputa se lee", () => {
+  const enPlazo = asignacionDePrueba({
+    id: id("11"),
+    estado: "VENCIDA_SIN_PUBLICAR",
+    reclamoHasta: "2026-10-27T00:00:00.000Z",
+  })
+  const reclamadaFueraDePlazo = asignacionDePrueba({
+    id: id("12"),
+    estado: "VENCIDA_SIN_PUBLICAR",
+    reclamoHasta: "2026-10-20T00:00:00.000Z",
+    enDisputaAt: "2026-10-19T00:00:00.000Z",
+  })
+  const nuncaReclamada = asignacionDePrueba({
+    id: id("13"),
+    estado: "VENCIDA_SIN_PUBLICAR",
+    reclamoHasta: "2026-10-20T00:00:00.000Z",
+  })
+  const enCurso = asignacionDePrueba({
+    id: id("14"),
+    estado: "PUBLICADA",
+    enDisputaAt: "2026-10-19T00:00:00.000Z",
+  })
+
+  it("en plazo, o fuera de él si pasó por una disputa: nada más", () => {
+    expect(esReclamable(enPlazo, AHORA.getTime())).toBe(true)
+    expect(esReclamable(reclamadaFueraDePlazo, AHORA.getTime())).toBe(false)
+    expect(
+      vencidasPorLeer(
+        [reclamadaFueraDePlazo, nuncaReclamada, enCurso, enPlazo],
+        AHORA.getTime()
+      )
+    ).toEqual([id("11"), id("12")])
+  })
+
+  it("al recortar, primero las que siguen en plazo", () => {
+    expect(
+      vencidasPorLeer([reclamadaFueraDePlazo, enPlazo], AHORA.getTime(), 1)
+    ).toEqual([id("11")])
+  })
+
+  it("ya reclamada y con el plazo terminado, la tarjeta lo dice (no «el plazo terminó»)", () => {
+    const tarjeta = tarjetaDe(
+      {
+        ...reclamadaFueraDePlazo,
+        disputa: {
+          id: "0199f3a0-0000-7000-8000-0000000000d1",
+          estado: "RESUELTA",
+          parte: "MEDIO",
+          estadoOrigen: "VENCIDA_SIN_PUBLICAR",
+          estadoResultante: "VENCIDA_SIN_PUBLICAR",
+          creadaAt: "2026-10-19T00:00:00.000Z",
+          resueltaAt: "2026-10-21T00:00:00.000Z",
+        },
+      },
+      []
+    )
+    expect(tarjeta.paso).toEqual({
+      tipo: "reclamo",
+      hasta: "2026-10-20T00:00:00.000Z",
+      asignacionId: id("12"),
+      reclamada: true,
+    })
   })
 })

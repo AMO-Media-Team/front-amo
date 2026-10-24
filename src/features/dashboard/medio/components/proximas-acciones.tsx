@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   PencilLine,
   RefreshCw,
+  Scale,
   Send,
 } from "lucide-react"
 import type { Route } from "next"
@@ -36,6 +37,7 @@ const ICONOS: Readonly<Record<TipoAccionMedio, LucideIcon>> = {
   CORREGIR_EVIDENCIA: PencilLine,
   CARGAR_METRICA: ChartColumn,
   CORREGIR_METRICAS: PencilLine,
+  RECLAMAR: Scale,
 }
 
 type Tinte = UrgenciaPlazo | "bloqueada"
@@ -61,9 +63,16 @@ const TINTES: Readonly<Record<Tinte, { chip: string; barra: string }>> = {
  */
 export type DestinoAcciones = "accion" | "ficha" | null
 
-function rutaDe(accion: AccionMedio, destino: DestinoAcciones): Route | null {
-  if (destino === "accion") return accion.ruta
-  if (destino === "ficha") return rutaAsignacionMedio(accion.asignacionId)
+function rutaDe(
+  accion: AccionMedio,
+  destino: DestinoAcciones,
+  puedeReclamar: boolean
+): Route | null {
+  // Reclamar una vencida pide `disputas.abrir`: sin él, a la ficha.
+  const directa =
+    destino === "accion" && (accion.tipo !== "RECLAMAR" || puedeReclamar)
+  if (directa) return accion.ruta
+  if (destino) return rutaAsignacionMedio(accion.asignacionId)
   return null
 }
 
@@ -79,17 +88,19 @@ function Accion({
   ahora,
   ahoraServidor,
   destino,
+  puedeReclamar,
 }: {
   accion: AccionMedio
   ahora: Date
   ahoraServidor: number
   destino: DestinoAcciones
+  puedeReclamar: boolean
 }) {
   const bloqueada = disponibilidadAccion(accion, ahora) === "bloqueada"
   const plazo = calcularPlazo(accion.venceAt, ahora)
   const tinte = TINTES[bloqueada ? "bloqueada" : plazo.urgencia]
   const Icono = ICONOS[accion.tipo]
-  const ruta = rutaDe(accion, destino)
+  const ruta = rutaDe(accion, destino, puedeReclamar)
   return (
     <li
       className={cn(
@@ -184,6 +195,7 @@ export function ProximasAcciones({
   acciones,
   ahoraServidor,
   destino = "accion",
+  puedeReclamar = false,
   restantes = 0,
   enlaceTodas,
   enlaceOfertas,
@@ -194,6 +206,11 @@ export function ProximasAcciones({
   /** `Date.now()` del servidor al pintar (hidratación sin desajustes). */
   ahoraServidor: number
   destino?: DestinoAcciones
+  /**
+   * `disputas.abrir`: «Reclama la publicación» lleva a su disputa; sin él,
+   * a la ficha de la asignación.
+   */
+  puedeReclamar?: boolean
   /** Pendientes que no caben en el panel (`null`: hay más, sin contar). */
   restantes?: number | null
   /** «Mis campañas», donde están todas. */
@@ -258,6 +275,7 @@ export function ProximasAcciones({
               ahora={ahora}
               ahoraServidor={ahoraServidor}
               destino={destino}
+              puedeReclamar={puedeReclamar}
             />
           ))}
         </ol>

@@ -248,6 +248,21 @@ export function esquemaValorParametro(
     case "BOOLEANO":
       return z.boolean({ error: "Elige sí o no." })
     case "TEXTO":
+      // Sin opciones es texto libre (p. ej. el correo de soporte): puede quedar
+      // vacío y, si es un correo, debe tener su forma.
+      if (!opciones && !existe) {
+        return z
+          .string({ error: "Escribe un texto." })
+          .trim()
+          .max(200, "No puede pasar de 200 caracteres.")
+          .refine(
+            (texto) =>
+              !reglas.clave.endsWith(".correo") ||
+              texto === "" ||
+              z.email().safeParse(texto).success,
+            "Escribe un correo válido o déjalo vacío."
+          )
+      }
       return z
         .string({ error: "Elige una opción." })
         .min(1, "Elige una opción.")

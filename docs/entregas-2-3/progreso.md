@@ -9,8 +9,8 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P1   | Alta y verificación del medio, términos, vinculación pública, notificaciones de negocio | ✅     |
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
-| P4   | Validación de evidencias y métricas, disputas, suspensión                               | ⬜     |
-| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
+| P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
+| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ✅     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
 
 ## Requisitos
@@ -63,26 +63,26 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | CUP-005          | Transiciones automáticas                                   | P3    | ✅     |
 | CUP-006          | Prueba de carrera automatizada                             | P3    | ✅     |
 | DSH-006          | Inicio del medio con botones directos                      | P3    | ✅     |
-| ADM-002          | Ficha y suspensión de medios                               | P4    | ⬜     |
-| ADM-007          | Validación de evidencias                                   | P4    | ⬜     |
-| ADM-008          | Validación de métricas con alertas                         | P4    | ⬜     |
-| ADM-009          | Verificación de la asignación (puerta a pago)              | P4    | ⬜     |
-| ADM-010          | Cancelación de asignaciones con causa                      | P4    | ⬜     |
-| ADM-011          | Apertura de disputas                                       | P4    | ⬜     |
-| ADM-012          | Bandeja y resolución de disputas                           | P4    | ⬜     |
-| INT-003          | Alerta de desviación frente al histórico propio            | P4    | ⬜     |
-| INT-004          | Alerta de alcance excesivo frente a seguidores             | P4    | ⬜     |
-| INT-006          | Revisión obligatoria y consecuencias                       | P4    | ⬜     |
-| LIQ-001          | Generación de liquidaciones                                | P5    | ⬜     |
-| LIQ-002          | Cálculo de retenciones                                     | P5    | ⬜     |
-| LIQ-003          | Aprobación con segregación y anulación                     | P5    | ⬜     |
-| LIQ-004          | Documento soporte electrónico                              | P5    | ⬜     |
-| LIQ-005          | Archivo de dispersión bancaria                             | P5    | ⬜     |
-| LIQ-006          | Registro de pago con soporte                               | P5    | ⬜     |
-| LIQ-007          | Control de seguridad social                                | P5    | ⬜     |
-| LIQ-008          | Facturas al anunciante y cartera                           | P5    | ⬜     |
-| MED-015          | Ganancias                                                  | P5    | ⬜     |
-| ANU-013          | Facturación del anunciante                                 | P5    | ⬜     |
+| ADM-002          | Ficha y suspensión de medios                               | P4    | ✅     |
+| ADM-007          | Validación de evidencias                                   | P4    | ✅     |
+| ADM-008          | Validación de métricas con alertas                         | P4    | ✅     |
+| ADM-009          | Verificación de la asignación (puerta a pago)              | P4    | ✅     |
+| ADM-010          | Cancelación de asignaciones con causa                      | P4    | ✅     |
+| ADM-011          | Apertura de disputas                                       | P4    | ✅     |
+| ADM-012          | Bandeja y resolución de disputas                           | P4    | ✅     |
+| INT-003          | Alerta de desviación frente al histórico propio            | P4    | ✅     |
+| INT-004          | Alerta de alcance excesivo frente a seguidores             | P4    | ✅     |
+| INT-006          | Revisión obligatoria y consecuencias                       | P4    | ✅     |
+| LIQ-001          | Generación de liquidaciones                                | P5    | ✅     |
+| LIQ-002          | Cálculo de retenciones                                     | P5    | ✅     |
+| LIQ-003          | Aprobación con segregación y anulación                     | P5    | ✅     |
+| LIQ-004          | Documento soporte electrónico                              | P5    | ✅     |
+| LIQ-005          | Archivo de dispersión bancaria                             | P5    | ✅     |
+| LIQ-006          | Registro de pago con soporte                               | P5    | ✅     |
+| LIQ-007          | Control de seguridad social                                | P5    | ✅     |
+| LIQ-008          | Facturas al anunciante y cartera                           | P5    | ✅     |
+| MED-015          | Ganancias                                                  | P5    | ✅     |
+| ANU-013          | Facturación del anunciante                                 | P5    | ✅     |
 | ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | ⬜     |
 | MED-016          | Indicadores de reputación                                  | P6    | ⬜     |
 | CTA-007          | Derechos del titular de datos                              | P6    | ⬜     |
@@ -187,3 +187,48 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   superadministradores, secreto de Vault; advisors sin ERROR (WARN nuevos esperados: `marketplace_medio`,
   `marketplace_facetas`, `impedimentos_aceptar`, `mi_elegibilidad_marketplace` y `seguimiento_campana`, definer con permiso
   y medio o empresa comprobados por dentro).
+- 2026-10-23 · **Fase 4 en curso.** Mapeo (4 lectores) con borrador de migración probado. Migración
+  `20261023171316_e3_validacion` (E3a, §3.12 de `docs/modelo-datos.md`, D65–D74) aplicada en local: validación atómica de
+  evidencias y métricas, corrección auditada, cancelación con causa y suspensión, alertas por cuenta persistentes y ocultas al
+  medio y al anunciante, colas del equipo, puerta a pago sin pendientes, reclamo de vencidas con motivo Otro, mensajes de
+  disputa con su parte, métricas durante la disputa, `asignacion.reabierta` y `soporte.correo`; 20 suites en verde tras
+  ajustar las expectativas que cambiaron. Preparación del líder: navegación «Validación» y «Disputas», `/ir` de las disputas,
+  rutas, configuración de texto libre, proyecto E2E `validacion` y brief `fase-4.md` (commit `e3757d4`). Workflow de
+  implementación con 7 paquetes (VA, AS, MS, DI → DX, E0, SQ).
+- 2026-10-23 · Fase 4: workflow de implementación (VA, AS, MS, E0, SQ y DI en paralelo; DX después de DI, relanzado en modo
+  «retomar» tras el límite de sesión), ronda de integración (una sola fuente para explicar las alertas, la ficha de la
+  asignación con las reglas de disputas, decisiones que esperan una disputa, colas con sus columnas nuevas, lectura de las
+  disputas con ver las asignaciones) y revisión adversarial (4 revisores + verificación): 21 hallazgos confirmados y
+  corregidos, entre ellos la constancia de aprobar una alerta visible para el medio y el anunciante en
+  `metricas.observaciones` (ahora solo en la bitácora), decidir sobre una versión que el medio cambió (sello `p_enviada_at`),
+  partes sin `disputas.abrir` escribiendo por la API, el medio sin poder cargar cortes durante una disputa, reclamos
+  repetidos de una vencida, textos de disputa de más de 1000 caracteres que rompían `asignaciones.motivo`, visor de adjuntos
+  sin alto máximo en el celular, regiones vivas vacías, foco tras paginar y pie fijo vacío. `cola_verificacion` pasó de
+  ~0,9 s a ~2 ms y `private.notificar` reintenta si un destinatario se borra a mitad del aviso. Local: 21 suites SQL
+  (`humo_e3_validacion` 148/148), 5.689 Vitest.
+- 2026-10-23 · Fase 4 verificada en local: 21 suites SQL (`humo_e3_validacion` 148/148), 5.689 Vitest y E2E completo con
+  412 en verde (0 fallas; proyecto `validacion` incluido). Último arreglo: el foco llega al aviso del estado tras cancelar o
+  abrir una disputa (Base UI enfocaba su enlace o lo perdía con el refresco). Respaldo
+  `context/respaldos/produccion-2026-10-23-antes-e3a-*`; la simulación contra producción solo aplica
+  `20261023171316_e3_validacion`.
+- 2026-10-23 · **Fase 4 en producción.** Andrés aplicó `20261023171316_e3_validacion`. Verificado por MCP (solo lectura): 51
+  migraciones, 60 plantillas, 59 claves (con `evidencias.plazo_recarga_horas` y `soporte.correo`), 145 transiciones, funciones
+  nuevas, columnas de alertas sin lectura para `authenticated`, `disputa_mensajes.autor_parte`, políticas de mensajes y de
+  Storage con `disputas.abrir` y capturas en disputa, configuración de prueba intacta, 3 superadministradores, secreto de Vault;
+  advisors sin ERROR (WARN nuevos esperados: `alertas_metricas`, `cola_metricas`, `cola_verificacion` y `mensajes_disputa`,
+  definer con permiso comprobado por dentro).
+- 2026-10-23 · **Fase 5 en curso.** Mapeo (4 lectores) y migración `20261024024312_e3_finanzas` en local: liquidaciones
+  con periodo cerrado y corte por lote, seguridad social al aprobar, documento soporte protegido con archivos, CUDS, nota
+  de ajuste y numeración de la plataforma o del proveedor, dispersión en dos pasos, pago con soporte cargado, factura del
+  medio, lecturas del medio por RPC, facturas desde las asignaciones expedidas en el software de AMO, notas crédito,
+  retenciones del anunciante y esquema del IVA. Suite `humo_e3_finanzas` 60/60 y las 22 suites en verde. Preparación:
+  navegación, `/ir`, rutas, contratos, `subirComoServicio`, logo para PDF del servidor, rótulos de error, configuración,
+  proyecto E2E `finanzas` y brief `fase-5.md`.
+- 2026-10-24 · **Fase 5 en producción.** Revisión adversarial (5 dimensiones, 34 hallazgos confirmados) corregida en la BD y el
+  front; base local reconstruida desde cero con la migración completa; 22 suites SQL (`humo_e3_finanzas` 67/67), 6.363 Vitest
+  y E2E completo en verde (finanzas 31/31). Respaldo `context/respaldos/produccion-2026-10-24-antes-e3b-*`. Andrés aplicó
+  `20261024024312_e3_finanzas` y la configuración de prueba de finanzas (retención en la fuente 4 % y 6 % desde 4 UVT, ReteICA
+  de Bogotá, Medellín, Cali y Barranquilla, resoluciones «PRUEBA» `PDS` y `PFE`, todo pendiente de validar). Verificado por MCP
+  (solo lectura): 52 migraciones, 66 plantillas, 65 claves, 146 transiciones, funciones nuevas, Storage con lectura solo de lo
+  referenciado, sin escritura de la sesión en facturas ni liquidaciones, configuración de prueba intacta, 3 superadministradores,
+  Vault; advisors sin ERROR (WARN nuevos: las lecturas definer de finanzas, con el permiso comprobado por dentro).

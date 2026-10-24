@@ -79,8 +79,8 @@ export function textoSituacionEvidencia(
       return {
         titulo: "Venció el plazo para cargar la evidencia",
         descripcion: situacion.reclamoHasta
-          ? `Si publicaste a tiempo y no pudiste cargarla, puedes reclamar hasta el ${formatearFechaHora(situacion.reclamoHasta)}. El equipo AMO atiende tu caso.`
-          : "Si publicaste a tiempo y no pudiste cargarla, escríbele al equipo AMO para revisar tu caso.",
+          ? `Si publicaste a tiempo y no pudiste cargarla, puedes reclamar hasta el ${formatearFechaHora(situacion.reclamoHasta)} desde la campaña, con «Reclamar: sí publiqué». El equipo AMO revisa tu caso.`
+          : "Si publicaste a tiempo y no pudiste cargarla, revisa en la campaña si aún puedes reclamar.",
       }
     case "cerrada":
       return {
@@ -134,7 +134,7 @@ export function textoSituacionMetricas(
       return {
         titulo: `Las métricas ${delCorte} fueron aprobadas`,
         descripcion:
-          "El equipo AMO ya las revisó. Si encuentras un error, escríbele: solo el equipo puede corregirlas.",
+          "El equipo AMO ya las revisó y solo el equipo puede corregirlas. Si encuentras un error, repórtalo desde la campaña con «Reportar un problema».",
       }
     case "cerrada":
       return {

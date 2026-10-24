@@ -77,8 +77,9 @@ const ALTO_PIE_IMAGEN = 16
 const ALTO_RELATIVO_IMAGEN = 0.6
 
 /**
- * Helvetica de jsPDF solo dibuja Latin-1: lo que queda fuera se omite en
- * silencio ("1–30" saldría "130"). Se sustituye por su equivalente legible.
+ * Helvetica de jsPDF solo dibuja WinAnsi (Latin-1 y los signos de cp1252 como
+ * «€», «•» o «™»). Lo que se usa en cifras y fechas se sustituye por su
+ * equivalente legible ("1–30" saldría "130").
  */
 const SUSTITUCIONES_PDF: ReadonlyArray<readonly [RegExp, string]> = [
   // Espacios duros y finos que usa Intl en cifras y fechas.
@@ -94,11 +95,58 @@ const SUSTITUCIONES_PDF: ReadonlyArray<readonly [RegExp, string]> = [
   [/[\u2191\u2193\u2192\u2197\u2198]\s*/g, ""],
 ]
 
+/** Lo que WinAnsi dibuja: ASCII imprimible, Latin-1 y los signos de cp1252. */
+const WINANSI =
+  "\\t\\n\\r\\u0020-\\u007e\\u00a0-\\u00ff€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ"
+const NO_DIBUJABLE = new RegExp(`[^${WINANSI}]`, "u")
+/**
+ * Caracteres que WinAnsi no dibuja (varios, aunque los separe un espacio:
+ * «🔥 ★»), con el espacio que tengan a cada lado.
+ */
+const TRAMO_NO_DIBUJABLE = new RegExp(
+  `( ?)([^${WINANSI}]+(?: [^${WINANSI}]+)*)( ?)`,
+  "gu"
+)
+
+/**
+ * Su forma de compatibilidad si WinAnsi la dibuja («𝐏𝐫𝐨𝐦𝐨» → «Promo», «ﬁ» →
+ * «fi», «Ｎ°» → «N°»); si no (emoji, «★», cirílico, un acento suelto), nada.
+ */
+function compatible(tramo: string): string {
+  return Array.from(tramo, (caracter) => {
+    const forma = caracter.normalize("NFKC")
+    return NO_DIBUJABLE.test(forma) ? "" : forma
+  }).join("")
+}
+
+/**
+ * Texto que Helvetica puede dibujar. Un solo carácter fuera de WinAnsi (un
+ * emoji en el título de una oferta, un acento combinado de un texto pegado
+ * desde macOS) haría que jsPDF codificara TODA la cadena en UTF-16 y la celda
+ * saliera ilegible; por eso:
+ *
+ * 1. NFC une cada letra con su acento combinado (la «a» y el «´» sueltos de
+ *    un texto NFD pasan a «á»). No se usa NFKC en todo el texto: cambiaría
+ *    «½» por «1⁄2».
+ * 2. Se sustituye lo de cifras y fechas (espacios finos, rayas, flechas…).
+ * 3. Lo que siga fuera de WinAnsi se cambia por su forma de compatibilidad si
+ *    la tiene, o se quita sin dejar un espacio doble.
+ */
 export function textoPdf(texto: string): string {
-  return SUSTITUCIONES_PDF.reduce(
+  const sustituido = SUSTITUCIONES_PDF.reduce(
     (resultado, [patron, reemplazo]) => resultado.replace(patron, reemplazo),
-    texto
-  ).trim()
+    texto.normalize("NFC")
+  )
+  return sustituido
+    .replace(
+      TRAMO_NO_DIBUJABLE,
+      (_, antes: string, tramo: string, despues: string) => {
+        const legible = compatible(tramo).replace(/ {2,}/g, " ").trim()
+        if (legible) return `${antes}${legible}${despues}`
+        return antes && despues ? " " : antes || despues
+      }
+    )
+    .trim()
 }
 
 type Rgb = [number, number, number]

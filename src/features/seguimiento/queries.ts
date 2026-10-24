@@ -15,13 +15,19 @@ import {
   perfilDesdeFila,
   type ResolverUbicacion,
 } from "./normalizar"
-import type { PerfilMedio, SeguimientoCampana } from "./tipos"
+import type {
+  AsignacionSeguimiento,
+  DisputaSeguimiento,
+  PerfilMedio,
+  SeguimientoCampana,
+} from "./tipos"
 
 /**
  * Consultas del seguimiento con el cliente de la SESIÓN. `seguimiento_campana`
  * es definer pero filtra a la empresa del usuario (o exige `asignaciones.ver`)
  * y devuelve solo lo público del medio y los cortes aprobados; una campaña
- * ajena no trae filas. Un error se lanza y lo recoge el límite de la pestaña.
+ * ajena no trae filas. Un error se lanza y lo recoge el límite de la pestaña
+ * (salvo las disputas, que son de apoyo).
  */
 
 /** Nombres desde el diccionario local (no viaja al navegador). */
@@ -31,7 +37,51 @@ const UBICACION: ResolverUbicacion = {
   departamento: (codigo) => departamentoJuntoAMunicipio(codigo),
 }
 
-/** Cada asignación aceptada de la campaña (una lectura por solicitud). */
+/** Ids por lectura de disputas (el filtro `in` viaja en la URL). */
+const IDS_POR_LECTURA = 100
+
+/**
+ * La disputa más reciente de cada asignación que alguna vez estuvo en disputa
+ * (`en_disputa_at`; la RLS deja a la empresa leer las de sus asignaciones).
+ * Dato de apoyo: si la lectura falla, las tarjetas deciden por el estado.
+ */
+async function ultimasDisputas(
+  asignaciones: readonly AsignacionSeguimiento[]
+): Promise<ReadonlyMap<string, DisputaSeguimiento> | null> {
+  const ids = asignaciones
+    .filter((asignacion) => asignacion.enDisputaAt !== null)
+    .map((asignacion) => asignacion.id)
+  const ultimas = new Map<string, DisputaSeguimiento>()
+  if (ids.length === 0) return ultimas
+  const supabase = await clienteSolicitud()
+  for (let inicio = 0; inicio < ids.length; inicio += IDS_POR_LECTURA) {
+    const { data, error } = await supabase
+      .from("disputas")
+      .select("id, asignacion_id, estado, estado_asignacion_origen")
+      .in("asignacion_id", ids.slice(inicio, inicio + IDS_POR_LECTURA))
+      .order("created_at", { ascending: false })
+    if (error) {
+      console.error(
+        `[seguimiento] disputas no disponibles (${error.code ?? "sin código"})`
+      )
+      return null
+    }
+    for (const fila of data) {
+      if (ultimas.has(fila.asignacion_id)) continue
+      ultimas.set(fila.asignacion_id, {
+        id: fila.id,
+        estado: fila.estado,
+        estadoOrigen: fila.estado_asignacion_origen,
+      })
+    }
+  }
+  return ultimas
+}
+
+/**
+ * Cada asignación aceptada de la campaña con su disputa más reciente (una
+ * lectura por solicitud).
+ */
 export const seguimientoDeCampana = cache(
   async (campanaId: string): Promise<SeguimientoCampana> => {
     const supabase = await clienteSolicitud()
@@ -43,9 +93,18 @@ export const seguimientoDeCampana = cache(
           .rpc("seguimiento_campana", { p_campana_id: campanaId })
           .range(desde, hasta)
     )
+    const asignaciones = filas.map((fila) =>
+      asignacionDesdeFila(fila, UBICACION)
+    )
+    const disputas = await ultimasDisputas(asignaciones)
     return {
       campanaId,
-      asignaciones: filas.map((fila) => asignacionDesdeFila(fila, UBICACION)),
+      asignaciones: disputas
+        ? asignaciones.map((asignacion) => ({
+            ...asignacion,
+            disputa: disputas.get(asignacion.id) ?? null,
+          }))
+        : asignaciones,
       consultadoAt: new Date().toISOString(),
     }
   }

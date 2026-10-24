@@ -100,6 +100,8 @@ export interface MetricasAtipicas {
   total: number
   desviacion: number
   multiplo: number
+  /** Sin alerta vigente pero con una que el medio corrigió (`alerta_previa`). */
+  corregidas: number
   masAntiguaAt: Date | string | null
 }
 

@@ -6,6 +6,7 @@
  * `fn_metricas_coherencia` (desde el día de la publicación hasta, como mucho,
  * el momento de la captura).
  */
+import { estadoDeTrabajo } from "@/features/mis-campanas/estados"
 import { parsearFecha, serializarFecha } from "@/lib/fechas"
 
 import { cortePermitido, disponibleDesde, esCorteFijo } from "./cortes"
@@ -14,6 +15,7 @@ import type {
   Corte,
   CorteComparable,
   EstadoAsignacion,
+  EstadoValidacion,
   MetricaEjecucion,
   PublicacionEjecucion,
 } from "./tipos"
@@ -21,7 +23,10 @@ import { cifrasDe } from "./coherencia"
 
 const DIA_MS = 86_400_000
 
-/** Estados en que el medio carga o corrige métricas (`puedo_cargar_metricas`). */
+/**
+ * Estados en que el medio carga o corrige métricas (`puedo_cargar_metricas`):
+ * también en disputa, si el previo es uno de ellos.
+ */
 export const ESTADOS_CON_METRICAS: ReadonlySet<EstadoAsignacion> = new Set([
   "PUBLICADA",
   "EVIDENCIA_VALIDADA",
@@ -48,8 +53,13 @@ export type SituacionMetricas =
   /** La asignación ya no admite métricas (verificada, cancelada…). */
   | { tipo: "cerrada" }
 
+/**
+ * `asignacion.estado` decide la evidencia (en disputa no se carga); los cortes
+ * siguen con el estado de trabajo: durante una disputa, el previo (D72).
+ */
 export function situacionMetricas(
-  asignacion: Pick<AsignacionEjecucion, "estado" | "cortesRequeridos">,
+  asignacion: Pick<AsignacionEjecucion, "estado" | "cortesRequeridos"> &
+    Partial<Pick<AsignacionEjecucion, "estadoPrevioDisputa">>,
   publicacion: Pick<PublicacionEjecucion, "estado" | "fechaPublicacion"> | null,
   corte: Corte,
   metrica: Pick<MetricaEjecucion, "estado" | "observaciones"> | null,
@@ -72,7 +82,9 @@ export function situacionMetricas(
   if (asignacion.estado === "CONTENIDO_ENTREGADO") {
     return { tipo: "faltan-evidencias" }
   }
-  if (!ESTADOS_CON_METRICAS.has(asignacion.estado)) return { tipo: "cerrada" }
+  if (!ESTADOS_CON_METRICAS.has(estadoDeTrabajo(asignacion))) {
+    return { tipo: "cerrada" }
+  }
   if (metrica?.estado === "RECHAZADA") {
     return { tipo: "corregir", observaciones: metrica.observaciones }
   }
@@ -91,6 +103,18 @@ export function admiteGuardar(situacion: SituacionMetricas): boolean {
     situacion.tipo === "corregir" ||
     situacion.tipo === "en-revision"
   )
+}
+
+/**
+ * Lo que el medio lee de las observaciones de un corte: solo la nota de un
+ * rechazo. La revisión de una alerta va a la bitácora y no viaja al
+ * navegador (D67).
+ */
+export function notaDeRechazo(
+  estado: EstadoValidacion,
+  observaciones: string | null
+): string | null {
+  return estado === "RECHAZADA" ? observaciones : null
 }
 
 /**

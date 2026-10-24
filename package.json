@@ -30,6 +30,8 @@
     "demo:purgar": "tsx scripts/demo/purgar.ts",
     "pruebas:carrera": "tsx --env-file=.env.local scripts/pruebas/carrera-cupos.ts",
     "pruebas:pauta-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-pauta-e2e.ts",
+    "pruebas:validacion-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-validacion-e2e.ts",
+    "pruebas:finanzas-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-finanzas-e2e.ts",
     "prod:config-pruebas": "tsx scripts/produccion/configuracion-pruebas.ts"
   },
   "engines": {

@@ -39,6 +39,7 @@ import {
   type PiezasIsotipo,
 } from "./isotipo"
 import { construirLamina } from "./lamina"
+import { generarLogoDocumentos } from "./logo-documentos"
 import { cargarFuente, construirPalabra } from "./logotipo"
 import { crearRasterizador } from "./render"
 import {
@@ -429,6 +430,9 @@ async function main() {
       join(DIR_SALIDA, "construccion.png"),
       await raster.svgAPng(construccion, 900, 900)
     )
+
+    // Después de escribir public/brand: rasteriza el logotipo recién generado.
+    await generarLogoDocumentos(raster)
   } finally {
     await raster.cerrar()
   }

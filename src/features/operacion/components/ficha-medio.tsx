@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import { type IndicadoresAsignaciones, situacionTope } from "../calculos"
 import { ESTADOS_MEDIO, etiquetaNivel, TIPOS_MEDIO } from "../estados"
 import {
+  cerrarFrase,
   contar,
   formatearCalificacion,
   formatearMultiplicador,
@@ -89,8 +90,11 @@ function AvisoEstadoMedio({ medio }: { medio: MedioDetalle }) {
           icono={Ban}
           titulo={`Suspendido${medio.suspendidoAt ? ` desde el ${formatearFecha(medio.suspendidoAt)}` : ""}`}
         >
-          {medio.motivoEstado ??
-            "No ve ofertas ni puede aceptar nuevas mientras siga suspendido."}
+          {medio.motivoEstado?.trim()
+            ? `Motivo: ${cerrarFrase(medio.motivoEstado.trim())} `
+            : ""}
+          No ve ofertas ni puede aceptar nuevas; conserva lo que tiene en curso
+          mientras el equipo AMO decide si se cancela.
         </AvisoFicha>
       )
     case "RECHAZADO":

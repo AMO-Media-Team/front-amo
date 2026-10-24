@@ -8,6 +8,19 @@
  *   documentos del nivel aprobados y vigentes.
  * - «Medio Nuevo E2E» (`E2E_MEDIO_NUEVO_*`): PENDIENTE recién registrado, sin
  *   cuentas, documentos ni pago. Cada corrida lo devuelve a ese estado.
+ * - «Medio Suspensión E2E» (`E2E_MEDIO_SUSPENSION_*`): VERIFICADO nivel 1 como
+ *   el Medio E2E, pero en otro municipio y con su propia cuenta de Instagram:
+ *   las pruebas de suspensión lo suspenden y lo reactivan sin tocar al medio
+ *   que usa la pauta. Cada corrida lo deja verificado (lo reactiva si quedó
+ *   suspendido).
+ *
+ * - «Medio Finanzas E2E» (`E2E_MEDIO_FINANZAS_*`) y «Medio Factura E2E»
+ *   (`E2E_MEDIO_FACTURA_*`): VERIFICADOS nivel 1 en Bogotá para las pruebas de
+ *   la fase 5 (liquidaciones, documento soporte, pagos y facturas). El
+ *   primero no es declarante ni factura (lleva documento soporte); el segundo
+ *   es declarante y está obligado a facturar (carga su factura). Su
+ *   certificación bancaria se aprueba después del último cambio de sus datos
+ *   de pago, como exige el archivo de pagos.
  *
  * Los ids son fijos, como el del anunciante E2E: las pruebas los ubican sin
  * consultar. Son `es_demo`, así que la purga demo se los lleva y la siguiente
@@ -20,6 +33,9 @@ type FilaMedio = Database["public"]["Tables"]["medios"]["Row"]
 
 export const MEDIO_E2E_ID = "e2e00000-0000-4000-8000-00000000b001"
 export const MEDIO_NUEVO_E2E_ID = "e2e00000-0000-4000-8000-00000000b002"
+export const MEDIO_SUSPENSION_E2E_ID = "e2e00000-0000-4000-8000-00000000b003"
+export const MEDIO_FINANZAS_E2E_ID = "e2e00000-0000-4000-8000-00000000b004"
+export const MEDIO_FACTURA_E2E_ID = "e2e00000-0000-4000-8000-00000000b005"
 
 /** Lo que el equipo AMO registra al dar de alta un medio (hoja «Registrar medio»). */
 export interface DatosBaseMedio {
@@ -53,7 +69,56 @@ export const MEDIO_NUEVO_E2E: DatosBaseMedio = {
   categoria: null,
 }
 
+/**
+ * Verificado para las pruebas de suspensión: en Barranquilla, para que las
+ * ofertas dirigidas a uno (`{ paraMedio }`: municipio y categorías) no le
+ * lleguen al otro.
+ */
+export const MEDIO_SUSPENSION_E2E: DatosBaseMedio = {
+  id: MEDIO_SUSPENSION_E2E_ID,
+  nombre: "Medio Suspensión E2E",
+  tipo: "PAGINA_NOTICIAS",
+  municipioPreferido: "08001",
+  descripcionAudiencia:
+    "Medio de las pruebas automatizadas de suspensión de AMO. Audiencia de Barranquilla interesada en noticias locales.",
+  categoria: "Noticias generales",
+}
+
+/**
+ * Medios de las pruebas de Finanzas: los dos en Bogotá y con la misma
+ * categoría, para que una sola oferta les llegue a ambos (y a ningún otro
+ * medio E2E: el Medio E2E está en Medellín y el de suspensión, en
+ * Barranquilla). Bogotá tiene ReteICA de referencia (9,66 ‰).
+ */
+export const MEDIO_FINANZAS_E2E: DatosBaseMedio = {
+  id: MEDIO_FINANZAS_E2E_ID,
+  nombre: "Medio Finanzas E2E",
+  tipo: "PAGINA_NOTICIAS",
+  municipioPreferido: "11001",
+  descripcionAudiencia:
+    "Medio de las pruebas automatizadas de Finanzas de AMO. Audiencia de Bogotá interesada en noticias locales.",
+  categoria: "Noticias generales",
+}
+
+export const MEDIO_FACTURA_E2E: DatosBaseMedio = {
+  id: MEDIO_FACTURA_E2E_ID,
+  nombre: "Medio Factura E2E",
+  tipo: "PAGINA_NOTICIAS",
+  municipioPreferido: "11001",
+  descripcionAudiencia:
+    "Medio de las pruebas automatizadas de Finanzas de AMO que expide factura electrónica. Audiencia de Bogotá.",
+  categoria: "Noticias generales",
+}
+
 export const NIVEL_MEDIO_E2E = 1
+
+/** Cuenta social verificada de un medio E2E. */
+export interface CuentaSocialE2E {
+  plataforma: Enums["plataforma"]
+  handle: string
+  url: string
+  seguidores: number
+}
 
 /** Cuenta verificada del Medio E2E: 40.000 seguidores (franja F1, 30.000–60.000). */
 export const CUENTA_INSTAGRAM_E2E = {
@@ -61,12 +126,31 @@ export const CUENTA_INSTAGRAM_E2E = {
   handle: "medio.e2e.amo",
   url: "https://www.instagram.com/medio.e2e.amo",
   seguidores: 40_000,
-} as const satisfies {
-  plataforma: Enums["plataforma"]
-  handle: string
-  url: string
-  seguidores: number
-}
+} as const satisfies CuentaSocialE2E
+
+/** Cuenta verificada del Medio Suspensión E2E: 45.000 seguidores (también F1). */
+export const CUENTA_INSTAGRAM_SUSPENSION_E2E = {
+  plataforma: "INSTAGRAM",
+  handle: "medio.suspension.e2e.amo",
+  url: "https://www.instagram.com/medio.suspension.e2e.amo",
+  seguidores: 45_000,
+} as const satisfies CuentaSocialE2E
+
+/** Cuenta verificada del Medio Finanzas E2E: 42.000 seguidores (F1). */
+export const CUENTA_INSTAGRAM_FINANZAS_E2E = {
+  plataforma: "INSTAGRAM",
+  handle: "medio.finanzas.e2e.amo",
+  url: "https://www.instagram.com/medio.finanzas.e2e.amo",
+  seguidores: 42_000,
+} as const satisfies CuentaSocialE2E
+
+/** Cuenta verificada del Medio Factura E2E: 48.000 seguidores (F1). */
+export const CUENTA_INSTAGRAM_FACTURA_E2E = {
+  plataforma: "INSTAGRAM",
+  handle: "medio.factura.e2e.amo",
+  url: "https://www.instagram.com/medio.factura.e2e.amo",
+  seguidores: 48_000,
+} as const satisfies CuentaSocialE2E
 
 // ── Medio Nuevo E2E ──────────────────────────────────────────────────────────
 

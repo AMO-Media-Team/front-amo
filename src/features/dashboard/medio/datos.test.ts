@@ -8,6 +8,8 @@ import {
   anioDelTope,
   claveAccion,
   enlazaSubirNivel,
+  esNegocioEnCurso,
+  ESTADOS_CONSULTA_EN_CURSO,
   etiquetaEstado,
   etiquetaNivel,
   formatoMonto,
@@ -233,6 +235,20 @@ describe("estados de los negocios en curso", () => {
     expect(pasoEstado("ACEPTADA")).toBe(1)
     expect(pasoEstado("METRICAS_CARGADAS")).toBe(5)
     expect(pasoEstado("PAGADA")).toBe(0)
+  })
+
+  it("una disputa sigue en curso en el paso que tenía al abrirla (D72)", () => {
+    expect(ESTADOS_CONSULTA_EN_CURSO).toContain("EN_DISPUTA")
+    expect(esNegocioEnCurso("EN_DISPUTA", "EVIDENCIA_VALIDADA")).toBe(true)
+    expect(pasoEstado("EN_DISPUTA", "EVIDENCIA_VALIDADA")).toBe(4)
+    expect(etiquetaEstado("EN_DISPUTA")).toBe("En disputa")
+    // El reclamo de una vencida no sigue en curso mientras se revisa; una
+    // verificada en disputa ya cumplió su recorrido.
+    expect(esNegocioEnCurso("EN_DISPUTA", "VENCIDA_SIN_PUBLICAR")).toBe(false)
+    expect(esNegocioEnCurso("EN_DISPUTA", "VERIFICADA")).toBe(false)
+    expect(esNegocioEnCurso("EN_DISPUTA")).toBe(false)
+    expect(esNegocioEnCurso("PUBLICADA")).toBe(true)
+    expect(esNegocioEnCurso("PAGADA")).toBe(false)
   })
 
   it("nivel con y sin nombre; año del tope según el fin del periodo", () => {

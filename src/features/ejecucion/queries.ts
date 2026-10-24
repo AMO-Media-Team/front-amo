@@ -16,7 +16,7 @@ import { valoresDeFila } from "./campos-metricas"
 import { leerTolerancia } from "./coherencia"
 import { PLAZO_CARGA_HORAS_POR_DEFECTO } from "./cortes"
 import { elegirNumero } from "./evidencia"
-import { metricaDelCorte } from "./metricas"
+import { metricaDelCorte, notaDeRechazo } from "./metricas"
 import type {
   AsignacionEjecucion,
   ContenidoEjecucion,
@@ -69,6 +69,7 @@ async function leerAsignacion(
     asignacion: {
       id: fila.id,
       estado: fila.estado,
+      estadoPrevioDisputa: fila.estado_previo_disputa,
       plataforma: fila.plataforma,
       formatoClave: formato?.clave ?? null,
       formatoNombre: fila.formato_nombre,
@@ -170,7 +171,7 @@ async function leerMetricas(
     periodoHasta: fila.periodo_hasta,
     valores: valoresDeFila(fila),
     estado: fila.estado_validacion,
-    observaciones: fila.observaciones,
+    observaciones: notaDeRechazo(fila.estado_validacion, fila.observaciones),
     conMiniatura: fila.miniatura_path !== null,
   }))
 }

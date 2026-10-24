@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   Ban,
   CircleSlash,
   Download,
@@ -11,9 +12,16 @@ import {
   Scale,
   TimerOff,
 } from "lucide-react"
-import type { ReactNode } from "react"
+import Link from "next/link"
+import type { ComponentProps, ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { InsigniaEstadoDisputa } from "@/features/disputas/components/estado-disputa"
+import { MOTIVOS, nombreParte } from "@/features/disputas/presentacion"
+import { rutaDisputaInterna } from "@/features/disputas/rutas"
+import { rutaFactura } from "@/features/facturacion/rutas"
+import { rutaLiquidacion } from "@/features/liquidaciones/rutas"
 import {
   formatearCOP,
   formatearFecha,
@@ -23,10 +31,11 @@ import {
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
+import { alertaRevisable } from "../alertas"
 import {
   CORTES,
   ESTADOS_ASIGNACION,
-  ESTADOS_DISPUTA,
+  ESTADOS_FACTURA,
   ESTADOS_LIQUIDACION,
   ESTADOS_TERMINALES_CAIDA,
   type EstadoAsignacion,
@@ -40,6 +49,8 @@ import {
   formatearRangoCompacto,
   instanteDeDia,
 } from "../formato"
+import { ID_AVISO_ESTADO_ASIGNACION } from "../foco"
+import { disputaAbierta } from "../gestion-asignacion"
 import {
   RUTAS_OPERACION,
   rutaAnunciante,
@@ -50,7 +61,7 @@ import type { AsignacionDetalle, PrecioCongelado as Precio } from "../tipos"
 import { InsigniaEstado, InsigniaTono, MarcaPlataforma } from "./distintivos"
 import { EvidenciasAsignacion } from "./evidencias-asignacion"
 import {
-  AvisoFicha,
+  AvisoEstadoFicha,
   CabeceraFicha,
   EnlaceFicha,
   FechaRelativa,
@@ -68,6 +79,8 @@ export interface EnlacesAsignacion {
   medio: boolean
   campana: boolean
   anunciante: boolean
+  /** `disputas.ver`: la ficha interna de cada disputa. */
+  disputas: boolean
 }
 
 /** Mientras el medio no publique, la fecha límite sigue corriendo. */
@@ -83,25 +96,53 @@ function estaCerrada(estado: EstadoAsignacion): boolean {
 
 // ── Cabecera ─────────────────────────────────────────────────────────────────
 
+/**
+ * Métricas por validar con alerta de integridad (INT-003/004), también la que
+ * la tuvo antes de que el medio la corrigiera: las dos piden constancia.
+ */
+function alertasPorValidar(asignacion: AsignacionDetalle): number {
+  return asignacion.publicaciones
+    .flatMap((publicacion) => publicacion.cortes)
+    .filter(
+      (corte) => corte.estado === "PENDIENTE" && alertaRevisable(corte.alerta)
+    ).length
+}
+
+/**
+ * Aviso del estado cuando la asignación salió del camino feliz. Es el
+ * destino del foco tras cancelarla o abrir una disputa desde la cabecera
+ * (`ID_AVISO_ESTADO_ASIGNACION`): siempre existe en esos estados.
+ */
 function AvisoEstadoAsignacion({
   asignacion,
+  verDisputas,
 }: {
   asignacion: AsignacionDetalle
+  verDisputas: boolean
 }) {
+  const id = ID_AVISO_ESTADO_ASIGNACION
   switch (asignacion.estado) {
     case "CANCELADA":
       return (
-        <AvisoFicha
+        <AvisoEstadoFicha
+          id={id}
           tono="peligro"
           icono={Ban}
           titulo={`Cancelada por AMO${asignacion.causaCancelacion ? ` · ${asignacion.causaCancelacion}` : ""}`}
         >
-          {asignacion.motivo ?? "Sin motivo registrado."}
-        </AvisoFicha>
+          <p>{asignacion.motivo ?? "Sin motivo registrado."}</p>
+          {asignacion.causa === "FRAUDE" ? (
+            <p className="mt-1">
+              Según los términos que aceptó, el medio no recibe el pago de esta
+              publicación.
+            </p>
+          ) : null}
+        </AvisoEstadoFicha>
       )
     case "RECHAZADA":
       return (
-        <AvisoFicha
+        <AvisoEstadoFicha
+          id={id}
           tono="neutro"
           icono={CircleSlash}
           titulo={
@@ -111,11 +152,12 @@ function AvisoEstadoAsignacion({
           }
         >
           {asignacion.motivo ?? "No dejó un motivo."}
-        </AvisoFicha>
+        </AvisoEstadoFicha>
       )
     case "VENCIDA_SIN_PUBLICAR":
       return (
-        <AvisoFicha
+        <AvisoEstadoFicha
+          id={id}
           tono="peligro"
           icono={TimerOff}
           titulo="Venció sin publicar"
@@ -123,29 +165,61 @@ function AvisoEstadoAsignacion({
           {asignacion.fechaLimite
             ? `El plazo terminó el ${formatearFechaHoraFija(asignacion.fechaLimite)} sin evidencia; el cupo volvió a quedar libre.`
             : "Pasó la fecha límite sin evidencia; el cupo volvió a quedar libre."}
-        </AvisoFicha>
+        </AvisoEstadoFicha>
       )
-    case "EN_DISPUTA":
+    case "EN_DISPUTA": {
+      const abierta = disputaAbierta(asignacion.disputas)
       return (
-        <AvisoFicha tono="aviso" icono={Scale} titulo="En disputa">
+        <AvisoEstadoFicha
+          id={id}
+          tono="aviso"
+          icono={Scale}
+          titulo="En disputa"
+          accion={
+            abierta && verDisputas ? (
+              <EnlaceBoton
+                href={rutaDisputaInterna(abierta.id)}
+                variant="outline"
+                size="sm"
+              >
+                Ver la disputa
+                <ArrowRight data-icon="inline-end" aria-hidden />
+              </EnlaceBoton>
+            ) : null
+          }
+        >
           {asignacion.estadoPrevioDisputa
             ? `Estaba en «${ESTADOS_ASIGNACION[asignacion.estadoPrevioDisputa].etiqueta.toLocaleLowerCase("es-CO")}» cuando se abrió. `
             : ""}
-          AMO debe resolverla para que la asignación siga su curso.
-        </AvisoFicha>
+          No se verifica ni se liquida hasta que el equipo AMO la resuelva.
+        </AvisoEstadoFicha>
       )
+    }
     default:
       return null
   }
 }
 
+/**
+ * Cabecera de la ficha: identidad de la asignación, estado, franja, cupo,
+ * medio suspendido y métricas con alerta por validar, fechas y el aviso del
+ * estado. `acciones` (la gestión del equipo, `AccionesAsignacion`) y
+ * `verificar` (el «Verificar» de la validación) van arriba a la derecha
+ * desde `sm`; en el celular la página los repite en el pie fijo.
+ */
 export function CabeceraAsignacion({
   asignacion,
   enlaces,
+  acciones,
+  verificar,
 }: {
   asignacion: AsignacionDetalle
   enlaces: EnlacesAsignacion
+  acciones?: ReactNode
+  /** Hueco del «Verificar» (`VerificarAsignacion`), antes de las demás acciones. */
+  verificar?: ReactNode
 }) {
+  const conAlerta = alertasPorValidar(asignacion)
   return (
     <CabeceraFicha
       volver={{ href: RUTAS_OPERACION.asignaciones, titulo: "Asignaciones" }}
@@ -211,8 +285,35 @@ export function CabeceraAsignacion({
               etiqueta={`Cupo ${formatearNumero(asignacion.slot)}`}
             />
           ) : null}
+          {asignacion.medio.estado === "SUSPENDIDO" ? (
+            <InsigniaTono
+              tono="aviso"
+              etiqueta="Medio suspendido"
+              titulo="No ve ofertas nuevas; conserva lo que tiene en curso mientras el equipo decide."
+            />
+          ) : null}
+          {conAlerta > 0 ? (
+            <InsigniaTono
+              tono="peligro"
+              etiqueta={
+                conAlerta === 1
+                  ? "1 métrica con alerta"
+                  : `${formatearNumero(conAlerta)} métricas con alerta`
+              }
+              titulo="Por validar: revisa el porqué de cada alerta antes de aprobarlas."
+            />
+          ) : null}
         </>
       }
+      acciones={
+        acciones || verificar ? (
+          <>
+            {verificar}
+            {acciones}
+          </>
+        ) : undefined
+      }
+      accionesEnPieMovil
       lateral={
         <>
           <span>
@@ -244,7 +345,12 @@ export function CabeceraAsignacion({
           ) : null}
         </>
       }
-      aviso={<AvisoEstadoAsignacion asignacion={asignacion} />}
+      aviso={
+        <AvisoEstadoAsignacion
+          asignacion={asignacion}
+          verDisputas={enlaces.disputas}
+        />
+      }
     />
   )
 }
@@ -501,10 +607,17 @@ export function EjecucionAsignacion({
   )
 }
 
+/**
+ * Disputas de la asignación, de la más antigua a la más reciente, con los
+ * textos y el estado de la bandeja del equipo (`@/features/disputas`); con
+ * `disputas.ver` cada una enlaza a su ficha interna (hilo y resolución).
+ */
 export function DisputasAsignacion({
   asignacion,
+  verDisputas,
 }: {
   asignacion: AsignacionDetalle
+  verDisputas: boolean
 }) {
   if (asignacion.disputas.length === 0) return null
   return (
@@ -513,22 +626,32 @@ export function DisputasAsignacion({
         {asignacion.disputas.map((disputa) => (
           <li key={disputa.id} className="flex flex-col gap-1.5 py-3">
             <span className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">{disputa.motivo}</span>
-              <InsigniaEstado
-                catalogo={ESTADOS_DISPUTA}
+              <EnlaceFicha
+                href={rutaDisputaInterna(disputa.id)}
+                permitido={verDisputas}
+                className="text-sm font-medium"
+              >
+                Disputa por{" "}
+                {MOTIVOS[disputa.motivo].etiqueta.toLocaleLowerCase("es-CO")}
+              </EnlaceFicha>
+              <InsigniaEstadoDisputa
                 estado={disputa.estado}
+                perspectiva="interno"
                 className="h-5 px-2 text-[0.6875rem]"
               />
             </span>
             <span className="text-xs text-muted-foreground">
-              Abierta por {disputa.parte} el {formatearFecha(disputa.creadaAt)}
+              Abierta por {nombreParte(disputa.parte, "interno")} el{" "}
+              {formatearFecha(disputa.creadaAt)}
               {disputa.resueltaAt
                 ? ` · cerrada el ${formatearFecha(disputa.resueltaAt)}`
                 : ""}
             </span>
-            <p className="text-sm text-pretty">{disputa.descripcion}</p>
+            <p className="text-sm text-pretty break-words">
+              {disputa.descripcion}
+            </p>
             {disputa.resolucion ? (
-              <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-pretty">
+              <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-pretty break-words">
                 <span className="font-medium">Resolución:</span>{" "}
                 {disputa.resolucion}
               </p>
@@ -540,15 +663,76 @@ export function DisputasAsignacion({
   )
 }
 
+/** Qué fichas de Finanzas puede abrir quien mira la asignación. */
+export interface EnlacesFinanzas {
+  /** `liquidaciones.ver` */
+  liquidaciones: boolean
+  /** `facturas.ver` */
+  facturas: boolean
+}
+
 export function LiquidacionAsignacion({
   asignacion,
+  finanzas = { liquidaciones: false, facturas: false },
 }: {
   asignacion: AsignacionDetalle
+  finanzas?: EnlacesFinanzas
 }) {
-  const { liquidacion } = asignacion
-  if (!liquidacion) return null
+  const { liquidacion, factura } = asignacion
+  if (!liquidacion && !factura) return null
   return (
-    <TarjetaFicha titulo="Liquidación al medio" icono={Landmark}>
+    <TarjetaFicha
+      titulo={liquidacion ? "Liquidación al medio" : "Facturación"}
+      icono={Landmark}
+    >
+      {liquidacion ? (
+        <LiquidacionDatos
+          liquidacion={liquidacion}
+          enlace={finanzas.liquidaciones}
+        />
+      ) : null}
+      {factura ? (
+        <ListaDatos
+          className="sm:grid-cols-1 xl:grid-cols-2"
+          datos={[
+            {
+              etiqueta: "Factura al anunciante",
+              valor: finanzas.facturas ? (
+                <Link
+                  href={rutaFactura(factura.id)}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {factura.numero ?? "Borrador"}
+                </Link>
+              ) : (
+                (factura.numero ?? "Borrador")
+              ),
+            },
+            {
+              etiqueta: "Estado de la factura",
+              valor: (
+                <InsigniaEstado
+                  catalogo={ESTADOS_FACTURA}
+                  estado={factura.estado}
+                />
+              ),
+            },
+          ]}
+        />
+      ) : null}
+    </TarjetaFicha>
+  )
+}
+
+function LiquidacionDatos({
+  liquidacion,
+  enlace,
+}: {
+  liquidacion: NonNullable<AsignacionDetalle["liquidacion"]>
+  enlace: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-3">
       <ListaDatos
         className="sm:grid-cols-1 xl:grid-cols-2"
         datos={[
@@ -578,7 +762,17 @@ export function LiquidacionAsignacion({
           },
         ]}
       />
-    </TarjetaFicha>
+      {enlace ? (
+        <EnlaceBoton
+          href={rutaLiquidacion(liquidacion.id)}
+          variant="outline"
+          size="sm"
+          className="self-start"
+        >
+          Ver la liquidación
+        </EnlaceBoton>
+      ) : null}
+    </div>
   )
 }
 
@@ -606,10 +800,21 @@ function mensajeSinEvidencia(asignacion: AsignacionDetalle): string {
   }
 }
 
+/**
+ * Lo que la validación necesita para ofrecer sus decisiones en la ficha
+ * (permisos de quien la ve y estado de la asignación); sin ello la evidencia
+ * es de solo lectura.
+ */
+export type ValidacionFicha = ComponentProps<
+  typeof EvidenciasAsignacion
+>["validacion"]
+
 export function EvidenciaAsignacion({
   asignacion,
+  validacion,
 }: {
   asignacion: AsignacionDetalle
+  validacion?: ValidacionFicha
 }) {
   const { publicaciones } = asignacion
   return (
@@ -628,6 +833,7 @@ export function EvidenciaAsignacion({
           plataforma={asignacion.plataforma}
           publicaciones={publicaciones}
           cortesRequeridos={asignacion.cortesRequeridos}
+          validacion={validacion}
         />
       ) : (
         <EstadoVacio
@@ -703,14 +909,28 @@ export function HistoriaAsignacion({
  */
 export function CuerpoAsignacion({
   asignacion,
+  verDisputas,
+  validacion,
+  finanzas,
 }: {
   asignacion: AsignacionDetalle
+  /** `disputas.ver`: cada disputa enlaza a su ficha interna. */
+  verDisputas: boolean
+  /** Decisiones de la validación sobre la evidencia y los cortes (ADM-007/008). */
+  validacion?: ValidacionFicha
+  /** Fichas de Finanzas que se pueden abrir (liquidación y factura). */
+  finanzas?: EnlacesFinanzas
 }) {
   const sinCupo = asignacion.aceptadaAt === null
   return (
     <div className="grid items-start gap-4 lg:grid-cols-5">
       <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
-        {sinCupo ? null : <EvidenciaAsignacion asignacion={asignacion} />}
+        {sinCupo ? null : (
+          <EvidenciaAsignacion
+            asignacion={asignacion}
+            validacion={validacion}
+          />
+        )}
         <HistoriaAsignacion asignacion={asignacion} />
       </div>
       <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
@@ -722,8 +942,8 @@ export function CuerpoAsignacion({
             <EjecucionAsignacion asignacion={asignacion} />
           </>
         )}
-        <DisputasAsignacion asignacion={asignacion} />
-        <LiquidacionAsignacion asignacion={asignacion} />
+        <DisputasAsignacion asignacion={asignacion} verDisputas={verDisputas} />
+        <LiquidacionAsignacion asignacion={asignacion} finanzas={finanzas} />
       </div>
     </div>
   )

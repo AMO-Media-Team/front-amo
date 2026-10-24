@@ -14,7 +14,7 @@ export const MENSAJES_MIS_CAMPANAS = {
   noEncontrada:
     "No encontramos esta campaña o ya no tienes acceso a ella. Actualiza la página.",
   sinMedio:
-    "Tu cuenta no está vinculada a un medio. Escríbele al equipo AMO para revisarlo.",
+    "Tu cuenta no está vinculada a un medio: el equipo AMO debe asociarla antes de que trabajes en tus campañas.",
   archivoNoEncontrado:
     "No encontramos ese archivo en tu contenido. Actualiza la página e inténtalo de nuevo.",
   noDisponible: "Esta campaña ya no tiene contenido disponible para descargar.",

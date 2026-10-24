@@ -5,6 +5,12 @@
  */
 import { z } from "zod"
 
+import {
+  LONGITUD_MAXIMA_MOTIVO,
+  LONGITUD_MINIMA_MOTIVO,
+} from "@/features/usuarios/schemas"
+import { Constants } from "@/types/database.types"
+
 export const ENTIDADES_PRIVADAS = ["medio", "anunciante"] as const
 export const GRUPOS_PRIVADOS = ["contacto", "pago"] as const
 
@@ -43,3 +49,48 @@ export const esquemaExportacion = z.object({
 })
 
 export type EntradaExportacion = z.input<typeof esquemaExportacion>
+
+// ── Gestión de una asignación (ADM-010, ADM-011) ─────────────────────────────
+
+const ENUMS = Constants.public.Enums
+
+const motivo = z
+  .string({ error: "Escribe el motivo." })
+  .trim()
+  .min(
+    LONGITUD_MINIMA_MOTIVO,
+    `Describe el motivo (al menos ${LONGITUD_MINIMA_MOTIVO} caracteres).`
+  )
+  .max(LONGITUD_MAXIMA_MOTIVO, `Máximo ${LONGITUD_MAXIMA_MOTIVO} caracteres.`)
+
+/**
+ * Cancelar con causa (`cancelar_asignacion_srv`). `estadoVisto` es el que
+ * mostraba la ficha al abrir el diálogo: si cambió mientras tanto, la acción
+ * no cancela sin que lo revisen. La suspensión solo acompaña al fraude o al
+ * incumplimiento del medio (la BD también lo exige).
+ */
+export const esquemaCancelarAsignacion = z
+  .object({
+    asignacionId: z.uuid({ error: "Identificador inválido." }),
+    estadoVisto: z.enum(ENUMS.asignacion_estado),
+    causa: z.enum(ENUMS.cancelacion_causa, {
+      error: "Elige la causa de la cancelación.",
+    }),
+    motivo,
+    suspenderMedio: z.boolean().default(false),
+  })
+  .refine(
+    (entrada) =>
+      !entrada.suspenderMedio ||
+      entrada.causa === "FRAUDE" ||
+      entrada.causa === "INCUMPLIMIENTO_MEDIO",
+    {
+      path: ["suspenderMedio"],
+      message:
+        "La suspensión solo acompaña una cancelación por fraude o por incumplimiento del medio.",
+    }
+  )
+
+export type EntradaCancelarAsignacion = z.input<
+  typeof esquemaCancelarAsignacion
+>

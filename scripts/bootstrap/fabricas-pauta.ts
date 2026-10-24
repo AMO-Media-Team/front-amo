@@ -9,12 +9,15 @@
  *   métricas con su cliente (RLS de su rol), como las acciones de la app.
  * - Las capturas son objetos reales en `evidencias/asignacion/{id}/…` (la BD
  *   exige que existan y sean imágenes).
- * - Lo del equipo AMO (aprobar o rechazar evidencias y métricas, verificar,
- *   cancelar) lo hace un operador temporal por `transicionar_srv`.
+ * - Lo del equipo AMO lo hace un operador temporal como la app: evidencias y
+ *   métricas con `validar_evidencia_srv` y `validar_metrica_srv` (con la
+ *   constancia de revisión si la métrica tiene alerta vigente o previa), y
+ *   verificar o cancelar por `transicionar_srv`.
  *
  * Nada de SQL directo; la limpieza borra con la API de servicio, en orden de
  * dependencias, y libera antes por la máquina de estados los cupos de ofertas
- * que no son de las pruebas. Solo fuera de producción.
+ * que no son de las pruebas (y cierra las disputas y los reclamos pendientes de
+ * lo que no se puede borrar). Solo fuera de producción.
  */
 import { randomUUID } from "node:crypto"
 
@@ -34,9 +37,11 @@ import { conOperadorTemporal } from "./operador-temporal"
 import { ANUNCIANTE_E2E_ID } from "./organizacion"
 import {
   type AsignacionALimpiar,
+  type CampanaALimpiar,
   consumeCupo,
   type ContenidoEntregado,
   type CorteMetrica,
+  esBorrable,
   type EtapaPauta,
   fechaCorteE2E,
   fechaPublicacionE2E,
@@ -61,6 +66,7 @@ import {
   type EntornoBootstrap,
   ErrorBootstrap,
 } from "./supabase"
+import { esReclamable, exigeRevision, leerAlerta } from "./validacion-e2e"
 
 type Enums = Database["public"]["Enums"]
 type EstadoAsignacion = Enums["asignacion_estado"]
@@ -73,6 +79,9 @@ type FilaMetricaDelMedio = Omit<
 >
 
 const CONTEXTO = "Las fábricas de pauta E2E"
+/** Lo que anota el equipo AMO al aprobar una métrica con alerta (la BD exige la constancia). */
+const REVISION_ALERTA_E2E =
+  "Revisada por las pruebas E2E: las cifras coinciden con la captura."
 /** Las empresas de las pruebas: sus campañas «Pauta E2E…» son de la pauta del medio. */
 const ANUNCIANTES_E2E = [ANUNCIANTE_E2E_ID, ANUNCIANTE_NUEVO_E2E_ID] as const
 const MOTIVO_RESTABLECER = "Restablecimiento de la pauta de pruebas E2E"
@@ -102,7 +111,7 @@ function trozos<T>(lista: readonly T[]): T[][] {
 // ── Sesiones ─────────────────────────────────────────────────────────────────
 
 /** La sesión del medio abierta una vez para varios pasos. */
-interface SesionMedio {
+export interface SesionMedio {
   medioId: string
   actor: ActorConSesion
   /** Con la sesión del medio (RLS de su rol): métricas. */
@@ -112,7 +121,7 @@ interface SesionMedio {
 }
 
 /** Ingresa como el medio, ejecuta `accion` y cierra esa sesión. */
-async function conSesionMedio<T>(
+export async function conSesionMedio<T>(
   entorno: EntornoBootstrap,
   medio: MedioPauta,
   accion: (sesion: SesionMedio) => Promise<T>
@@ -128,21 +137,25 @@ async function conSesionMedio<T>(
   )
 }
 
-interface SesionOperador {
+export interface SesionOperador {
+  /** Servicio a nombre del operador: las `*_srv` y `transicionar_srv`. */
   servicio: ClienteSupabase
   operador: ActorConSesion
+  /** Con la sesión aal2 del operador (RLS del equipo AMO): mensajes de disputa. */
+  cliente: ClienteSupabase
 }
 
 /** Ejecuta `accion` con un operador temporal del equipo AMO (se borra al terminar). */
-async function conOperador<T>(
+export async function conOperador<T>(
   entorno: EntornoBootstrap,
   accion: (sesion: SesionOperador) => Promise<T>
 ): Promise<T> {
   const superadmin = await clienteComoSuperadmin(entorno)
-  return conOperadorTemporal(entorno, superadmin, (operador) =>
+  return conOperadorTemporal(entorno, superadmin, (operador, cliente) =>
     accion({
       servicio: crearClienteServicio(entorno, operador.usuarioId),
       operador,
+      cliente,
     })
   )
 }
@@ -241,7 +254,7 @@ async function cuentaParaOferta(
   return cuenta.id
 }
 
-async function aceptarCon(
+export async function aceptarCon(
   sesion: SesionMedio,
   opciones: OpcionesAceptar
 ): Promise<AceptacionCreada> {
@@ -315,7 +328,7 @@ export async function desistirAsignacion(
   )
 }
 
-async function desistirCon(
+export async function desistirCon(
   { servicio, actor }: SesionMedio,
   asignacionId: string,
   motivo: string
@@ -331,7 +344,7 @@ async function desistirCon(
 
 // ── Contenido, evidencia y métricas ──────────────────────────────────────────
 
-async function entregarCon(
+export async function entregarCon(
   { servicio, actor }: SesionMedio,
   asignacionId: string
 ): Promise<ContenidoEntregado> {
@@ -382,7 +395,7 @@ export interface EvidenciaPublicada {
   capturaPath: string
 }
 
-async function publicarCon(
+export async function publicarCon(
   sesion: SesionMedio,
   opciones: OpcionesEvidencia
 ): Promise<EvidenciaPublicada> {
@@ -485,7 +498,7 @@ export interface MetricaCargada {
   capturaPath: string
 }
 
-async function cargarCon(
+export async function cargarCon(
   sesion: SesionMedio,
   opciones: OpcionesMetrica
 ): Promise<MetricaCargada> {
@@ -575,10 +588,39 @@ export async function cargarMetrica(
 
 // ── Lo que hace el equipo AMO ────────────────────────────────────────────────
 
-async function aprobarEvidenciasCon(
+/**
+ * `validar_evidencia_srv` como el operador (la decisión de la cola de
+ * evidencias): aprobar exige la etiqueta verificada; rechazar, observaciones.
+ */
+export async function validarEvidenciaCon(
   { servicio, operador }: SesionOperador,
+  publicacionId: string,
+  decision: { aprobar: true } | { aprobar: false; observaciones: string }
+): Promise<void> {
+  const { error } = await servicio.rpc(
+    "validar_evidencia_srv",
+    argumentosRpc<"validar_evidencia_srv">({
+      p_publicacion_id: publicacionId,
+      p_aprobar: decision.aprobar,
+      p_etiqueta_verificada: decision.aprobar,
+      p_observaciones: decision.aprobar ? null : decision.observaciones,
+      p_actor_id: operador.usuarioId,
+      p_session_id: operador.sesionId,
+    })
+  )
+  if (error) {
+    fallo(
+      `No se pudo ${decision.aprobar ? "aprobar" : "rechazar"} la evidencia ${publicacionId}`,
+      error
+    )
+  }
+}
+
+export async function aprobarEvidenciasCon(
+  sesion: SesionOperador,
   asignacionId: string
 ): Promise<void> {
+  const { servicio, operador } = sesion
   const { data, error } = await servicio
     .from("asignaciones")
     .select(
@@ -590,20 +632,20 @@ async function aprobarEvidenciasCon(
   const pendientes = data.filas.filter(
     (fila) => fila.estado_validacion === "PENDIENTE"
   )
+  // Al aprobar la última, la BD valida la asignación en la misma transacción.
   for (const publicacion of pendientes) {
-    await transicionarComo(
-      servicio,
-      operador,
-      { entidad: "publicaciones", id: publicacion.id, hacia: "APROBADA" },
-      { datos: { etiqueta_verificada: true } }
-    )
+    await validarEvidenciaCon(sesion, publicacion.id, { aprobar: true })
   }
   const aprobadas = data.filas.filter(
     (fila) =>
       fila.estado_validacion === "APROBADA" ||
       fila.estado_validacion === "PENDIENTE"
   ).length
-  if (data.estado === "PUBLICADA" && aprobadas >= (data.publicaciones ?? 1)) {
+  if (
+    pendientes.length === 0 &&
+    data.estado === "PUBLICADA" &&
+    aprobadas >= (data.publicaciones ?? 1)
+  ) {
     await transicionarComo(servicio, operador, {
       entidad: "asignaciones",
       id: asignacionId,
@@ -614,8 +656,8 @@ async function aprobarEvidenciasCon(
 
 /**
  * El equipo AMO aprueba las evidencias pendientes (etiqueta de publicidad
- * verificada) y, con todas aprobadas, valida la asignación
- * (EVIDENCIA_VALIDADA; si ya tiene todos los cortes, METRICAS_CARGADAS).
+ * verificada, `validar_evidencia_srv`): con la última, la asignación queda
+ * EVIDENCIA_VALIDADA (si ya tiene todos los cortes, METRICAS_CARGADAS).
  */
 export async function validarEvidencia(
   entorno: EntornoBootstrap,
@@ -627,9 +669,10 @@ export async function validarEvidencia(
 }
 
 /**
- * El equipo AMO rechaza la evidencia de una publicación con sus observaciones;
- * si la asignación ya estaba PUBLICADA vuelve a CONTENIDO_ENTREGADO para que
- * el medio la corrija (próxima acción CORREGIR_EVIDENCIA).
+ * El equipo AMO rechaza la evidencia de una publicación con sus observaciones
+ * (`validar_evidencia_srv`): si la asignación estaba PUBLICADA vuelve a
+ * CONTENIDO_ENTREGADO para que el medio la corrija (próxima acción
+ * CORREGIR_EVIDENCIA), con al menos `evidencias.plazo_recarga_horas` para hacerlo.
  */
 export async function rechazarEvidencia(
   entorno: EntornoBootstrap,
@@ -639,42 +682,18 @@ export async function rechazarEvidencia(
     observaciones,
   }: { asignacionId: string; numero?: number; observaciones: string }
 ): Promise<void> {
-  await conOperador(entorno, async ({ servicio, operador }) => {
-    const [publicacion, asignacion] = await Promise.all([
-      servicio
-        .from("publicaciones")
-        .select("id")
-        .eq("asignacion_id", asignacionId)
-        .eq("numero", numero)
-        .single(),
-      servicio
-        .from("asignaciones")
-        .select("estado")
-        .eq("id", asignacionId)
-        .single(),
-    ])
-    if (publicacion.error)
-      fallo("No se pudo leer la publicación", publicacion.error)
-    if (asignacion.error)
-      fallo("No se pudo leer la asignación", asignacion.error)
-    await transicionarComo(
-      servicio,
-      operador,
-      { entidad: "publicaciones", id: publicacion.data.id, hacia: "RECHAZADA" },
-      { motivo: observaciones, datos: { observaciones } }
-    )
-    if (asignacion.data.estado === "PUBLICADA") {
-      await transicionarComo(
-        servicio,
-        operador,
-        {
-          entidad: "asignaciones",
-          id: asignacionId,
-          hacia: "CONTENIDO_ENTREGADO",
-        },
-        { motivo: observaciones }
-      )
-    }
+  await conOperador(entorno, async (sesion) => {
+    const { data, error } = await sesion.servicio
+      .from("publicaciones")
+      .select("id")
+      .eq("asignacion_id", asignacionId)
+      .eq("numero", numero)
+      .single()
+    if (error) fallo("No se pudo leer la publicación", error)
+    await validarEvidenciaCon(sesion, data.id, {
+      aprobar: false,
+      observaciones,
+    })
   })
 }
 
@@ -695,16 +714,66 @@ async function metricasPendientes(
   return data.map((fila) => fila.id)
 }
 
-async function aprobarMetricasCon(
+/**
+ * `validar_metrica_srv` como el operador (la decisión de la cola de métricas):
+ * aprobar una con alerta exige anotar qué se revisó; rechazar, observaciones.
+ */
+export async function validarMetricaCon(
   { servicio, operador }: SesionOperador,
-  filtro: { metricaId: string } | { asignacionId: string }
+  metricaId: string,
+  decision: { aprobar: boolean; observaciones?: string | null }
+): Promise<void> {
+  const { error } = await servicio.rpc(
+    "validar_metrica_srv",
+    argumentosRpc<"validar_metrica_srv">({
+      p_metrica_id: metricaId,
+      p_aprobar: decision.aprobar,
+      p_observaciones: decision.observaciones ?? null,
+      p_actor_id: operador.usuarioId,
+      p_session_id: operador.sesionId,
+    })
+  )
+  if (error) {
+    fallo(
+      `No se pudo ${decision.aprobar ? "aprobar" : "rechazar"} la métrica ${metricaId}`,
+      error
+    )
+  }
+}
+
+/**
+ * Ids de las métricas cuya aprobación exige anotar la revisión: con alerta
+ * vigente o previa (la que conserva la BD cuando el medio corrige una
+ * rechazada). El servicio sí lee esas columnas; la sesión no.
+ */
+async function conAlerta(
+  servicio: ClienteSupabase,
+  ids: readonly string[]
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  const { data, error } = await servicio
+    .from("metricas")
+    .select("id, alerta_desviacion, alerta_multiplo, detalle_alertas")
+    .in("id", ids)
+  if (error) fallo("No se pudieron leer las alertas", error)
+  return new Set(
+    data
+      .filter((fila) => exigeRevision(leerAlerta(fila)))
+      .map((fila) => fila.id)
+  )
+}
+
+export async function aprobarMetricasCon(
+  sesion: SesionOperador,
+  filtro: { metricaId: string } | { asignacionId: string },
+  revision: string = REVISION_ALERTA_E2E
 ): Promise<number> {
-  const ids = await metricasPendientes(servicio, filtro)
+  const ids = await metricasPendientes(sesion.servicio, filtro)
+  const alertadas = await conAlerta(sesion.servicio, ids)
   for (const id of ids) {
-    await transicionarComo(servicio, operador, {
-      entidad: "metricas",
-      id,
-      hacia: "APROBADA",
+    await validarMetricaCon(sesion, id, {
+      aprobar: true,
+      observaciones: alertadas.has(id) ? revision : null,
     })
   }
   return ids.length
@@ -712,8 +781,9 @@ async function aprobarMetricasCon(
 
 /**
  * El equipo AMO aprueba una métrica (o todas las pendientes de una
- * asignación). Exige la evidencia de su publicación aprobada. Devuelve
- * cuántas aprobó.
+ * asignación) con `validar_metrica_srv`; si tiene alerta (vigente o previa),
+ * anota la revisión, que la BD guarda en la bitácora y no en observaciones.
+ * Exige la evidencia de su publicación aprobada. Devuelve cuántas aprobó.
  */
 export async function aprobarMetrica(
   entorno: EntornoBootstrap,
@@ -722,22 +792,21 @@ export async function aprobarMetrica(
   return conOperador(entorno, (sesion) => aprobarMetricasCon(sesion, filtro))
 }
 
-/** El equipo AMO rechaza una métrica con sus observaciones: el medio la corrige (CORREGIR_METRICAS). */
+/**
+ * El equipo AMO rechaza una métrica con sus observaciones
+ * (`validar_metrica_srv`): el medio la corrige (CORREGIR_METRICAS) y, si la
+ * asignación ya tenía todo cargado, vuelve a EVIDENCIA_VALIDADA.
+ */
 export async function rechazarMetrica(
   entorno: EntornoBootstrap,
   { metricaId, observaciones }: { metricaId: string; observaciones: string }
 ): Promise<void> {
-  await conOperador(entorno, ({ servicio, operador }) =>
-    transicionarComo(
-      servicio,
-      operador,
-      { entidad: "metricas", id: metricaId, hacia: "RECHAZADA" },
-      { motivo: observaciones, datos: { observaciones } }
-    )
+  await conOperador(entorno, (sesion) =>
+    validarMetricaCon(sesion, metricaId, { aprobar: false, observaciones })
   )
 }
 
-async function verificarCon(
+export async function verificarCon(
   { servicio, operador }: SesionOperador,
   asignacionId: string
 ): Promise<void> {
@@ -880,6 +949,26 @@ async function conDescargas(
   return ids
 }
 
+/**
+ * Disputas con mensajes (`disputa_mensajes` es de solo inserción: la BD no
+ * deja borrarlas, ni a su asignación).
+ */
+async function disputasConMensajes(
+  servicio: ClienteSupabase,
+  disputaIds: readonly string[]
+): Promise<Set<string>> {
+  const ids = new Set<string>()
+  for (const trozo of trozos(disputaIds)) {
+    const { data, error } = await servicio
+      .from("disputa_mensajes")
+      .select("disputa_id")
+      .in("disputa_id", trozo)
+    if (error) fallo("No se pudieron leer los mensajes de disputa", error)
+    for (const fila of data) ids.add(fila.disputa_id)
+  }
+  return ids
+}
+
 async function borrarArchivosDe(
   servicio: ClienteSupabase,
   carpetas: readonly string[]
@@ -899,10 +988,10 @@ type TablaLimpiable =
   "disputas" | "metricas" | "publicaciones" | "asignaciones" | "notificaciones"
 
 /**
- * Borra asignaciones SIN descargas con lo que cuelga de ellas (capturas,
- * disputas, métricas, publicaciones, montos, avisos), en orden de
- * dependencias. No toca contadores: quien llama libera antes los cupos o borra
- * la campaña entera.
+ * Borra asignaciones SIN descargas ni mensajes de disputa con lo que cuelga de
+ * ellas (capturas, disputas, métricas, publicaciones, montos, avisos), en
+ * orden de dependencias. No toca contadores: quien llama libera antes los
+ * cupos o borra la campaña entera.
  */
 export async function borrarAsignaciones(
   servicio: ClienteSupabase,
@@ -917,6 +1006,12 @@ export async function borrarAsignaciones(
     )
   }
   const disputas = await idsDonde(servicio, "disputas", "asignacion_id", ids)
+  const conMensajes = await disputasConMensajes(servicio, disputas)
+  if (conMensajes.size > 0) {
+    throw new ErrorBootstrap(
+      `${conMensajes.size} disputa(s) tienen mensajes: la BD no deja borrarlas (cierra la disputa y cancela la asignación).`
+    )
+  }
   await borrarArchivosDe(servicio, [
     ...ids.map((id) => `asignacion/${id}`),
     ...disputas.map((id) => `disputa/${id}`),
@@ -963,56 +1058,168 @@ async function cancelarCon(
   }
 }
 
+/**
+ * Cierra una disputa abierta resolviéndola con la asignación CANCELADA (causa
+ * administrativa): así la campaña se puede cancelar y archivar.
+ */
+async function cerrarDisputaCon(
+  { servicio, operador }: SesionOperador,
+  disputaId: string
+): Promise<void> {
+  await transicionarComo(
+    servicio,
+    operador,
+    { entidad: "disputas", id: disputaId, hacia: "RESUELTA" },
+    {
+      motivo: MOTIVO_RESTABLECER,
+      datos: {
+        estado_asignacion_resultante: "CANCELADA",
+        causa: "ADMINISTRATIVA",
+      } satisfies Record<string, Json>,
+    }
+  )
+}
+
+/**
+ * El medio reclama una vencida (`abrir_disputa_srv`, motivo Otro) para que el
+ * equipo AMO pueda cerrarla: es la única salida de una vencida reclamable.
+ * Devuelve la disputa.
+ */
+async function reclamarParaCerrar(
+  entorno: EntornoBootstrap,
+  medio: MedioPauta,
+  asignacionId: string
+): Promise<string> {
+  return conSesionMedio(entorno, medio, async ({ servicio, actor }) => {
+    const { data, error } = await servicio.rpc("abrir_disputa_srv", {
+      p_asignacion_id: asignacionId,
+      p_motivo: "OTRO",
+      p_descripcion: MOTIVO_RESTABLECER,
+      p_actor_id: actor.usuarioId,
+      p_session_id: actor.sesionId,
+    })
+    if (error) fallo(`No se pudo cerrar el reclamo de ${asignacionId}`, error)
+    return data
+  })
+}
+
 export interface PautaBorrada {
   /** Campañas borradas enteras. */
   campanas: number
-  /** Campañas con descargas: canceladas y archivadas (la BD no deja borrarlas). */
+  /** Campañas con descargas o mensajes: canceladas y archivadas (la BD no deja borrarlas). */
   archivadas: number
   /** Asignaciones borradas. */
   asignaciones: number
+  /** Disputas abiertas que se cerraron (cancelando su asignación). */
+  disputasCerradas: number
+  /** Vencidas aún reclamables que se cerraron (reclamo del medio y cancelación). */
+  reclamosCerrados: number
   /** Asignaciones que solo quedaron canceladas (con descargas) o que no se tocaron. */
   conservadas: { id: string; motivo: string }[]
 }
 
+/** Horas que tiene el medio para reclamar una vencida (`disputas.plazo_vencida_horas`). */
+async function plazoReclamoHoras(servicio: ClienteSupabase): Promise<number> {
+  const { data, error } = await servicio
+    .from("configuracion")
+    .select("valor")
+    .eq("clave", "disputas.plazo_vencida_horas")
+    .single()
+  if (error) fallo("No se pudo leer disputas.plazo_vencida_horas", error)
+  const horas = Number(data.valor)
+  if (!Number.isFinite(horas) || horas < 0) {
+    throw new ErrorBootstrap("disputas.plazo_vencida_horas no es un número.")
+  }
+  return horas
+}
+
+const DISPUTA_ABIERTA: ReadonlySet<string> = new Set(["ABIERTA", "EN_REVISION"])
+
 /**
  * Limpia las campañas de la empresa que empiezan por `prefijo` (sin las ya
- * archivadas): las que no tienen descargas se borran enteras (asignaciones de
+ * archivadas): las que la BD deja borrar se borran enteras (asignaciones de
  * cualquier medio, ofertas, creativos, archivos y avisos); las que tienen
- * descargas, que la BD no deja borrar, quedan con sus asignaciones canceladas
- * (cupos liberados), canceladas y archivadas, para que no vuelvan a aparecer
- * en el marketplace ni en las listas. `servicio` sale de `clienteComoSuperadmin`.
+ * descargas o mensajes de disputa (de solo inserción) quedan con sus disputas
+ * cerradas, sus asignaciones canceladas (cupos liberados), canceladas y
+ * archivadas, para que no vuelvan a aparecer en el marketplace ni en las
+ * listas. Una vencida que el medio aún podría reclamar se cierra con su sesión
+ * (`medios`: los medios E2E de los que se conocen las credenciales); sin ella,
+ * se conserva. `servicio` sale de `clienteComoSuperadmin`.
  */
 export async function borrarPauta(
   entorno: EntornoBootstrap,
   servicio: ClienteSupabase,
-  { anuncianteId, prefijo }: { anuncianteId: string; prefijo: string }
+  {
+    anuncianteId,
+    prefijo,
+    medios = [],
+  }: { anuncianteId: string; prefijo: string; medios?: readonly MedioPauta[] }
 ): Promise<PautaBorrada> {
   exigirFueraDeProduccion(entorno.url, CONTEXTO)
   const { data: campanas, error } = await servicio
     .from("campanas")
-    .select("id, estado, asignaciones ( id, estado, estado_previo_disputa )")
+    .select(
+      "id, estado, asignaciones ( id, estado, estado_previo_disputa, medio_id, vencida_at, disputas ( id, estado ) )"
+    )
     .eq("anunciante_id", anuncianteId)
     .like("nombre", `${prefijo}%`)
     .is("deleted_at", null)
   if (error) fallo("No se pudieron leer las campañas", error)
-  const descargadas = await conDescargas(
-    servicio,
-    campanas.flatMap((campana) => campana.asignaciones.map((a) => a.id))
+  const filas = campanas.flatMap((campana) => campana.asignaciones)
+  const [descargadas, conMensajes, plazoHoras] = await Promise.all([
+    conDescargas(
+      servicio,
+      filas.map((fila) => fila.id)
+    ),
+    disputasConMensajes(
+      servicio,
+      filas.flatMap((fila) => fila.disputas.map((disputa) => disputa.id))
+    ),
+    plazoReclamoHoras(servicio),
+  ])
+  const ahora = new Date()
+  const porCampana: CampanaALimpiar[] = campanas.map((campana) => ({
+    id: campana.id,
+    estado: campana.estado,
+    asignaciones: campana.asignaciones.map((asignacion) => ({
+      id: asignacion.id,
+      estado: asignacion.estado,
+      estadoPrevioDisputa: asignacion.estado_previo_disputa,
+      conDescarga: descargadas.has(asignacion.id),
+      conMensajes: asignacion.disputas.some((d) => conMensajes.has(d.id)),
+      disputaAbiertaId:
+        asignacion.disputas.find((d) => DISPUTA_ABIERTA.has(d.estado))?.id ??
+        null,
+      reclamable: esReclamable(
+        {
+          estado: asignacion.estado,
+          vencidaAt: asignacion.vencida_at,
+          conDisputa: asignacion.disputas.length > 0,
+        },
+        plazoHoras,
+        ahora
+      ),
+    })),
+  }))
+  const plan = planCampanasPauta(porCampana)
+  const medioDe = new Map(filas.map((fila) => [fila.id, fila.medio_id]))
+  const sinCredenciales = plan.cerrarReclamos.filter(
+    (id) => !medios.some((medio) => medio.id === medioDe.get(id))
   )
-  const plan = planCampanasPauta(
-    campanas.map((campana) => ({
-      id: campana.id,
-      estado: campana.estado,
-      asignaciones: campana.asignaciones.map((asignacion) => ({
-        id: asignacion.id,
-        estado: asignacion.estado,
-        estadoPrevioDisputa: asignacion.estado_previo_disputa,
-        conDescarga: descargadas.has(asignacion.id),
-      })),
-    }))
+  const reclamos = plan.cerrarReclamos.filter(
+    (id) => !sinCredenciales.includes(id)
   )
   if (plan.retener.length > 0) {
     await conOperador(entorno, async (sesion) => {
+      const disputas = plan.cerrarDisputas.map((d) => d.disputaId)
+      for (const asignacionId of reclamos) {
+        const medio = medios.find((m) => m.id === medioDe.get(asignacionId))
+        if (medio) {
+          disputas.push(await reclamarParaCerrar(entorno, medio, asignacionId))
+        }
+      }
+      for (const disputaId of disputas)
+        await cerrarDisputaCon(sesion, disputaId)
       await cancelarCon(sesion, plan.cancelar)
       for (const campanaId of plan.cancelarCampanas) {
         await transicionarComo(
@@ -1046,19 +1253,37 @@ export async function borrarPauta(
     ...plan.borrarAsignaciones,
   ])
   const borradas = await borrarCampanasPorId(servicio, plan.borrar)
+  const noBorrables = new Set(
+    porCampana
+      .flatMap((campana) => campana.asignaciones)
+      .filter((asignacion) => !esBorrable(asignacion))
+      .map((asignacion) => asignacion.id)
+  )
   const conservadas = [
     ...plan.conservar,
-    ...plan.cancelar
-      .filter((id) => descargadas.has(id))
+    ...sinCredenciales.map((id) => ({
+      id,
+      motivo:
+        "vencida que su medio aún puede reclamar (sin sus credenciales no se cierra)",
+    })),
+    ...[
+      ...plan.cancelar,
+      ...plan.cerrarDisputas.map((d) => d.asignacionId),
+      ...reclamos,
+    ]
+      .filter((id) => noBorrables.has(id))
       .map((id) => ({
         id,
-        motivo: "tiene descargas: queda cancelada (la BD no deja borrarla)",
+        motivo:
+          "tiene descargas o mensajes de disputa: queda cancelada (la BD no deja borrarla)",
       })),
   ]
   return {
     campanas: borradas,
     archivadas: plan.retener.length,
     asignaciones,
+    disputasCerradas: plan.retener.length > 0 ? plan.cerrarDisputas.length : 0,
+    reclamosCerrados: plan.retener.length > 0 ? reclamos.length : 0,
     conservadas,
   }
 }
@@ -1145,6 +1370,7 @@ export async function restablecerPautaMedio(
     const pauta = await borrarPauta(entorno, servicio, {
       anuncianteId,
       prefijo: PREFIJO_PAUTA,
+      medios: [medio],
     })
     campanas += pauta.campanas
     archivadas += pauta.archivadas

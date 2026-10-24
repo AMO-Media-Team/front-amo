@@ -1,7 +1,12 @@
 import { CircleCheck, Heart, MapPinned, Radar, ReceiptText } from "lucide-react"
+import Link from "next/link"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { MiniMapaColombia } from "@/components/maps/mini-mapa-colombia"
+import {
+  RUTA_FACTURAS_ANUNCIANTE,
+  rutaFacturaAnunciante,
+} from "@/features/facturas-anunciante/rutas"
 import {
   formatearCompacto,
   formatearCOP,
@@ -287,7 +292,10 @@ function TablaMedios({ ranking }: { ranking: RankingMedios }) {
   )
 }
 
-/** Facturas con saldo: total por pagar, lo vencido y las próximas a vencer. */
+/**
+ * Facturas con saldo: total por pagar, lo vencido y las próximas a vencer;
+ * cada una abre su ficha y el pie lleva a todas las facturas (ANU-013).
+ */
 export function CarteraAnunciante({
   cartera,
   className,
@@ -302,6 +310,10 @@ export function CarteraAnunciante({
       descripcion="Saldo de tus facturas emitidas."
       icono={ReceiptText}
       className={className}
+      enlace={{
+        href: RUTA_FACTURAS_ANUNCIANTE,
+        texto: alDia ? "Ver tus facturas" : "Ver todas tus facturas",
+      }}
     >
       {alDia ? (
         <div className="flex items-center gap-3 rounded-lg border border-dashed bg-background/40 p-4">
@@ -336,12 +348,16 @@ export function CarteraAnunciante({
             {cartera.facturas.map((factura) => (
               <li
                 key={factura.id}
-                className="flex items-center justify-between gap-3 px-3 py-2.5 text-[0.8125rem]"
+                className="relative flex items-center justify-between gap-3 px-3 py-2.5 text-[0.8125rem] transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40 has-[a:focus-visible]:anillo-foco"
               >
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">
+                  {/* Toda la fila abre la ficha; el anillo de foco lo pinta la fila. */}
+                  <Link
+                    href={rutaFacturaAnunciante(factura.id)}
+                    className="truncate font-medium underline-offset-4 outline-none after:absolute after:inset-0 hover:underline"
+                  >
                     {factura.numero ? `Factura ${factura.numero}` : "Factura"}
-                  </span>
+                  </Link>
                   <span
                     className={cn(
                       "text-[0.6875rem]",

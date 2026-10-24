@@ -21,9 +21,11 @@ export const metadata: Metadata = { title: "Mis campañas" }
 
 async function SeccionTablero({
   puedeEjecutar,
+  puedeDisputar,
   puedeVerOfertas,
 }: {
   puedeEjecutar: boolean
+  puedeDisputar: boolean
   puedeVerOfertas: boolean
 }) {
   const { asignaciones, completas } = await misAsignaciones()
@@ -37,6 +39,7 @@ async function SeccionTablero({
       segmentoInicial={segmentoInicial(conteoDelTablero(tablero))}
       ahoraServidor={ahoraServidor}
       puedeEjecutar={puedeEjecutar}
+      puedeDisputar={puedeDisputar}
       puedeVerOfertas={puedeVerOfertas}
       completas={completas}
     />
@@ -73,6 +76,7 @@ export default async function PaginaMisCampanas() {
               puedeEjecutar={tieneAlgunPermiso(usuario, [
                 "asignaciones.ejecutar",
               ])}
+              puedeDisputar={tieneAlgunPermiso(usuario, ["disputas.abrir"])}
               puedeVerOfertas={puedeVerOfertas}
             />
           </Suspense>

@@ -1,9 +1,17 @@
 import "server-only"
 
-import { Activity, ChartColumn, FileText, Megaphone } from "lucide-react"
+import {
+  Activity,
+  ChartColumn,
+  FileText,
+  Megaphone,
+  Receipt,
+} from "lucide-react"
 import { notFound } from "next/navigation"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { rutaFacturasDeCampana } from "@/features/facturas-anunciante/rutas"
 import { campanaMetricas } from "@/features/metricas-campana/calculos"
 import { EsqueletoMetricas } from "@/features/metricas-campana/components/esqueleto-metricas"
 import { SeccionMetricas } from "@/features/metricas-campana/components/seccion-metricas"
@@ -147,15 +155,28 @@ export async function FichaMiCampana({
         campana={campana}
         hoy={hoy}
         acciones={
-          <AccionesCampana
-            campana={{
-              id: campana.id,
-              nombre: campana.nombre,
-              estado: campana.estado,
-            }}
-            acciones={acciones}
-            puedeEditar={puedeEditar}
-          />
+          <>
+            {/* ANU-013: las facturas que incluyen esta campaña (también las consolidadas). */}
+            {campana.estado !== "BORRADOR" &&
+            tieneAlgunPermiso(usuario, ["facturas.ver_propias"]) ? (
+              <EnlaceBoton
+                href={rutaFacturasDeCampana(campana.id)}
+                variant="outline"
+              >
+                <Receipt data-icon="inline-start" aria-hidden />
+                Facturas
+              </EnlaceBoton>
+            ) : null}
+            <AccionesCampana
+              campana={{
+                id: campana.id,
+                nombre: campana.nombre,
+                estado: campana.estado,
+              }}
+              acciones={acciones}
+              puedeEditar={puedeEditar}
+            />
+          </>
         }
         aviso={
           empresa && campana.estado !== "FINALIZADA" ? (

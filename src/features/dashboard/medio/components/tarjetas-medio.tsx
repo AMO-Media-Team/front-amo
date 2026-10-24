@@ -99,7 +99,8 @@ const UMBRAL_HEROE_COMPACTO = 10_000_000
 
 /**
  * La cifra que el medio viene a ver: lo ganado en el periodo (cifra héroe,
- * animada), su variación y tendencia, y lo pendiente y lo ya pagado.
+ * animada), su variación y tendencia, lo pendiente y lo ya pagado, y el
+ * enlace a «Ganancias» con sus pagos y soportes.
  */
 export function HeroGanancias({
   titulo,
@@ -107,6 +108,7 @@ export function HeroGanancias({
   pendiente,
   pagado,
   etiquetaComparacion,
+  enlaceGanancias = null,
   className,
 }: {
   titulo: string
@@ -114,6 +116,8 @@ export function HeroGanancias({
   pendiente: number | null
   pagado: number | null
   etiquetaComparacion: string
+  /** «Ganancias» (sus pagos y soportes), si el rol puede abrirla. */
+  enlaceGanancias?: Route | null
   className?: string
 }) {
   const valor = ganado?.valor ?? 0
@@ -206,6 +210,16 @@ export function HeroGanancias({
           nota="Neto recibido, después de retenciones"
         />
       </dl>
+      {enlaceGanancias ? (
+        <EnlaceBoton
+          href={enlaceGanancias}
+          variant="outline"
+          className="w-full sm:w-fit"
+        >
+          Ver ganancias
+          <ArrowRight data-icon="inline-end" aria-hidden />
+        </EnlaceBoton>
+      ) : null}
     </section>
   )
 }
@@ -490,7 +504,7 @@ function Negocio({
   conEnlace: boolean
 }) {
   const pasos = ESTADOS_EN_CURSO.length
-  const paso = pasoEstado(negocio.estado)
+  const paso = pasoEstado(negocio.estado, negocio.estadoPrevioDisputa)
   const estado = etiquetaEstado(negocio.estado)
   const titulo = negocio.titulo ?? estado
   return (

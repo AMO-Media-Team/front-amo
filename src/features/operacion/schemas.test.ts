@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  esquemaCancelarAsignacion,
   esquemaEvidencias,
   esquemaExportacion,
   esquemaRevelar,
@@ -78,5 +79,48 @@ describe("esquemaExportacion", () => {
     expect(
       esquemaExportacion.safeParse({ ...base, filas: 10_001 }).success
     ).toBe(false)
+  })
+})
+
+describe("esquemaCancelarAsignacion", () => {
+  const BASE = {
+    asignacionId: ID,
+    estadoVisto: "PUBLICADA",
+    causa: "ADMINISTRATIVA",
+    motivo: "  La oferta tenía un error de configuración.  ",
+  } as const
+
+  it("exige causa del catálogo y motivo; recorta y no suspende por omisión", () => {
+    expect(esquemaCancelarAsignacion.parse(BASE)).toEqual({
+      ...BASE,
+      motivo: "La oferta tenía un error de configuración.",
+      suspenderMedio: false,
+    })
+    const sinCausa = esquemaCancelarAsignacion.safeParse({
+      ...BASE,
+      causa: "OTRA",
+    })
+    expect(sinCausa.error?.issues[0]?.message).toBe(
+      "Elige la causa de la cancelación."
+    )
+    const corto = esquemaCancelarAsignacion.safeParse({ ...BASE, motivo: "no" })
+    expect(corto.error?.issues[0]?.path).toEqual(["motivo"])
+  })
+
+  it("la suspensión solo acompaña al fraude o al incumplimiento del medio", () => {
+    const administrativa = esquemaCancelarAsignacion.safeParse({
+      ...BASE,
+      suspenderMedio: true,
+    })
+    expect(administrativa.error?.issues[0]?.path).toEqual(["suspenderMedio"])
+    for (const causa of ["FRAUDE", "INCUMPLIMIENTO_MEDIO"] as const) {
+      expect(
+        esquemaCancelarAsignacion.safeParse({
+          ...BASE,
+          causa,
+          suspenderMedio: true,
+        }).success
+      ).toBe(true)
+    }
   })
 })

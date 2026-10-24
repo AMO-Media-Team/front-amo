@@ -87,7 +87,7 @@ export const facturasPendientes = cache(
     const supabase = await clientePanel()
     const { data, error } = await supabase
       .from("facturas")
-      .select("id, prefijo, numero, total, saldo, estado, fecha_vencimiento")
+      .select("id, numero, total, saldo, estado, fecha_vencimiento")
       .in("estado", [...ESTADOS_PENDIENTES])
       .order("fecha_vencimiento", { ascending: true, nullsFirst: false })
       .limit(LIMITE_FACTURAS)
@@ -99,9 +99,8 @@ export const facturasPendientes = cache(
         ? [
             {
               id: fila.id,
-              numero: fila.numero
-                ? `${fila.prefijo ?? ""}${fila.numero}`
-                : null,
+              // `numero` es columna generada (prefijo || consecutivo): ya trae el prefijo.
+              numero: fila.numero,
               total: n(fila.total),
               saldo: n(fila.saldo),
               estado: fila.estado,

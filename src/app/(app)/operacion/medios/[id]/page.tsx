@@ -5,6 +5,8 @@ import {
   Handshake,
   LayoutDashboard,
   MapPinned,
+  Scale,
+  ShieldAlert,
   UsersRound,
 } from "lucide-react"
 import type { Metadata } from "next"
@@ -36,6 +38,17 @@ import {
   cuentasDelMedio,
   obtenerMedio,
 } from "@/features/operacion/queries/medios"
+import {
+  EsqueletoEnCurso,
+  EsqueletoListaFicha,
+} from "@/features/suspension-medios/components/esqueletos"
+import {
+  SeccionAlertasMedio,
+  SeccionDisputasMedio,
+  SeccionEnCursoSuspendido,
+} from "@/features/suspension-medios/components/secciones"
+import { accionSuspension } from "@/features/suspension-medios/decision"
+import { pendientesDelMedio } from "@/features/suspension-medios/queries"
 import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
 import { cargarDatosGestion } from "@/features/usuarios/gestion"
 import type { OrganizacionFija } from "@/features/usuarios/tipos"
@@ -61,11 +74,13 @@ export async function generateMetadata({
 }
 
 /**
- * Ficha de un medio: cabecera e indicadores, y pestañas Resumen, Verificación,
- * Cuentas sociales, Asignaciones, Documentos, Pertinencia y Usuarios. El
- * equipo AMO edita sus datos, lo verifica e invita a su equipo desde aquí.
- * Cada sección consulta por su cuenta y llega en streaming; lo que el rol no
- * puede ver o hacer no se consulta.
+ * Ficha de un medio (ADM-002): cabecera e indicadores, y pestañas Resumen,
+ * Verificación, Cuentas sociales, Asignaciones, Disputas, Alertas, Documentos,
+ * Pertinencia y Usuarios. El equipo AMO edita sus datos, lo verifica, lo
+ * suspende o lo reactiva (con motivo) e invita a su equipo desde aquí; si está
+ * suspendido, la ficha lista lo que conserva en curso para decidir si se
+ * cancela. Cada sección consulta por su cuenta y llega en streaming; lo que el
+ * rol no puede ver o hacer no se consulta.
  */
 export default async function PaginaMedio({
   params,
@@ -75,6 +90,7 @@ export default async function PaginaMedio({
   if (!UUID.test(id)) notFound()
 
   const verAsignaciones = tieneAlgunPermiso(usuario, ["asignaciones.ver"])
+  const verDisputas = tieneAlgunPermiso(usuario, ["disputas.ver"])
   const verSensibles = tieneAlgunPermiso(usuario, ["datos_sensibles.ver"])
   const verVerificaciones = tieneAlgunPermiso(usuario, ["medios.verificar"])
   // La RLS de documentos exige ambos permisos.
@@ -86,15 +102,18 @@ export default async function PaginaMedio({
     "medios.clasificar_pertinencia",
   ])
 
-  const [medio, cuentas, categorias, gestion] = await Promise.all([
+  const [medio, cuentas, categorias, gestion, pendientes] = await Promise.all([
     obtenerMedio(id),
     cuentasDelMedio(id, { verVerificaciones }),
     puedeEditar ? categoriasEdicion(id) : null,
     puedeInvitar
       ? cargarDatosGestion(usuario, { organizaciones: false })
       : null,
+    // Contadores de las pestañas Disputas y Alertas (nunca fallan).
+    pendientesDelMedio(id, { verDisputas, verAlertas: verAsignaciones }),
   ])
   if (!medio) notFound()
+  const suspension = accionSuspension(medio.estado, usuario.permisos)
 
   const invitarA: OrganizacionFija | null = gestion
     ? { tipo: "MEDIO", id: medio.id, nombre: medio.nombre }
@@ -149,6 +168,47 @@ export default async function PaginaMedio({
       contenido: (
         <Diferida recurso="las asignaciones del medio">
           <SeccionActividad dueno="medio" id={medio.id} />
+        </Diferida>
+      ),
+    })
+  }
+  // ADM-002: historial de disputas de sus asignaciones.
+  if (verDisputas) {
+    pestanas.push({
+      clave: "disputas",
+      titulo: "Disputas",
+      icono: <Scale aria-hidden />,
+      contador: pendientes.disputasAbiertas,
+      contenido: (
+        <Diferida
+          recurso="las disputas del medio"
+          respaldo={
+            <EsqueletoListaFicha etiqueta="Cargando las disputas del medio…" />
+          }
+        >
+          <SeccionDisputasMedio
+            medioId={medio.id}
+            verAsignaciones={verAsignaciones}
+          />
+        </Diferida>
+      ),
+    })
+  }
+  // INT-003/INT-004: sus métricas con alerta (`alertas_metricas` exige ver asignaciones).
+  if (verAsignaciones) {
+    pestanas.push({
+      clave: "alertas",
+      titulo: "Alertas",
+      icono: <ShieldAlert aria-hidden />,
+      contador: pendientes.alertasPorValidar,
+      contenido: (
+        <Diferida
+          recurso="las alertas de métricas del medio"
+          respaldo={
+            <EsqueletoListaFicha etiqueta="Cargando las métricas con alerta…" />
+          }
+        >
+          <SeccionAlertasMedio medioId={medio.id} />
         </Diferida>
       ),
     })
@@ -211,9 +271,31 @@ export default async function PaginaMedio({
                 : null
             }
             invitarA={invitarA}
+            suspension={
+              suspension
+                ? {
+                    medio: { id: medio.id, nombre: medio.nombre },
+                    accion: suspension,
+                    verAsignaciones,
+                    verDisputas,
+                  }
+                : null
+            }
           />
         }
       />
+      {/* ADM-002 c2: suspendido, conserva lo que tiene en curso hasta que se decida. */}
+      {medio.estado === "SUSPENDIDO" && verAsignaciones ? (
+        <Diferida
+          recurso="las asignaciones en curso del medio"
+          respaldo={<EsqueletoEnCurso />}
+        >
+          <SeccionEnCursoSuspendido
+            medioId={medio.id}
+            verDisputas={verDisputas}
+          />
+        </Diferida>
+      ) : null}
       <Diferida
         recurso="los indicadores del medio"
         respaldo={<EsqueletoIndicadores cantidad={5} />}

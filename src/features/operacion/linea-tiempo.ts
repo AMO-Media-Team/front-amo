@@ -4,6 +4,11 @@
  * (siempre visibles para quien ve la asignación) y las transiciones de la
  * bitácora (con actor y motivo; solo con `auditoria.ver`). Cuando ambas
  * describen el mismo paso, gana la bitácora, que tiene más contexto.
+ *
+ * Las observaciones de una evidencia o una métrica solo explican su rechazo.
+ * La constancia de lo revisado al aprobar una métrica y el motivo de su
+ * corrección viven solo en la bitácora (las partes no los ven): llegan como
+ * `revisionesMetricas`.
  */
 import {
   CORTES,
@@ -61,6 +66,22 @@ export interface ValidacionRegistrada {
 export interface MetricaRegistrada extends ValidacionRegistrada {
   corte: Corte
   conAlerta: boolean
+}
+
+/**
+ * Aprobación (transición a APROBADA) o corrección auditada de una métrica,
+ * leída de la bitácora (solo con `auditoria.ver`).
+ */
+export interface RevisionMetricaRegistrada {
+  id: number
+  at: string
+  metricaId: string
+  tipo: "aprobacion" | "correccion"
+  /** Correo enmascarado o nombre del actor; `null` = el sistema. */
+  actor: string | null
+  actorRol: string | null
+  /** Lo que se revisó al aprobar (constancia) o el motivo de la corrección. */
+  motivo: string | null
 }
 
 export interface DisputaRegistrada {
@@ -132,6 +153,11 @@ function esEstado(valor: string | null): valor is EstadoAsignacion {
   return valor !== null && valor in ESTADOS_ASIGNACION
 }
 
+/** «op***@amo.test · OPERACIONES» (o `null` si lo hizo el sistema). */
+function actorDe(actor: string | null, rol: string | null): string | null {
+  return actor ? `${actor}${rol ? ` · ${rol}` : ""}` : null
+}
+
 // ── Eventos de estado ────────────────────────────────────────────────────────
 
 const COLUMNAS_MARCA: readonly [EstadoAsignacion, keyof MarcasAsignacion][] = [
@@ -180,9 +206,7 @@ function eventosDeBitacora(
         detalle: transicion.motivo,
         tono: tonoDeTransicion(transicion.desde, hacia),
         estado: hacia,
-        actor: transicion.actor
-          ? `${transicion.actor}${transicion.actorRol ? ` · ${transicion.actorRol}` : ""}`
-          : null,
+        actor: actorDe(transicion.actor, transicion.actorRol),
         fuente: "bitacora" as const,
       },
     ]
@@ -245,6 +269,7 @@ function eventosDeMarcas(
 function eventosDeValidaciones(
   publicaciones: readonly ValidacionRegistrada[],
   metricas: readonly MetricaRegistrada[],
+  revisiones: readonly RevisionMetricaRegistrada[],
   conVariasPublicaciones: boolean
 ): EventoLineaTiempo[] {
   const eventos: EventoLineaTiempo[] = []
@@ -295,6 +320,27 @@ function eventosDeValidaciones(
         fuente: "registro",
       })
     }
+  }
+
+  // Aprobaciones y correcciones: no dependen de `observaciones` (ya no las
+  // guardan), sino de la bitácora.
+  const metricaDe = new Map(metricas.map((metrica) => [metrica.id, metrica]))
+  for (const revision of revisiones) {
+    const metrica = metricaDe.get(revision.metricaId)
+    if (!metrica) continue
+    const corte = CORTES[metrica.corte].etiqueta
+    const aprobacion = revision.tipo === "aprobacion"
+    eventos.push({
+      id: `bitacora-metrica-${revision.id}`,
+      at: revision.at,
+      categoria: "metrica",
+      titulo: `Métricas de ${corte} ${aprobacion ? "aprobadas" : "corregidas por AMO"}${sufijo(metrica.numero)}`,
+      detalle: revision.motivo,
+      tono: aprobacion ? "exito" : "aviso",
+      estado: null,
+      actor: actorDe(revision.actor, revision.actorRol),
+      fuente: "bitacora",
+    })
   }
   return eventos
 }
@@ -385,6 +431,8 @@ export interface FuentesLineaTiempo {
   transiciones?: readonly TransicionRegistrada[]
   publicaciones?: readonly ValidacionRegistrada[]
   metricas?: readonly MetricaRegistrada[]
+  /** De la bitácora (`auditoria.ver`): aprobaciones y correcciones de métricas. */
+  revisionesMetricas?: readonly RevisionMetricaRegistrada[]
   disputas?: readonly DisputaRegistrada[]
 }
 
@@ -394,6 +442,7 @@ export function construirLineaTiempo({
   transiciones = [],
   publicaciones = [],
   metricas = [],
+  revisionesMetricas = [],
   disputas = [],
 }: FuentesLineaTiempo): EventoLineaTiempo[] {
   const deBitacora = eventosDeBitacora(transiciones)
@@ -404,7 +453,12 @@ export function construirLineaTiempo({
       [...deBitacora, ...eventosDeMarcas(marcas, deBitacora)],
       eventosDeDisputas(disputas)
     ),
-    ...eventosDeValidaciones(publicaciones, metricas, variasPublicaciones),
+    ...eventosDeValidaciones(
+      publicaciones,
+      metricas,
+      revisionesMetricas,
+      variasPublicaciones
+    ),
   ].sort(
     (a, b) =>
       new Date(a.at).getTime() - new Date(b.at).getTime() ||

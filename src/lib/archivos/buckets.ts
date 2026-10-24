@@ -45,7 +45,14 @@ export const BUCKETS = {
   },
   soportes: {
     maxBytes: 10 * MIB,
-    mimes: ["application/pdf", "image/jpeg", "image/png", "text/csv"],
+    // JSON: archivo genérico del documento soporte para el proveedor tecnológico (e3_finanzas).
+    mimes: [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "text/csv",
+      "application/json",
+    ],
   },
 } as const satisfies Record<string, LimitesBucket>
 

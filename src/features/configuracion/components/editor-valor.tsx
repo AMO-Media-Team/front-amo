@@ -155,10 +155,13 @@ function EditorTexto({
   borrador,
   onCambio,
   idCampo,
+  idDescripcion,
   invalido,
   deshabilitado,
   etiquetas,
   onEtiqueta,
+  onEnviar,
+  onCancelar,
 }: PropsEditorValor & { borrador: Extract<Borrador, { tipo: "texto" }> }) {
   if (parametro.clave === CLAVE_MUNICIPIO_PLATAFORMA) {
     return (
@@ -177,6 +180,30 @@ function EditorTexto({
         }}
         className="max-w-sm"
       />
+    )
+  }
+  if (!parametro.opciones) {
+    // Texto libre (sin opciones), p. ej. el correo de soporte.
+    const correo = parametro.clave.endsWith(".correo")
+    return (
+      <InputGroup className="w-full max-w-sm bg-background">
+        <InputGroupInput
+          id={idCampo}
+          value={borrador.valor}
+          onChange={(evento) =>
+            onCambio({ tipo: "texto", valor: evento.target.value })
+          }
+          onKeyDown={teclas(onEnviar, onCancelar)}
+          type={correo ? "email" : "text"}
+          inputMode={correo ? "email" : undefined}
+          autoComplete="off"
+          autoFocus
+          maxLength={200}
+          disabled={deshabilitado}
+          aria-invalid={invalido || undefined}
+          aria-describedby={idDescripcion}
+        />
+      </InputGroup>
     )
   }
   return (

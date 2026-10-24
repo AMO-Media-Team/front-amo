@@ -1,6 +1,8 @@
 import { Receipt, Wallet } from "lucide-react"
+import Link from "next/link"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { rutaFactura } from "@/features/facturacion/rutas"
 import {
   formatearCOP,
   formatearCOPCompacto,
@@ -139,9 +141,13 @@ function ListaFacturas({ cartera }: { cartera: Cartera }) {
             >
               <td className="px-5 py-2.5">
                 <span className="flex flex-col">
-                  <span className="font-medium cifras">
+                  {/* La pestaña exige `facturas.ver`: la ficha de Finanzas siempre se puede abrir. */}
+                  <Link
+                    href={rutaFactura(factura.id)}
+                    className="font-medium cifras underline-offset-4 hover:underline focus-visible:anillo-foco"
+                  >
                     {factura.numero ?? "Sin número"}
-                  </span>
+                  </Link>
                   <span className="max-w-56 truncate text-xs text-muted-foreground">
                     {factura.campana ?? "—"}
                   </span>

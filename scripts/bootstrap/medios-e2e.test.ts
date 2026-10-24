@@ -10,8 +10,13 @@ import {
   type FilaMedioNuevo,
   MEDIO_E2E,
   MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E,
+  MEDIO_FACTURA_E2E_ID,
+  MEDIO_FINANZAS_E2E,
+  MEDIO_FINANZAS_E2E_ID,
   MEDIO_NUEVO_E2E,
   MEDIO_NUEVO_E2E_ID,
+  MEDIO_SUSPENSION_E2E_ID,
 } from "./medios-e2e"
 import { ANUNCIANTE_E2E_ID } from "./organizacion"
 
@@ -35,8 +40,35 @@ describe("ids y datos base", () => {
     expect(MEDIO_NUEVO_E2E.id).toBe(MEDIO_NUEVO_E2E_ID)
   })
 
+  it("los medios de Finanzas tienen ids propios, en Bogotá y con la misma categoría", () => {
+    const ids = [
+      MEDIO_E2E_ID,
+      MEDIO_NUEVO_E2E_ID,
+      MEDIO_SUSPENSION_E2E_ID,
+      MEDIO_FINANZAS_E2E_ID,
+      MEDIO_FACTURA_E2E_ID,
+      ANUNCIANTE_E2E_ID,
+    ]
+    for (const id of ids) expect(id).toMatch(UUID)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(MEDIO_FINANZAS_E2E.id).toBe(MEDIO_FINANZAS_E2E_ID)
+    expect(MEDIO_FACTURA_E2E.id).toBe(MEDIO_FACTURA_E2E_ID)
+    // Una sola oferta (municipio y categoría) les llega a los dos y a ningún otro medio E2E.
+    expect(MEDIO_FINANZAS_E2E.municipioPreferido).toBe("11001")
+    expect(MEDIO_FACTURA_E2E.municipioPreferido).toBe(
+      MEDIO_FINANZAS_E2E.municipioPreferido
+    )
+    expect(MEDIO_FACTURA_E2E.categoria).toBe(MEDIO_FINANZAS_E2E.categoria)
+    expect(MEDIO_E2E.municipioPreferido).not.toBe("11001")
+  })
+
   it("respetan los límites de la hoja «Registrar medio»", () => {
-    for (const medio of [MEDIO_E2E, MEDIO_NUEVO_E2E]) {
+    for (const medio of [
+      MEDIO_E2E,
+      MEDIO_NUEVO_E2E,
+      MEDIO_FINANZAS_E2E,
+      MEDIO_FACTURA_E2E,
+    ]) {
       expect(medio.nombre.length).toBeGreaterThanOrEqual(2)
       expect(medio.nombre.length).toBeLessThanOrEqual(120)
       expect(medio.municipioPreferido).toMatch(/^\d{5}$/)

@@ -60,6 +60,7 @@ describe("tipoDeAccion", () => {
     expect(tipoDeAccion("CARGAR_METRICA_H72")).toBe("CARGAR_METRICA")
     expect(tipoDeAccion("CARGAR_METRICA_D7")).toBe("CARGAR_METRICA")
     expect(tipoDeAccion("CORREGIR_METRICAS")).toBe("CORREGIR_METRICAS")
+    expect(tipoDeAccion("RECLAMAR")).toBe("RECLAMAR")
     expect(tipoDeAccion("CARGAR_METRICA_PERSONALIZADO")).toBeNull()
     expect(tipoDeAccion("ALGO_NUEVO")).toBeNull()
   })
@@ -83,6 +84,8 @@ describe("textos de cada acción", () => {
     ).toBe("Corrige la evidencia de la publicación 1")
     expect(etiquetaPlazoAccion("CARGAR_METRICA", "D7")).toBe("Métricas de 7 d")
     expect(etiquetaPlazoAccion("PUBLICAR")).toBe("Publicación")
+    expect(etiquetaAccion("RECLAMAR")).toBe("Reclama la publicación")
+    expect(etiquetaPlazoAccion("RECLAMAR")).toBe("Plazo para reclamar")
   })
 
   it("llevan a la pantalla donde se hace", () => {
@@ -99,6 +102,8 @@ describe("textos de cada acción", () => {
     )
     // Sin publicación ni corte no hay formulario al que ir: la ficha.
     expect(rutaDeAccion(ID, "CORREGIR_METRICAS")).toBe(`/mis-campanas/${ID}`)
+    // El reclamo de una vencida se abre en la página de su disputa.
+    expect(rutaDeAccion(ID, "RECLAMAR")).toBe(`/mis-campanas/${ID}/disputa`)
   })
 
   it("un corte personalizado rechazado se corrige por su id, no en un formulario nuevo", () => {
@@ -291,8 +296,138 @@ describe("siguientePaso", () => {
       }),
       []
     )
-    expect(paso).toEqual({ tipo: "reclamo", hasta: "2026-10-26T05:00:00.000Z" })
+    expect(paso).toEqual({
+      tipo: "reclamo",
+      hasta: "2026-10-26T05:00:00.000Z",
+      asignacionId: ID,
+    })
     expect(vencimientoDelPaso(paso)).toBe("2026-10-26T05:00:00.000Z")
+  })
+
+  it("con la fila RECLAMAR, el reclamo toma su plazo", () => {
+    const reclamar = accion({
+      accion: "RECLAMAR",
+      venceAt: "2026-10-26T06:00:00.000Z",
+    })
+    expect(reclamar).toMatchObject({
+      tipo: "RECLAMAR",
+      etiqueta: "Reclama la publicación",
+      etiquetaPlazo: "Plazo para reclamar",
+      ruta: `/mis-campanas/${ID}/disputa`,
+    })
+    expect(
+      siguientePaso(
+        asignacion({
+          estado: "VENCIDA_SIN_PUBLICAR",
+          reclamoHasta: "2026-10-26T05:00:00.000Z",
+        }),
+        [reclamar]
+      )
+    ).toEqual({
+      tipo: "reclamo",
+      hasta: "2026-10-26T06:00:00.000Z",
+      asignacionId: ID,
+    })
+  })
+
+  it("una vencida ya reclamada no ofrece otro reclamo ni ordena por su plazo", () => {
+    const paso = siguientePaso(
+      asignacion({
+        estado: "VENCIDA_SIN_PUBLICAR",
+        reclamoHasta: "2026-10-26T05:00:00.000Z",
+        disputa: {
+          id: OTRA,
+          estado: "RESUELTA",
+          parte: "MEDIO",
+          estadoOrigen: "VENCIDA_SIN_PUBLICAR",
+          estadoResultante: "VENCIDA_SIN_PUBLICAR",
+          creadaAt: "2026-10-24T05:00:00.000Z",
+          resueltaAt: "2026-10-25T05:00:00.000Z",
+        },
+      }),
+      []
+    )
+    expect(paso).toEqual({
+      tipo: "reclamo",
+      hasta: "2026-10-26T05:00:00.000Z",
+      asignacionId: ID,
+      reclamada: true,
+    })
+    expect(vencimientoDelPaso(paso)).toBeNull()
+  })
+
+  it("en disputa: si quedan cortes, lo que sigue es cargarlos (D72)", () => {
+    const paso = siguientePaso(
+      asignacion({ estado: "EN_DISPUTA", estadoPrevioDisputa: "PUBLICADA" }),
+      [accion({ accion: "CARGAR_METRICA_H72", numero: 1, corte: "H72" })]
+    )
+    expect(paso.tipo === "accion" && paso.accion.tipo).toBe("CARGAR_METRICA")
+  })
+
+  it("en disputa sin nada por cargar: espera y enlaza la disputa", () => {
+    expect(
+      siguientePaso(
+        asignacion({ estado: "EN_DISPUTA", estadoPrevioDisputa: "VERIFICADA" }),
+        []
+      )
+    ).toEqual({
+      tipo: "espera",
+      titulo: "Hay una disputa abierta",
+      descripcion: expect.stringMatching(/puedes seguir la conversación/),
+      disputa: true,
+      asignacionId: ID,
+    })
+    // El reclamo de una vencida: el cupo no vuelve mientras se revisa.
+    expect(
+      siguientePaso(
+        asignacion({
+          estado: "EN_DISPUTA",
+          estadoPrevioDisputa: "VENCIDA_SIN_PUBLICAR",
+        }),
+        []
+      )
+    ).toMatchObject({
+      tipo: "espera",
+      titulo: "Estamos revisando tu reclamo",
+      descripcion: expect.stringMatching(/el cupo no vuelve a tu cuenta/),
+      disputa: true,
+      reclamo: true,
+      asignacionId: ID,
+    })
+  })
+
+  it("una cancelada dice si se paga según la causa y enlaza la disputa que la canceló", () => {
+    expect(
+      siguientePaso(
+        asignacion({ estado: "CANCELADA", causaCancelacion: "FRAUDE" }),
+        []
+      )
+    ).toMatchObject({
+      tipo: "cerrada",
+      descripcion:
+        "Según los términos que aceptaste, esta publicación no se paga.",
+    })
+    const porDisputa = siguientePaso(
+      asignacion({
+        estado: "CANCELADA",
+        causaCancelacion: "ADMINISTRATIVA",
+        disputa: {
+          id: OTRA,
+          estado: "RESUELTA",
+          parte: "ANUNCIANTE",
+          estadoOrigen: "PUBLICADA",
+          estadoResultante: "CANCELADA",
+          creadaAt: "2026-10-24T05:00:00.000Z",
+          resueltaAt: "2026-10-25T05:00:00.000Z",
+        },
+      }),
+      []
+    )
+    expect(porDisputa).toMatchObject({
+      tipo: "cerrada",
+      disputa: true,
+      asignacionId: ID,
+    })
   })
 
   it("las cerradas dicen cómo terminaron", () => {
