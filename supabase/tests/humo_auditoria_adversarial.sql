@@ -484,9 +484,13 @@ begin
                               from public.liquidaciones where id = v_liq)
               and (select estado = 'METRICAS_CARGADAS' and liquidacion_id is null from public.asignaciones where id = a2)
          then to_jsonb(true) else to_jsonb(v_t) end);
+  -- E3 (fase 5): la factura del medio y el soporte del pago entran por sus procedimientos, con el archivo ya cargado.
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('soportes', 'liquidacion/' || v_liq || '/f.pdf', '{"mimetype": "application/pdf", "size": 1000}'),
+         ('soportes', 'liquidacion/' || v_liq || '/s.pdf', '{"mimetype": "application/pdf", "size": 1000}');
   execute 'set local role service_role';
   begin
-    update public.liquidaciones set numero_factura_medio = 'FV-9', factura_medio_path = 'liquidacion/' || v_liq || '/f.pdf' where id = v_liq;
+    perform public.registrar_factura_medio_srv(v_liq, 'FV-9', 'liquidacion/' || v_liq || '/f.pdf', u_fin, s_fin);
     perform public.registrar_pago_liquidacion_srv(v_liq, private.hoy(), 'REF-1', 'liquidacion/' || v_liq || '/s.pdf', u_fin, s_fin);
     v_t := 'ok';
   exception when others then v_t := sqlerrm; end;
@@ -521,7 +525,7 @@ begin
 
   -- ── (z) Estructura ──────────────────────────────────────────────────────────────────────────────────
   r := r || jsonb_build_object('z1_triggers_solo_plataforma',
-    (select count(*) = 10 from pg_trigger t join pg_proc p on p.oid = t.tgfoid where p.proname = 'fn_solo_plataforma' and not t.tgisinternal));
+    (select count(*) = 11 from pg_trigger t join pg_proc p on p.oid = t.tgfoid where p.proname = 'fn_solo_plataforma' and not t.tgisinternal));
   r := r || jsonb_build_object('z2_nucleo_sin_execute_para_la_api',
     not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                 where n.nspname = 'private'

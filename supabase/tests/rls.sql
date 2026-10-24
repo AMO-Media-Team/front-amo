@@ -82,6 +82,8 @@ declare
   l_b constant uuid := '00000000-0000-4000-f000-00000000b042';
   f_a constant uuid := '00000000-0000-4000-f000-00000000b051';
   f_b constant uuid := '00000000-0000-4000-f000-00000000b052';
+  f_c constant uuid := '00000000-0000-4000-f000-00000000b053';
+  res_f constant uuid := '00000000-0000-4000-f000-00000000b054';
   d_a constant uuid := '00000000-0000-4000-f000-00000000b061';
   dm_a constant uuid := '00000000-0000-4000-f000-00000000b071';
   dm_b constant uuid := '00000000-0000-4000-f000-00000000b072';
@@ -174,8 +176,15 @@ begin
                                     monto_medio, monto_retenciones, monto_neto, estado, requiere_documento_soporte)
   values (l_a, me_a, private.hoy() - 15, private.hoy() - 1, 0, 0, 0, 0, 0, 0, 'BORRADOR', true),
          (l_b, me_b, private.hoy() - 15, private.hoy() - 1, 0, 0, 0, 0, 0, 0, 'BORRADOR', true);
-  insert into public.facturas (id, anunciante_id, campana_id, subtotal, iva, pagado, estado)
-  values (f_a, an_a, c_a, 100000, 19000, 0, 'BORRADOR'), (f_b, an_b, c_b, 100000, 19000, 0, 'BORRADOR');
+  -- E3 (fase 5): el anunciante ve sus facturas expedidas (con número), no los borradores (f_c).
+  insert into public.resoluciones_dian (id, tipo, prefijo, numero_resolucion, fecha_resolucion, rango_desde, rango_hasta,
+                                        consecutivo_actual, vigente_desde, activa)
+  values (res_f, 'FACTURA_VENTA', 'RLS', 'RLS-0001', private.hoy() - 30, 1, 10, 2, private.hoy() - 30, false);
+  insert into public.facturas (id, anunciante_id, campana_id, subtotal, iva, pagado, estado, resolucion_id, prefijo, consecutivo,
+                               fecha_emision, fecha_vencimiento, emitida_at)
+  values (f_a, an_a, c_a, 100000, 19000, 0, 'EMITIDA', res_f, 'RLS', 1, private.hoy(), private.hoy() + 30, now()),
+         (f_b, an_b, c_b, 100000, 19000, 0, 'EMITIDA', res_f, 'RLS', 2, private.hoy(), private.hoy() + 30, now()),
+         (f_c, an_a, c_a, 100000, 19000, 0, 'BORRADOR', null, null, null, null, null, null);
   insert into public.disputas (id, asignacion_id, abierta_por, parte, motivo, descripcion, estado, estado_asignacion_origen)
   values (d_a, x_a, u_del, 'MEDIO', 'CONTENIDO', 'Disputa de la suite RLS', 'ABIERTA', 'ACEPTADA');
   insert into public.disputa_mensajes (disputa_id, autor_id, mensaje, interno)
@@ -434,8 +443,8 @@ begin
   r := r || jsonb_build_object('an05_no_lee_medios_en_tablas_base', pg_temp.ok(v_n = 0, v_n::text));
   select string_agg(id::text, ',') into v_t from public.medios_publico(array[me_a, me_b]);
   r := r || jsonb_build_object('an06_medios_publico_solo_su_contraparte', pg_temp.ok(v_t = me_a::text, v_t));
-  select string_agg(id::text, ',') into v_t from public.facturas where id in (f_a, f_b);
-  r := r || jsonb_build_object('an07_solo_su_factura', pg_temp.ok(v_t = f_a::text, v_t));
+  select string_agg(id::text, ',') into v_t from public.facturas where id in (f_a, f_b, f_c);
+  r := r || jsonb_build_object('an07_solo_su_factura_expedida', pg_temp.ok(v_t = f_a::text, v_t));
   select count(*) into v_n from public.perfiles where id = any (v_usuarios);
   r := r || jsonb_build_object('an08_solo_su_perfil', pg_temp.ok(v_n = 1, v_n::text));
   select count(*) into v_n from public.bitacora;
@@ -543,8 +552,10 @@ begin
   r := r || jsonb_build_object('me05_marketplace_respeta_segmentacion', pg_temp.ok(v_t = o_a::text, v_t));
   select string_agg(id::text, ',') into v_t from public.anunciantes_publico(array[an_a, an_b]);
   r := r || jsonb_build_object('me06_anunciantes_publico_solo_contraparte', pg_temp.ok(v_t = an_a::text, v_t));
-  select string_agg(id::text, ',') into v_t from public.liquidaciones where id in (l_a, l_b);
-  r := r || jsonb_build_object('me07_solo_su_liquidacion', pg_temp.ok(v_t = l_a::text, v_t));
+  -- E3 (fase 5): el medio lee sus liquidaciones por RPC (respeta la visibilidad de la comisión), no la tabla.
+  select string_agg(id::text, ',') into v_t from public.mis_liquidaciones_medio(24, null, null) where id in (l_a, l_b);
+  select count(*) into v_n from public.liquidaciones where id in (l_a, l_b);
+  r := r || jsonb_build_object('me07_solo_su_liquidacion', pg_temp.ok(v_t = l_a::text and v_n = 0, v_t || ' / tabla ' || v_n));
   select valor into v_num from public.kpis_medio(v_desde, v_hasta) where kpi = 'asignaciones_activas';
   r := r || jsonb_build_object('me08_kpis_solo_con_sus_datos', pg_temp.ok(v_num = 1, coalesce(v_num::text, 'null')));
   select count(*) into v_n from public.proximas_acciones_medio(20) where asignacion_id = x_b;

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
 // Origen: Supabase local (supabase start), esquema public,
-// última migración aplicada: 20261023171316_e3_validacion.
+// última migración aplicada: 20261024024312_e3_finanzas.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -1504,14 +1504,22 @@ export type Database = {
         Row: {
           anulado_at: string | null
           archivo_path: string | null
+          archivo_proveedor_path: string | null
           consecutivo: number | null
           created_at: string
           cuds: string | null
+          cuds_registrado_at: string | null
+          cuds_registrado_por: string | null
           emitido_at: string | null
           estado: Database["public"]["Enums"]["documento_soporte_estado"]
           fecha_emision: string | null
           id: string
           liquidacion_id: string
+          nota_ajuste_at: string | null
+          nota_ajuste_cude: string | null
+          nota_ajuste_numero: string | null
+          nota_ajuste_path: string | null
+          nota_ajuste_por: string | null
           numero: string | null
           prefijo: string | null
           resolucion_id: string | null
@@ -1521,14 +1529,22 @@ export type Database = {
         Insert: {
           anulado_at?: string | null
           archivo_path?: string | null
+          archivo_proveedor_path?: string | null
           consecutivo?: number | null
           created_at?: string
           cuds?: string | null
+          cuds_registrado_at?: string | null
+          cuds_registrado_por?: string | null
           emitido_at?: string | null
           estado?: Database["public"]["Enums"]["documento_soporte_estado"]
           fecha_emision?: string | null
           id?: string
           liquidacion_id: string
+          nota_ajuste_at?: string | null
+          nota_ajuste_cude?: string | null
+          nota_ajuste_numero?: string | null
+          nota_ajuste_path?: string | null
+          nota_ajuste_por?: string | null
           numero?: string | null
           prefijo?: string | null
           resolucion_id?: string | null
@@ -1538,14 +1554,22 @@ export type Database = {
         Update: {
           anulado_at?: string | null
           archivo_path?: string | null
+          archivo_proveedor_path?: string | null
           consecutivo?: number | null
           created_at?: string
           cuds?: string | null
+          cuds_registrado_at?: string | null
+          cuds_registrado_por?: string | null
           emitido_at?: string | null
           estado?: Database["public"]["Enums"]["documento_soporte_estado"]
           fecha_emision?: string | null
           id?: string
           liquidacion_id?: string
+          nota_ajuste_at?: string | null
+          nota_ajuste_cude?: string | null
+          nota_ajuste_numero?: string | null
+          nota_ajuste_path?: string | null
+          nota_ajuste_por?: string | null
           numero?: string | null
           prefijo?: string | null
           resolucion_id?: string | null
@@ -1554,10 +1578,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "documentos_soporte_cuds_registrado_por_fkey"
+            columns: ["cuds_registrado_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "documentos_soporte_liquidacion_id_fkey"
             columns: ["liquidacion_id"]
             isOneToOne: false
             referencedRelation: "liquidaciones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documentos_soporte_nota_ajuste_por_fkey"
+            columns: ["nota_ajuste_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
             referencedColumns: ["id"]
           },
           {
@@ -1580,6 +1618,7 @@ export type Database = {
           cufe: string | null
           emitida_at: string | null
           es_demo: boolean
+          esquema: string
           estado: Database["public"]["Enums"]["factura_estado"]
           fecha_emision: string | null
           fecha_vencimiento: string | null
@@ -1590,12 +1629,15 @@ export type Database = {
           pagado: number
           periodo_desde: string | null
           periodo_hasta: string | null
+          porcentaje_iva: number | null
           prefijo: string | null
           resolucion_id: string | null
           saldo: number | null
           subtotal: number
           total: number | null
           updated_at: string
+          valor_notas_credito: number
+          valor_terceros: number
           vencida_at: string | null
         }
         Insert: {
@@ -1608,6 +1650,7 @@ export type Database = {
           cufe?: string | null
           emitida_at?: string | null
           es_demo?: boolean
+          esquema?: string
           estado?: Database["public"]["Enums"]["factura_estado"]
           fecha_emision?: string | null
           fecha_vencimiento?: string | null
@@ -1618,12 +1661,15 @@ export type Database = {
           pagado?: number
           periodo_desde?: string | null
           periodo_hasta?: string | null
+          porcentaje_iva?: number | null
           prefijo?: string | null
           resolucion_id?: string | null
           saldo?: number | null
           subtotal?: number
           total?: number | null
           updated_at?: string
+          valor_notas_credito?: number
+          valor_terceros?: number
           vencida_at?: string | null
         }
         Update: {
@@ -1636,6 +1682,7 @@ export type Database = {
           cufe?: string | null
           emitida_at?: string | null
           es_demo?: boolean
+          esquema?: string
           estado?: Database["public"]["Enums"]["factura_estado"]
           fecha_emision?: string | null
           fecha_vencimiento?: string | null
@@ -1646,12 +1693,15 @@ export type Database = {
           pagado?: number
           periodo_desde?: string | null
           periodo_hasta?: string | null
+          porcentaje_iva?: number | null
           prefijo?: string | null
           resolucion_id?: string | null
           saldo?: number | null
           subtotal?: number
           total?: number | null
           updated_at?: string
+          valor_notas_credito?: number
+          valor_terceros?: number
           vencida_at?: string | null
         }
         Relationships: [
@@ -2404,6 +2454,76 @@ export type Database = {
         }
         Relationships: []
       }
+      notas_credito: {
+        Row: {
+          anula_factura: boolean
+          anunciante_id: string
+          archivo_path: string
+          created_at: string
+          cude: string
+          es_demo: boolean
+          factura_id: string
+          fecha_emision: string
+          id: string
+          motivo: string
+          numero: string
+          registrado_por: string | null
+          valor: number
+        }
+        Insert: {
+          anula_factura: boolean
+          anunciante_id: string
+          archivo_path: string
+          created_at?: string
+          cude: string
+          es_demo?: boolean
+          factura_id: string
+          fecha_emision: string
+          id?: string
+          motivo: string
+          numero: string
+          registrado_por?: string | null
+          valor: number
+        }
+        Update: {
+          anula_factura?: boolean
+          anunciante_id?: string
+          archivo_path?: string
+          created_at?: string
+          cude?: string
+          es_demo?: boolean
+          factura_id?: string
+          fecha_emision?: string
+          id?: string
+          motivo?: string
+          numero?: string
+          registrado_por?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_credito_anunciante_id_fkey"
+            columns: ["anunciante_id"]
+            isOneToOne: false
+            referencedRelation: "anunciantes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_credito_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_credito_registrado_por_fkey"
+            columns: ["registrado_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificaciones: {
         Row: {
           canal: Database["public"]["Enums"]["notificacion_canal"]
@@ -2782,6 +2902,7 @@ export type Database = {
           referencia: string | null
           registrado_por: string | null
           soporte_path: string | null
+          valor_retenciones: number
         }
         Insert: {
           anunciante_id: string
@@ -2795,6 +2916,7 @@ export type Database = {
           referencia?: string | null
           registrado_por?: string | null
           soporte_path?: string | null
+          valor_retenciones?: number
         }
         Update: {
           anunciante_id?: string
@@ -2808,6 +2930,7 @@ export type Database = {
           referencia?: string | null
           registrado_por?: string | null
           soporte_path?: string | null
+          valor_retenciones?: number
         }
         Relationships: [
           {
@@ -3737,6 +3860,16 @@ export type Database = {
           hora: number
         }[]
       }
+      adjuntar_archivos_documento_soporte_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_proveedor_path: string
+          p_documento_id: string
+          p_pdf_path: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       alertas_metricas: {
         Args: { p_asignacion_id?: string; p_medio_id?: string }
         Returns: {
@@ -3943,6 +4076,31 @@ export type Database = {
         Args: { p_datos: Json; p_ip_hash: string }
         Returns: undefined
       }
+      datos_dispersion_srv: {
+        Args: {
+          p_actor_id: string
+          p_liquidacion_ids: string[]
+          p_repetir?: boolean
+          p_session_id: string
+        }
+        Returns: {
+          datos_pago_cifrados: string
+          liquidacion_id: string
+          medio: string
+          medio_id: string
+          metodo_pago: Database["public"]["Enums"]["metodo_pago"]
+          monto_neto: number
+          numero_documento_cifrado: string
+          periodo_fin: string
+          periodo_inicio: string
+          tipo_documento: Database["public"]["Enums"]["documento_identidad_tipo"]
+          titular_nombre: string
+        }[]
+      }
+      datos_documento_soporte: {
+        Args: { p_documento_id: string }
+        Returns: Json
+      }
       desempeno_anunciante: {
         Args: {
           p_campana_id?: string
@@ -4039,10 +4197,6 @@ export type Database = {
         }
         Returns: string
       }
-      emitir_factura_srv: {
-        Args: { p_actor_id: string; p_factura_id: string; p_session_id: string }
-        Returns: Json
-      }
       enviar_anunciante_a_verificacion_srv: {
         Args: {
           p_actor_id: string
@@ -4075,6 +4229,17 @@ export type Database = {
           precio_mediano: number
         }[]
       }
+      generar_factura_srv: {
+        Args: {
+          p_actor_id: string
+          p_anunciante_id: string
+          p_campana_id: string
+          p_periodo_desde: string
+          p_periodo_hasta: string
+          p_session_id: string
+        }
+        Returns: string
+      }
       generar_liquidacion_srv: {
         Args: {
           p_actor_id: string
@@ -4084,6 +4249,20 @@ export type Database = {
           p_session_id: string
         }
         Returns: string
+      }
+      generar_liquidaciones_corte_srv: {
+        Args: {
+          p_actor_id: string
+          p_periodo_fin: string
+          p_periodo_inicio: string
+          p_session_id: string
+        }
+        Returns: {
+          error: string
+          liquidacion_id: string
+          medio: string
+          medio_id: string
+        }[]
       }
       geo_metricas: {
         Args: {
@@ -4177,6 +4356,27 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      lineas_liquidacion_medio: {
+        Args: { p_liquidacion_id: string }
+        Returns: {
+          anunciante: string
+          asignacion_id: string
+          campana_id: string
+          formato: string
+          marca: string
+          monto_bruto: number
+          monto_comision: number
+          monto_medio: number
+          monto_neto: number
+          monto_retenciones: number
+          oferta: string
+          oferta_id: string
+          plataforma: Database["public"]["Enums"]["plataforma"]
+          publicada_at: string
+          retenciones_aplicadas: Json
+          verificada_at: string
+        }[]
       }
       listar_usuarios: {
         Args: {
@@ -4445,6 +4645,42 @@ export type Database = {
           verificada_at: string
         }[]
       }
+      mis_liquidaciones_medio: {
+        Args: { p_antes_id?: string; p_id?: string; p_limite?: number }
+        Returns: {
+          alerta_seg_social: boolean
+          aprobada_at: string
+          bloquea_seg_social: boolean
+          cantidad_asignaciones: number
+          created_at: string
+          cuds: string
+          documento_estado: Database["public"]["Enums"]["documento_soporte_estado"]
+          documento_fecha: string
+          documento_id: string
+          documento_numero: string
+          documento_path: string
+          enviada_banco_at: string
+          estado: Database["public"]["Enums"]["liquidacion_estado"]
+          factura_medio_path: string
+          fecha_pago: string
+          fecha_pago_estimada: string
+          id: string
+          monto_bruto: number
+          monto_comision: number
+          monto_medio: number
+          monto_neto: number
+          monto_retenciones: number
+          numero_factura_medio: string
+          periodo_fin: string
+          periodo_inicio: string
+          referencia_pago: string
+          requiere_documento_soporte: boolean
+          retefuente: number
+          reteica: number
+          reteiva: number
+          soporte_pago_path: string
+        }[]
+      }
       mis_notificaciones: {
         Args: {
           p_antes_id?: number
@@ -4504,23 +4740,33 @@ export type Database = {
           ventana_inicio: string
         }[]
       }
-      preparar_dispersion_srv: {
+      pendientes_liquidacion: {
+        Args: { p_hasta?: string }
+        Returns: {
+          asignaciones: number
+          datos_pago_listos: boolean
+          medio: string
+          medio_id: string
+          monto_medio: number
+          municipio_codigo: string
+          primera_verificada: string
+          requiere_documento_soporte: boolean
+          seg_social_pendiente: boolean
+          ultima_liquidacion_fin: string
+          ultima_verificada: string
+        }[]
+      }
+      periodo_liquidacion_sugerido: {
+        Args: never
+        Returns: Record<string, unknown>
+      }
+      preparar_documento_soporte_srv: {
         Args: {
           p_actor_id: string
-          p_archivo_path: string
-          p_liquidacion_ids: string[]
+          p_liquidacion_id: string
           p_session_id: string
         }
-        Returns: {
-          datos_pago_cifrados: string
-          liquidacion_id: string
-          medio_id: string
-          metodo_pago: Database["public"]["Enums"]["metodo_pago"]
-          monto_neto: number
-          numero_documento_cifrado: string
-          tipo_documento: Database["public"]["Enums"]["documento_identidad_tipo"]
-          titular_nombre: string
-        }[]
+        Returns: string
       }
       programar_tarifa: {
         Args: {
@@ -4580,10 +4826,43 @@ export type Database = {
           motivo: string
         }[]
       }
+      registrar_cuds_srv: {
+        Args: {
+          p_actor_id: string
+          p_cuds: string
+          p_documento_id: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       registrar_descarga_srv: {
         Args: {
           p_actor_id: string
           p_asignacion_id: string
+          p_session_id: string
+        }
+        Returns: Json
+      }
+      registrar_dispersion_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_dispersion_id: string
+          p_liquidacion_ids: string[]
+          p_repetir?: boolean
+          p_session_id: string
+        }
+        Returns: string
+      }
+      registrar_documento_soporte_externo_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_consecutivo: number
+          p_cuds: string
+          p_documento_id: string
+          p_fecha_emision: string
+          p_prefijo: string
           p_session_id: string
         }
         Returns: Json
@@ -4617,9 +4896,60 @@ export type Database = {
         }
         Returns: string
       }
+      registrar_factura_expedida_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_consecutivo: number
+          p_cufe: string
+          p_factura_id: string
+          p_fecha_emision: string
+          p_fecha_vencimiento: string
+          p_prefijo: string
+          p_session_id: string
+          p_total: number
+        }
+        Returns: Json
+      }
+      registrar_factura_medio_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_liquidacion_id: string
+          p_numero: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       registrar_intento_login_srv: {
         Args: { p_email: string; p_exito: boolean; p_ip: unknown }
         Returns: undefined
+      }
+      registrar_nota_ajuste_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_cude: string
+          p_documento_id: string
+          p_numero: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
+      registrar_nota_credito_srv: {
+        Args: {
+          p_actor_id: string
+          p_archivo_path: string
+          p_asignacion_ids: string[]
+          p_cude: string
+          p_factura_id: string
+          p_fecha_emision: string
+          p_motivo: string
+          p_numero: string
+          p_session_id: string
+          p_valor: number
+        }
+        Returns: string
       }
       registrar_pago_anunciante_srv: {
         Args: {
@@ -4629,6 +4959,7 @@ export type Database = {
           p_medio_pago: string
           p_monto: number
           p_referencia: string
+          p_retenciones?: number
           p_session_id: string
           p_soporte_path: string
         }
@@ -4806,6 +5137,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      resumen_ganancias_medio: { Args: never; Returns: Record<string, unknown> }
       resumen_usuarios: {
         Args: never
         Returns: {
