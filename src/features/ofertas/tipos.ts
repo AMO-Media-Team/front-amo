@@ -118,6 +118,8 @@ export interface OfertaCompleta {
   segmentacion: SegmentacionOferta
   historial: FilaHistorial[]
   creativos: VersionCreativo[]
+  /** La creó el equipo AMO por cuenta del anunciante (ADM-014; la fija la BD). */
+  gestionAsistida: boolean
 }
 
 /**

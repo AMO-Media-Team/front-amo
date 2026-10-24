@@ -156,11 +156,17 @@ export function FiltroFacetadoTabla({
                     key={opcion.valor}
                     value={`${opcion.etiqueta} ${opcion.valor}`}
                     data-checked={activo}
-                    aria-selected={activo}
+                    // cmdk usa `aria-selected` para la opción resaltada y pisa
+                    // el que se le pase: lo aplicado va en `aria-checked` y en
+                    // un texto oculto (lo anuncian todos los lectores).
+                    aria-checked={activo}
                     onSelect={() => alternar(opcion.valor)}
                   >
                     <MarcaOpcion opcion={opcion} />
                     <span className="truncate">{opcion.etiqueta}</span>
+                    {activo ? (
+                      <span className="sr-only">, aplicado</span>
+                    ) : null}
                   </CommandItem>
                 )
               })}

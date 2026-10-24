@@ -2,7 +2,9 @@
 /**
  * `archivarOferta` con el DAL y el cliente de servicio simulados: autoriza
  * antes que nada, va por `archivar_oferta_srv` con el actor y su sesión y no
- * refresca la ficha (ya no existiría: el cliente vuelve a la campaña).
+ * refresca la ficha (ya no existiría: el cliente vuelve a la campaña). Las
+ * acciones aceptan el permiso del anunciante o el del equipo AMO (ADM-014) y
+ * los cambios de estado van por la máquina de estados con su motivo.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -13,6 +15,7 @@ const estado = vi.hoisted(() => ({
   rpc: [] as { nombre: string; args: Record<string, unknown> }[],
   error: null as unknown,
   refrescos: 0,
+  transiciones: [] as unknown[],
 }))
 
 vi.mock("server-only", () => ({}))
@@ -42,21 +45,30 @@ vi.mock("@/lib/auth/contexto-actor", () => ({
     }
   }),
 }))
-vi.mock("@/lib/negocio/transicionar", () => ({ transicionar: vi.fn() }))
+vi.mock("@/lib/negocio/transicionar", () => ({
+  transicionar: vi.fn(async (_contexto: unknown, solicitud: unknown) => {
+    estado.transiciones.push(solicitud)
+    return { data: null, error: null }
+  }),
+}))
 
-const { archivarOferta } = await import("./actions")
+const { archivarOferta, cancelarOferta, retirarOfertaDeRevision } =
+  await import("./actions")
+
+const PERMISOS_DAL = "dal:ofertas.gestionar_propias,ofertas.gestionar"
 
 beforeEach(() => {
   estado.orden = []
   estado.rpc = []
   estado.error = null
   estado.refrescos = 0
+  estado.transiciones = []
 })
 
 describe("archivarOferta", () => {
   it("archiva con el actor y su sesión, después del DAL y sin refrescar", async () => {
     const resultado = await archivarOferta({ ofertaId: OFERTA })
-    expect(estado.orden).toEqual(["dal:ofertas.gestionar_propias", "contexto"])
+    expect(estado.orden).toEqual([PERMISOS_DAL, "contexto"])
     expect(estado.rpc).toEqual([
       {
         nombre: "archivar_oferta_srv",
@@ -82,5 +94,32 @@ describe("archivarOferta", () => {
   it("valida el id antes de tocar la BD", async () => {
     expect((await archivarOferta({ ofertaId: "x" })).ok).toBe(false)
     expect(estado.rpc).toEqual([])
+  })
+})
+
+describe("cambios de estado (también en la gestión asistida)", () => {
+  it("cancelar lleva el motivo a la máquina de estados y refresca la ficha", async () => {
+    const resultado = await cancelarOferta({
+      ofertaId: OFERTA,
+      motivo: "Lo pidió la empresa por teléfono.",
+    })
+    expect(resultado.ok).toBe(true)
+    expect(estado.orden).toEqual([PERMISOS_DAL, "contexto"])
+    expect(estado.transiciones).toEqual([
+      {
+        entidad: "ofertas",
+        id: OFERTA,
+        hacia: "CANCELADA",
+        motivo: "Lo pidió la empresa por teléfono.",
+      },
+    ])
+    expect(estado.refrescos).toBe(1)
+  })
+
+  it("retirar de revisión vuelve a borrador", async () => {
+    await retirarOfertaDeRevision({ ofertaId: OFERTA })
+    expect(estado.transiciones).toEqual([
+      { entidad: "ofertas", id: OFERTA, hacia: "BORRADOR" },
+    ])
   })
 })

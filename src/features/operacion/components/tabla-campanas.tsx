@@ -33,6 +33,8 @@ import {
 } from "../formato"
 import { rutaAnunciante, rutaCampana } from "../rutas"
 import type { CampanaFila, OpcionCatalogo } from "../tipos"
+import { InsigniaGestionAsistida } from "@/features/campanas/components/distintivos-campana"
+
 import { BarraLlenado, InsigniaEstado, MarcaPlataforma } from "./distintivos"
 
 const columna = crearColumnas<CampanaFila>()
@@ -218,10 +220,15 @@ export function TablaCampanas({
           header: "Estado",
           meta: { titulo: "Estado", campoOrden: "estado", tipoDato: "otro" },
           cell: ({ row }) => (
-            <InsigniaEstado
-              catalogo={ESTADOS_CAMPANA}
-              estado={row.original.estado}
-            />
+            <span className="flex flex-wrap items-center gap-1.5">
+              <InsigniaEstado
+                catalogo={ESTADOS_CAMPANA}
+                estado={row.original.estado}
+              />
+              {row.original.gestionAsistida ? (
+                <InsigniaGestionAsistida />
+              ) : null}
+            </span>
           ),
         }),
         columna.accessor((fila) => instanteDeDia(fila.fechaInicio), {
@@ -339,7 +346,7 @@ export function TablaCampanas({
   )
 
   const filtros = useMemo<
-    FiltroFacetado<"estado" | "anunciante" | "plataforma">[]
+    FiltroFacetado<"estado" | "anunciante" | "plataforma" | "origen">[]
   >(
     () => [
       {
@@ -365,6 +372,13 @@ export function TablaCampanas({
           valor: plataforma,
           etiqueta: PLATAFORMAS[plataforma],
         })),
+      },
+      {
+        clave: "origen",
+        titulo: "Origen",
+        opciones: [
+          { valor: "asistida", etiqueta: "Creadas por el equipo AMO" },
+        ],
       },
     ],
     [anunciantes]

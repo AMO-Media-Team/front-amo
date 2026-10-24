@@ -36,7 +36,7 @@ const SELECCION = `
   municipios_objetivo, categorias_objetivo, seguidores_minimos, medios_excluidos, ventana_inicio, ventana_fin,
   fecha_limite_aceptacion, permanencia_minima_dias, exclusividad_dias, cortes_requeridos, instrucciones,
   restricciones, comentario_moderacion, enviada_at, devuelta_at, publicada_at, cupos_completos_at,
-  en_ejecucion_at, vencida_at, cerrada_at, cancelada_at, created_at, deleted_at,
+  en_ejecucion_at, vencida_at, cerrada_at, cancelada_at, created_at, deleted_at, gestion_asistida,
   campana:campanas ( id, nombre, marca, estado, fecha_inicio, fecha_fin, presupuesto_total ),
   anunciante:anunciantes ( id, nombre_comercial, razon_social ),
   cupos:oferta_cupos ( franja_id, cupos_totales, cupos_ocupados ),
@@ -250,6 +250,7 @@ export const obtenerOferta = cache(
       segmentacion,
       historial,
       creativos,
+      gestionAsistida: fila.gestion_asistida,
     }
   }
 )

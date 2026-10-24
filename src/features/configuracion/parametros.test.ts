@@ -23,8 +23,8 @@ type Regla = [
 ]
 
 /**
- * Las 53 claves sembradas (docs/modelo-datos.md §7) y las que suman la fase 4
- * (e3_validacion) y la fase 5 (e3_finanzas), con sus reglas reales.
+ * Las 53 claves sembradas (docs/modelo-datos.md §7) y las que suman las fases
+ * 2, 4 (e3_validacion), 5 (e3_finanzas) y 6 (e3_cierre), con sus reglas reales.
  */
 const SEMILLA: readonly Regla[] = [
   ["comision.porcentaje_global", "PORCENTAJE", 0, 0.5],
@@ -123,7 +123,22 @@ const SEMILLA: readonly Regla[] = [
   ["retencion.intentos_login_dias", "ENTERO", 1, 365],
   ["retencion.notificaciones_dias", "ENTERO", 7, 730],
   ["archivos.vigencia_url_firmada_segundos", "ENTERO", 30, 3600],
-  ["archivos.max_creativo_mb", "ENTERO", 1, 500],
+  ["archivos.max_creativo_mb", "ENTERO", 1, 50],
+  // Fase 2 (e2_*): estimador, tolerancias y el formulario de vinculación.
+  ["ofertas.estimador_n_minimo", "ENTERO", 3, 50],
+  ["archivos.tolerancia_aspecto", "DECIMAL", 0, 0.2],
+  ["metricas.tolerancia_cortes", "DECIMAL", 0, 0.2],
+  ["vinculacion.max_solicitudes_ip_dia", "ENTERO", 1, 100],
+  // Fase 6 (e3_cierre): derechos del titular y correo.
+  ["privacidad.plazo_consulta_dias", "ENTERO", 1, 10],
+  ["privacidad.prorroga_consulta_dias", "ENTERO", 0, 5],
+  ["privacidad.plazo_reclamo_dias", "ENTERO", 1, 15],
+  ["privacidad.prorroga_reclamo_dias", "ENTERO", 0, 8],
+  ["privacidad.desistimiento_meses", "ENTERO", 2, 12],
+  ["privacidad.alerta_dias", "ENTERO", 0, 5],
+  ["correo.habilitado", "BOOLEANO", null, null],
+  ["correo.max_intentos", "ENTERO", 1, 10],
+  ["correo.lote", "ENTERO", 1, 100],
 ]
 
 function reglas([
@@ -137,8 +152,8 @@ function reglas([
 }
 
 describe("catálogo de parámetros", () => {
-  it("cubre exactamente las 61 claves con ficha", () => {
-    expect(SEMILLA).toHaveLength(61)
+  it("cubre exactamente las 74 claves con ficha", () => {
+    expect(SEMILLA).toHaveLength(74)
     expect(Object.keys(FICHAS).sort()).toEqual(SEMILLA.map(([c]) => c).sort())
   })
 
@@ -190,6 +205,20 @@ describe("catálogo de parámetros", () => {
       { clave: "medios.umbral_seguidores" },
     ])
     expect(parametrosDelGrupo(parametros, "inexistente")).toEqual([])
+  })
+
+  it("los derechos del titular van en Legal y el correo en Plantillas", () => {
+    expect(grupoDe("privacidad.plazo_reclamo_dias")).toMatchObject({
+      id: "privacidad",
+      seccion: "legal",
+      titulo: "Derechos de los titulares",
+    })
+    expect(grupoDe("correo.habilitado")).toMatchObject({
+      id: "correo",
+      seccion: "plantillas",
+      titulo: "Envío por correo",
+    })
+    expect(grupoDe("vinculacion.max_solicitudes_ip_dia").seccion).toBe("medios")
   })
 
   it("las claves de comisión exigen el permiso de comisiones", () => {

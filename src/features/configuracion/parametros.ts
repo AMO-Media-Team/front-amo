@@ -73,6 +73,13 @@ export const GRUPOS: readonly GrupoParametros[] = [
       "Vigencia de la verificación de seguidores y del código temporal de historia.",
   },
   {
+    id: "vinculacion",
+    seccion: "medios",
+    titulo: "Solicitudes de vinculación",
+    descripcion:
+      "Límite del formulario público con el que un medio pide unirse a la red.",
+  },
+  {
     id: "actividad",
     seccion: "medios",
     titulo: "Actividad y reputación",
@@ -167,6 +174,20 @@ export const GRUPOS: readonly GrupoParametros[] = [
     descripcion: "Cada cuánto se corta y en cuántos días se paga a los medios.",
   },
   {
+    id: "privacidad",
+    seccion: "legal",
+    titulo: "Derechos de los titulares",
+    descripcion:
+      "Plazos para atender las consultas y los reclamos de los titulares de datos personales (Ley 1581 de 2012, arts. 14 y 15). Se cuentan en días hábiles; la base no admite más de lo que permite la ley.",
+  },
+  {
+    id: "correo",
+    seccion: "plantillas",
+    titulo: "Envío por correo",
+    descripcion:
+      "Si los avisos con plantilla de correo activa también se envían por correo, y cómo reintenta el despachador.",
+  },
+  {
     id: GRUPO_OTROS,
     seccion: "comercial",
     titulo: "Otros parámetros",
@@ -178,6 +199,8 @@ const IMPACTO_PRECIO =
   "Aplica a las asignaciones que se acepten desde ahora; las ya aceptadas conservan su precio congelado."
 const IMPACTO_SESION =
   "Las sesiones abiertas se evalúan con el nuevo valor en su siguiente solicitud."
+const IMPACTO_PLAZO_TITULAR =
+  "Rige para las solicitudes que se radiquen o reinicien su plazo desde ahora; las demás conservan su fecha límite."
 
 export const FICHAS: Readonly<Record<string, FichaParametro>> = {
   "comision.porcentaje_global": {
@@ -210,6 +233,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     grupo: "ofertas",
     titulo: "Mínimo de medios por oferta",
     defecto: 1,
+  },
+  "ofertas.estimador_n_minimo": {
+    grupo: "ofertas",
+    titulo: "Medios mínimos para estimar",
+    defecto: 5,
+    impacto:
+      "Con menos medios elegibles en una franja, el asistente de oferta no muestra cuántos son ni sus estimaciones, para no revelar a un medio.",
   },
   "disputas.plazo_vencida_horas": {
     grupo: "disputas",
@@ -262,6 +292,11 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Vigencia del código de historia",
     defecto: 60,
   },
+  "vinculacion.max_solicitudes_ip_dia": {
+    grupo: "vinculacion",
+    titulo: "Solicitudes por conexión al día",
+    defecto: 5,
+  },
   "medios.n_minimo_cumplimiento": {
     grupo: "actividad",
     titulo: "Muestra mínima de cumplimiento",
@@ -310,6 +345,11 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     grupo: "integridad",
     titulo: "Múltiplo alcance / seguidores",
     defecto: { FACEBOOK: 3, INSTAGRAM: 2, TIKTOK: 20 },
+  },
+  "metricas.tolerancia_cortes": {
+    grupo: "integridad",
+    titulo: "Tolerancia entre cortes",
+    defecto: 0.02,
   },
   "analitica.n_minimo_tasas": {
     grupo: "analitica",
@@ -447,7 +487,12 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Tamaño máximo de un creativo",
     defecto: 50,
     impacto:
-      "No puede superar el límite del plan de almacenamiento (50 MB en el plan gratuito).",
+      "No puede superar el límite del plan de almacenamiento (50 MB en el plan gratuito). Rige sobre el peso máximo de cada formato: se aplica el menor de los dos.",
+  },
+  "archivos.tolerancia_aspecto": {
+    grupo: "archivos",
+    titulo: "Tolerancia de la relación de aspecto",
+    defecto: 0.02,
   },
   "tributario.reteica_municipio_base": {
     grupo: "tributario",
@@ -524,6 +569,58 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Días para pagar",
     defecto: 8,
   },
+  "privacidad.plazo_consulta_dias": {
+    grupo: "privacidad",
+    titulo: "Plazo para responder una consulta",
+    defecto: 10,
+    impacto: IMPACTO_PLAZO_TITULAR,
+  },
+  "privacidad.prorroga_consulta_dias": {
+    grupo: "privacidad",
+    titulo: "Prórroga de una consulta",
+    defecto: 5,
+    impacto: IMPACTO_PLAZO_TITULAR,
+  },
+  "privacidad.plazo_reclamo_dias": {
+    grupo: "privacidad",
+    titulo: "Plazo para responder un reclamo",
+    defecto: 15,
+    impacto: IMPACTO_PLAZO_TITULAR,
+  },
+  "privacidad.prorroga_reclamo_dias": {
+    grupo: "privacidad",
+    titulo: "Prórroga de un reclamo",
+    defecto: 8,
+    impacto: IMPACTO_PLAZO_TITULAR,
+  },
+  "privacidad.desistimiento_meses": {
+    grupo: "privacidad",
+    titulo: "Desistimiento por falta de respuesta",
+    defecto: 2,
+  },
+  "privacidad.alerta_dias": {
+    grupo: "privacidad",
+    titulo: "Aviso antes del vencimiento",
+    defecto: 2,
+  },
+  "correo.habilitado": {
+    grupo: "correo",
+    titulo: "Envío por correo",
+    defecto: false,
+    booleano: ["Encendido", "Apagado"],
+    impacto:
+      "Enciéndelo solo con el proveedor de correo configurado en el servidor y el envío programado activo: sin ellos, los correos se acumulan sin enviarse. Las preferencias de cada persona deciden qué avisos le llegan.",
+  },
+  "correo.max_intentos": {
+    grupo: "correo",
+    titulo: "Intentos por correo",
+    defecto: 5,
+  },
+  "correo.lote": {
+    grupo: "correo",
+    titulo: "Correos por corrida",
+    defecto: 20,
+  },
 }
 
 /** Nombres legibles de las opciones de los parámetros TEXTO y LISTA_TEXTO. */
@@ -552,6 +649,9 @@ export function etiquetaOpcion(
 ): string {
   return extra?.[opcion] ?? ETIQUETAS_OPCION[opcion] ?? opcion
 }
+
+/** Interruptor del envío por correo (NOT-004): la lista de plantillas avisa si está apagado. */
+export const CLAVE_CORREO_HABILITADO = "correo.habilitado"
 
 /** Parámetros cuyas opciones viven en otras tablas (validación por subconsulta en la BD). */
 export const CLAVE_PAISES_HABITUALES = "seguridad.paises_habituales"

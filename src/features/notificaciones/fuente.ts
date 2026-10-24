@@ -3,12 +3,13 @@
 /**
  * Fuente de datos de notificaciones en el navegador (React Query).
  *
- * - Conteo de no leídas por polling cada 60 s (docs/modelo-datos.md §9.1) y
- *   lista breve para el panel de la campana. Se leen con el cliente de
- *   Supabase del NAVEGADOR (JWT del usuario + RLS: solo las propias) y no con
- *   Server Actions: estas pasan por el DAL, que registra actividad de la
- *   sesión, y un sondeo automático nunca debe contar como actividad (anularía
- *   el cierre por inactividad).
+ * - Conteo de no leídas y lista breve para el panel de la campana. El aviso en
+ *   vivo (`tiempo-real.ts`) actualiza el conteo al instante; el sondeo queda
+ *   de respaldo: cada 60 s sin canal y cada 5 min con él (docs/modelo-datos.md
+ *   §9.1). Se leen con el cliente de Supabase del NAVEGADOR (JWT del usuario +
+ *   RLS: solo las propias) y no con Server Actions: estas pasan por el DAL, que
+ *   registra actividad de la sesión, y ni el sondeo ni el canal deben contar
+ *   como actividad (anularían el cierre por inactividad).
  * - Las escrituras sí van por Server Actions (DAL + zod) y, al terminar,
  *   invalidan todas las consultas `["notificaciones", …]`.
  */
@@ -23,6 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { obtenerClienteNavegador } from "@/lib/supabase/client"
 
 import { marcarNotificaciones, marcarTodasLeidas } from "./actions"
+import { INTERVALO_SONDEO_MS, intervaloSondeo, useEnVivo } from "./en-vivo"
 import { aplicarAConteo, aplicarALista, type CambioLectura } from "./lecturas"
 import {
   conteoDesdeRespuesta,
@@ -34,7 +36,6 @@ import {
   type Notificacion,
 } from "./tipos"
 
-export const INTERVALO_SONDEO_MS = 60_000
 /** Cuántas muestra el panel de la campana (la bandeja completa pagina). */
 export const RECIENTES_EN_PANEL = 8
 
@@ -76,19 +77,31 @@ export async function leerRecientes(): Promise<Recientes> {
     : { disponible: false, notificaciones: [] }
 }
 
+export interface OpcionesConteo {
+  /** El conteo que ya trae el servidor (evita un salto al hidratar). */
+  inicial?: ConteoNoLeidas
+  /**
+   * Canal en vivo conectado: espacia el sondeo. Por omisión, el estado que
+   * publica la campana (`useCanalNotificaciones`) para todas las vistas.
+   */
+  enVivo?: boolean
+}
+
 /**
- * Conteo de no leídas con sondeo cada 60 s (solo con la pestaña visible). Si
- * la tabla aún no existe deja de sondear. `inicial`: el conteo que ya trae el
- * servidor (evita un salto al hidratar).
+ * Conteo de no leídas con sondeo de respaldo (solo con la pestaña visible):
+ * cada 60 s sin canal y cada 5 min con él. Si la tabla aún no existe deja de
+ * sondear.
  */
-export function useConteoNoLeidas(inicial?: ConteoNoLeidas) {
+export function useConteoNoLeidas({ inicial, enVivo }: OpcionesConteo = {}) {
+  const canalConectado = useEnVivo()
+  const intervalo = intervaloSondeo(enVivo ?? canalConectado)
   return useQuery({
     queryKey: CLAVES_NOTIFICACIONES.conteo,
     queryFn: leerConteoNoLeidas,
     initialData: inicial,
     staleTime: INTERVALO_SONDEO_MS / 2,
     refetchInterval: (consulta) =>
-      consulta.state.data?.disponible === false ? false : INTERVALO_SONDEO_MS,
+      consulta.state.data?.disponible === false ? false : intervalo,
     refetchOnWindowFocus: true,
   })
 }

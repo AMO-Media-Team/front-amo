@@ -7,18 +7,23 @@ import {
 import {
   PROYECTO_ALTA_MEDIO,
   PROYECTO_ANUNCIANTE,
+  PROYECTO_CHROME_ANDROID,
   PROYECTO_CIERRE,
   PROYECTO_ESCRITORIO,
   PROYECTO_FINANZAS,
+  PROYECTO_FIREFOX,
   PROYECTO_MOVIL,
   PROYECTO_PAUTA_MEDIO,
   PROYECTO_PREPARACION,
+  PROYECTO_SAFARI,
+  PROYECTO_SAFARI_IOS,
   PROYECTO_TABLET,
   PROYECTO_VALIDACION,
   SPECS_ALTA_MEDIO,
   SPECS_ANUNCIANTE,
   SPECS_CIERRE,
   SPECS_FINANZAS,
+  SPECS_MATRIZ,
   SPECS_PAUTA_MEDIO,
   SPECS_VALIDACION,
 } from "./e2e/utilidades/proyectos"
@@ -39,6 +44,47 @@ const URL_BASE = `http://localhost:${PUERTO}`
 const OPCIONES_LANZAMIENTO = {
   args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 }
+
+/**
+ * Matriz de navegadores (RNF-COM-01): solo lectura (humo, navegación, inicio y
+ * mapa) en Firefox, Safari de escritorio, Safari de iOS y Chrome para Android.
+ * Corre con `pnpm test:e2e:navegadores` (AMO_E2E_NAVEGADORES=1), aparte de la
+ * suite completa.
+ */
+const MATRIZ_NAVEGADORES = process.env.AMO_E2E_NAVEGADORES
+  ? [
+      {
+        name: PROYECTO_FIREFOX,
+        dependencies: [PROYECTO_PREPARACION],
+        testMatch: SPECS_MATRIZ,
+        use: {
+          ...devices["Desktop Firefox"],
+          viewport: { width: 1440, height: 900 },
+        },
+      },
+      {
+        name: PROYECTO_SAFARI,
+        dependencies: [PROYECTO_PREPARACION],
+        testMatch: SPECS_MATRIZ,
+        use: {
+          ...devices["Desktop Safari"],
+          viewport: { width: 1440, height: 900 },
+        },
+      },
+      {
+        name: PROYECTO_SAFARI_IOS,
+        dependencies: [PROYECTO_PREPARACION],
+        testMatch: SPECS_MATRIZ,
+        use: { ...devices["iPhone 13"] },
+      },
+      {
+        name: PROYECTO_CHROME_ANDROID,
+        dependencies: [PROYECTO_PREPARACION],
+        testMatch: SPECS_MATRIZ,
+        use: { ...devices["Pixel 7"], launchOptions: OPCIONES_LANZAMIENTO },
+      },
+    ]
+  : []
 
 export default defineConfig({
   testDir: "./e2e",
@@ -204,6 +250,7 @@ export default defineConfig({
         launchOptions: OPCIONES_LANZAMIENTO,
       },
     },
+    ...MATRIZ_NAVEGADORES,
   ],
   webServer: {
     command: `pnpm build && pnpm start -p ${PUERTO}`,

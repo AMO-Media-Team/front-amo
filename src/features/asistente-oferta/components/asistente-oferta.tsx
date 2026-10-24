@@ -20,11 +20,13 @@ import { toast } from "sonner"
 
 import { Asistente, type PasoAsistente } from "@/components/asistente/asistente"
 import { DialogoConfirmacion } from "@/components/feedback/dialogo-confirmacion"
-import type { EstadoCreativo } from "@/features/creativos/tipos"
 import {
-  rutaOfertaAnunciante,
-  rutaOfertasDeCampana,
-} from "@/features/ofertas/rutas"
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
+import type { EstadoCreativo } from "@/features/creativos/tipos"
 import { ZONA } from "@/lib/fechas"
 import type { ResultadoFallo } from "@/lib/result"
 
@@ -86,6 +88,11 @@ export interface PropsAsistenteOferta {
   creativosIniciales: Record<string, EstadoCreativo>
   /** ISO del momento en que el servidor armó la página. */
   ahora: string
+  /**
+   * El anunciante con lo suyo o el equipo AMO por cuenta de un anunciante
+   * (ADM-014): decide los enlaces de salida y la voz de los textos.
+   */
+  gestion?: ModoGestion
 }
 
 interface ErrorDePaso {
@@ -177,8 +184,11 @@ export function AsistenteOferta({
   ofertasIniciales,
   creativosIniciales,
   ahora,
+  gestion = GESTION_PROPIA,
 }: PropsAsistenteOferta) {
   const router = useRouter()
+  const rutas = rutasGestion(gestion)
+  const asistido = esAsistido(gestion)
   const [ofertas, setOfertas] = useState<OfertaEnCurso[]>(ofertasIniciales)
   const claveEnviados = ofertas
     .filter((oferta) => !EDITABLES.has(oferta.estado))
@@ -517,13 +527,17 @@ export function AsistenteOferta({
           : enviadas.length === 1
             ? "Oferta enviada a revisión"
             : `${enviadas.length} ofertas enviadas a revisión`,
-        { description: "AMO la revisa y te avisa cuando quede publicada." }
+        {
+          description: asistido
+            ? `Queda en la cola de moderación; ${gestion.anunciante} recibe un aviso.`
+            : "AMO la revisa y te avisa cuando quede publicada.",
+        }
       )
       const unica = lista.length === 1 ? lista[0] : null
       router.push(
         unica
-          ? rutaOfertaAnunciante(campana.id, unica.ofertaId)
-          : rutaOfertasDeCampana(campana.id)
+          ? rutas.oferta(campana.id, unica.ofertaId)
+          : rutas.ofertasCampana(campana.id)
       )
       return true
     }
@@ -596,6 +610,7 @@ export function AsistenteOferta({
             alternarFormato(formatoId, marcar)
           }}
           onQuitarRetirado={quitarRetirado}
+          gestion={gestion}
         />
       ),
       validar: () => validarPaso("que"),
@@ -640,8 +655,9 @@ export function AsistenteOferta({
     {
       id: "cuanto",
       titulo: TITULOS_PASO.cuanto,
-      descripcion:
-        "Tú defines el presupuesto y los cupos; el precio de cada medio lo calcula AMO con sus tarifas.",
+      descripcion: asistido
+        ? "El presupuesto y los cupos los defines por cuenta de la empresa; el precio de cada medio lo calcula AMO con sus tarifas."
+        : "Tú defines el presupuesto y los cupos; el precio de cada medio lo calcula AMO con sus tarifas.",
       contenido: contenido(
         "cuanto",
         <PasoCuanto
@@ -684,8 +700,9 @@ export function AsistenteOferta({
     {
       id: "envio",
       titulo: TITULOS_PASO.envio,
-      descripcion:
-        "Revisa todo antes de enviarla. AMO la modera y, si está bien, la publica para los medios elegibles.",
+      descripcion: asistido
+        ? "Revisa todo antes de enviarla. Queda en la cola de moderación y, si está bien, se publica para los medios elegibles."
+        : "Revisa todo antes de enviarla. AMO la modera y, si está bien, la publica para los medios elegibles.",
       contenido: contenido(
         "envio",
         <PasoEnvio
@@ -695,6 +712,7 @@ export function AsistenteOferta({
           ofertas={ofertas}
           creativos={creativos}
           empresaVerificada={empresaVerificada}
+          gestion={gestion}
         />
       ),
       validar: () => validarPaso("envio"),

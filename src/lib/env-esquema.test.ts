@@ -5,6 +5,7 @@ import {
   MAPBOX_ESTILO_POR_DEFECTO,
   SITIO_URL_POR_DEFECTO,
   esClaveCifradoValida,
+  esRemitenteValido,
   validarEnvCliente,
   validarEnvServidor,
 } from "./env-esquema"
@@ -191,5 +192,84 @@ describe("validarEnvServidor", () => {
     expect(() =>
       validarEnvServidor({ ...SERVIDOR_VALIDO, AMO_SMTP_CONFIGURADO: "si" })
     ).toThrow(ErrorEnv)
+  })
+})
+
+describe("validarEnvServidor: correo de los avisos", () => {
+  const RESEND = {
+    ...SERVIDOR_VALIDO,
+    AMO_CORREO_PROVEEDOR: "resend",
+    RESEND_API_KEY: "re_clave_secreta",
+    AMO_CORREO_REMITENTE: "AMO <avisos@amo.co>",
+  }
+
+  it("deja el correo desactivado por omisión", () => {
+    const env = validarEnvServidor(SERVIDOR_VALIDO)
+    expect(env.AMO_CORREO_PROVEEDOR).toBe("desactivado")
+    expect(env.AMO_CORREOS_SECRETO).toBeUndefined()
+  })
+
+  it("con resend exige la clave y el remitente sin mostrarlos", () => {
+    expect(validarEnvServidor(RESEND).AMO_CORREO_PROVEEDOR).toBe("resend")
+    const mensaje = mensajeDeError(() =>
+      validarEnvServidor({
+        ...SERVIDOR_VALIDO,
+        AMO_CORREO_PROVEEDOR: "resend",
+      })
+    )
+    expect(mensaje).toContain("RESEND_API_KEY")
+    expect(mensaje).toContain("AMO_CORREO_REMITENTE")
+  })
+
+  it.each([
+    ["avisos@amo.co", true],
+    ["AMO Avisos <avisos@amo.co>", true],
+    ["AMO <no-correo>", false],
+    ["<avisos@amo.co>", false],
+    ["AMO avisos@amo.co", false],
+  ])("remitente %s → %s", (valor, valido) => {
+    expect(esRemitenteValido(valor)).toBe(valido)
+  })
+
+  it("rechaza «registro» en producción", () => {
+    expect(() =>
+      validarEnvServidor({
+        ...SERVIDOR_VALIDO,
+        AMO_CORREO_PROVEEDOR: "registro",
+        VERCEL_ENV: "preview",
+      })
+    ).not.toThrow()
+    expect(
+      mensajeDeError(() =>
+        validarEnvServidor({
+          ...SERVIDOR_VALIDO,
+          SUPABASE_SECRET_KEY: "sb_secret_x",
+          AMO_CORREO_PROVEEDOR: "registro",
+          VERCEL_ENV: "production",
+        })
+      )
+    ).toContain("AMO_CORREO_PROVEEDOR")
+  })
+
+  it("exige un secreto del despachador largo y propio", () => {
+    expect(
+      validarEnvServidor({
+        ...SERVIDOR_VALIDO,
+        AMO_CORREOS_SECRETO: "c".repeat(32),
+      }).AMO_CORREOS_SECRETO
+    ).toBe("c".repeat(32))
+    const corto = mensajeDeError(() =>
+      validarEnvServidor({ ...SERVIDOR_VALIDO, AMO_CORREOS_SECRETO: "corto" })
+    )
+    expect(corto).toContain("AMO_CORREOS_SECRETO")
+    expect(corto).not.toContain("corto")
+    expect(
+      mensajeDeError(() =>
+        validarEnvServidor({
+          ...SERVIDOR_VALIDO,
+          AMO_CORREOS_SECRETO: SECRETO_VALIDO,
+        })
+      )
+    ).toContain("distinto de AMO_SERVIDOR_SECRET")
   })
 })

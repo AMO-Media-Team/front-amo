@@ -1,13 +1,12 @@
 import { randomInt } from "node:crypto"
 
-import AxeBuilder from "@axe-core/playwright"
-
 import {
   clienteComoSuperadmin,
   type CuentaE2E,
 } from "../scripts/bootstrap/provision-e2e"
 import type { ClienteSupabase } from "../scripts/bootstrap/supabase"
 import { huellaConexion } from "../src/features/vinculacion/ip"
+import { infracciones } from "./utilidades/axe"
 import { entorno } from "./utilidades/cuentas"
 import { esperarSinDesbordeHorizontal, fijarTema } from "./utilidades/interfaz"
 import {
@@ -49,7 +48,6 @@ const REVISOR: CuentaE2E = {
 
 const PREFIJO_CORREO = "e2e.vinculacion."
 const PREFIJO_MEDIO = "E2E Vinculación"
-const NORMAS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 /** `vinculacion.max_solicitudes_ip_dia` por defecto. */
 const LIMITE_POR_CONEXION = 5
 
@@ -210,16 +208,6 @@ async function llenarFormulario(
       name: "Autorizo a AMO a tratar mis datos personales",
     })
     .check()
-}
-
-async function infracciones(page: Page): Promise<string[]> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(NORMAS)
-    .analyze()
-  return violations.map(
-    ({ id, impact, help, nodes }) =>
-      `${id} (${impact}): ${help} → ${nodes.map((nodo) => nodo.target.join(" ")).join(" | ")}`
-  )
 }
 
 test.describe("formulario público de vinculación", () => {

@@ -155,7 +155,7 @@ export function BarraFiltros({
   inicial: ConteoNoLeidas
   className?: string
 }) {
-  const conteo = useConteoNoLeidas(inicial)
+  const conteo = useConteoNoLeidas({ inicial })
   return (
     <div
       className={cn(
@@ -243,7 +243,7 @@ function GrupoRiel({
 /** Filtros de la bandeja como riel lateral fijo (solo `lg` en adelante). */
 export function RielFiltros({ inicial }: { inicial: ConteoNoLeidas }) {
   const { filtros, fijarFiltros } = useBandeja()
-  const conteo = useConteoNoLeidas(inicial)
+  const conteo = useConteoNoLeidas({ inicial })
   const noLeidas = (conteo.data ?? inicial).total
 
   return (

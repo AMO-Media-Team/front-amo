@@ -24,6 +24,7 @@ const estado = vi.hoisted(() => ({
   orden: [] as string[],
   usuario: {
     id: "u1",
+    rol: { tipo: "ANUNCIANTE" as "ANUNCIANTE" | "ADMIN" },
     anuncianteId: "e2e00000-0000-4000-8000-00000000a001" as string | null,
   },
   respuestas: {} as Record<string, unknown[]>,
@@ -216,6 +217,7 @@ beforeEach(() => {
   estado.orden = []
   estado.usuario = {
     id: "u1",
+    rol: { tipo: "ANUNCIANTE" },
     anuncianteId: "e2e00000-0000-4000-8000-00000000a001",
   }
   estado.respuestas = {}
@@ -235,7 +237,9 @@ describe("guardarOfertas", () => {
       existentes: [],
       valores: valoresCompletos({ que: { titulo: "" } }),
     })
-    expect(estado.orden[0]).toBe("dal:ofertas.gestionar_propias")
+    expect(estado.orden[0]).toBe(
+      "dal:ofertas.gestionar_propias,ofertas.gestionar"
+    )
     expect(resultado.ok).toBe(false)
     if (resultado.ok) return
     // Las rutas de error son las del formulario.
@@ -254,6 +258,32 @@ describe("guardarOfertas", () => {
     })
     expect(resultado).toEqual({ ok: false, error: SIN_EMPRESA })
     expect(estado.llamadas).toHaveLength(0)
+  })
+
+  it("al equipo AMO no se le exige empresa propia (gestión asistida, ADM-014)", async () => {
+    estado.usuario = { id: "op1", rol: { tipo: "ADMIN" }, anuncianteId: null }
+    prepararLecturas({
+      ofertas: [[fila(IDS.ofertaA, IDS.igReel, "BORRADOR", V2)]],
+    })
+    estado.respuestas["insert:ofertas"] = [
+      { data: [fila(IDS.ofertaA, IDS.igReel, "BORRADOR")], error: null },
+    ]
+    estado.respuestas["select:oferta_cupos"] = [{ data: [], error: null }]
+    const valores = valoresCompletos()
+    const resultado = await guardarOfertas({
+      campanaId: IDS.campana,
+      existentes: [],
+      valores,
+    })
+    expect(estado.orden[0]).toBe(
+      "dal:ofertas.gestionar_propias,ofertas.gestionar"
+    )
+    expect(resultado.ok).toBe(true)
+    // La empresa la deriva la BD de la campaña también en modo asistido.
+    const [insercion] = llamadas("ofertas", "insert")
+    const filas = insercion.carga as Record<string, unknown>[]
+    expect(filas[0]).toMatchObject({ campana_id: IDS.campana })
+    expect(filas[0]).not.toHaveProperty("anunciante_id")
   })
 
   it("crea una oferta por formato en una sola inserción y luego sus cupos", async () => {
@@ -615,7 +645,9 @@ describe("enviarOfertasARevision", () => {
       ],
       valores: dosFormatos(),
     })
-    expect(estado.orden[0]).toBe("dal:ofertas.gestionar_propias")
+    expect(estado.orden[0]).toBe(
+      "dal:ofertas.gestionar_propias,ofertas.gestionar"
+    )
     expect(estado.transiciones).toEqual([
       { id: IDS.ofertaA, hacia: "EN_REVISION" },
       { id: IDS.ofertaB, hacia: "EN_REVISION" },
@@ -669,7 +701,10 @@ describe("enviarOfertasARevision", () => {
 describe("descartarOferta", () => {
   it("archiva el borrador con el actor y su sesión (no lo cancela)", async () => {
     const resultado = await descartarOferta({ ofertaId: IDS.ofertaA })
-    expect(estado.orden).toEqual(["dal:ofertas.gestionar_propias", "contexto"])
+    expect(estado.orden).toEqual([
+      "dal:ofertas.gestionar_propias,ofertas.gestionar",
+      "contexto",
+    ])
     expect(estado.rpcServicio).toEqual([
       {
         nombre: "archivar_oferta_srv",

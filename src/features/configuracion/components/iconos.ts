@@ -15,6 +15,7 @@ import {
   Landmark,
   LibraryBig,
   type LucideIcon,
+  Mail,
   Megaphone,
   Percent,
   Radar,
@@ -28,6 +29,8 @@ import {
   Tags,
   Timer,
   UserCheck,
+  UserLock,
+  UserPlus,
   Wallet,
 } from "lucide-react"
 
@@ -71,6 +74,7 @@ export const ICONOS_GRUPO: Readonly<Record<string, LucideIcon>> = {
   precios: Calculator,
   elegibilidad: UserCheck,
   reverificacion: BadgeCheck,
+  vinculacion: UserPlus,
   actividad: Activity,
   cortes: Timer,
   integridad: Radar,
@@ -85,6 +89,8 @@ export const ICONOS_GRUPO: Readonly<Record<string, LucideIcon>> = {
   tributario: Landmark,
   facturacion: Receipt,
   liquidaciones: Wallet,
+  privacidad: UserLock,
+  correo: Mail,
   otros: SlidersHorizontal,
 }
 

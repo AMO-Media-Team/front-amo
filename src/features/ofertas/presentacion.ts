@@ -337,3 +337,10 @@ export const SUGERENCIAS_CANCELACION_ANUNCIANTE: readonly string[] = [
   "El producto o servicio ya no está disponible.",
   "Hay un error en la configuración de la oferta.",
 ]
+
+/** Los mismos motivos dichos por el equipo AMO por cuenta de la empresa (ADM-014). */
+export const SUGERENCIAS_CANCELACION_ASISTIDA: readonly string[] = [
+  "Lo solicitó la empresa.",
+  "La empresa ya no ofrece el producto o servicio.",
+  "La oferta tiene un error de configuración y se creará otra.",
+]

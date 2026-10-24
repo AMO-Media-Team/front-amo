@@ -110,6 +110,21 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     variableTotp: "E2E_FINANZAS_TOTP_SECRET",
   },
   {
+    // Finanzas de solo lectura (fase 6): la sesión `finanzas` que abre una vez
+    // `e2e/preparacion.setup.ts` para auditar los pagos a medios, que ADMIN no
+    // ve (`liquidaciones.registrar_pago`). Cuenta aparte de la anterior: el
+    // proyecto «finanzas» ingresa con TOTP y eso cerraría esta sesión.
+    clave: "LECTURA_FINANZAS",
+    rol: "FINANZAS",
+    nombre: "Lectura Finanzas E2E",
+    emailPorDefecto: "e2e.lectura.finanzas@amo.test",
+    variableEmail: "E2E_LECTURA_FINANZAS_EMAIL",
+    variablePassword: "E2E_LECTURA_FINANZAS_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: true,
+    variableTotp: "E2E_LECTURA_FINANZAS_TOTP_SECRET",
+  },
+  {
     clave: "ANUNCIANTE",
     rol: "ANUNCIANTE",
     nombre: "Anunciante E2E",

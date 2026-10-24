@@ -12,13 +12,18 @@ import {
   Megaphone,
   MousePointerClick,
   PiggyBank,
+  Plus,
   Radio,
   Target,
   Ticket,
   Wallet,
 } from "lucide-react"
+import type { Route } from "next"
+import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { InsigniaGestionAsistida } from "@/features/campanas/components/distintivos-campana"
 import { serializarFecha } from "@/lib/fechas"
 import {
   formatearCOP,
@@ -107,13 +112,23 @@ function DistintivoFase({
   return <InsigniaTono tono="neutro" etiqueta="Vigencia terminada" />
 }
 
+/**
+ * Cabecera de la ficha interna de una campaña. Con la gestión asistida
+ * (ADM-014) recibe las acciones por cuenta del anunciante (nueva oferta,
+ * editar, activar, cancelar, archivar) y marca la campaña que creó el equipo.
+ */
 export function CabeceraCampana({
   campana,
   verAnunciante,
+  gestionAsistida = false,
+  acciones,
 }: {
   campana: CampanaDetalle
   /** `anunciantes.ver`: el nombre enlaza a su ficha. */
   verAnunciante: boolean
+  /** La creó el equipo AMO por cuenta del anunciante (`gestion_asistida`). */
+  gestionAsistida?: boolean
+  acciones?: ReactNode
 }) {
   const hoy = serializarFecha(new Date())
   const dias = diasDeVigencia(campana.fechaInicio, campana.fechaFin)
@@ -123,6 +138,7 @@ export function CabeceraCampana({
       antetitulo={`Campaña · ${campana.marca}`}
       titulo={campana.nombre}
       visual={<Monograma icono={Megaphone} />}
+      acciones={acciones}
       subtitulo={
         <span className="flex flex-col gap-1">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -157,6 +173,7 @@ export function CabeceraCampana({
         <>
           <InsigniaEstado catalogo={ESTADOS_CAMPANA} estado={campana.estado} />
           <DistintivoFase campana={campana} hoy={hoy} />
+          {gestionAsistida ? <InsigniaGestionAsistida /> : null}
           {campana.esDemo ? <InsigniaDemo /> : null}
         </>
       }
@@ -343,24 +360,45 @@ function ordenarOfertas(ofertas: readonly OfertaDetalle[]): OfertaDetalle[] {
 /** Pestaña Ofertas: cada oferta con cupos por franja, presupuesto, ventana y segmentación. */
 export async function SeccionOfertasCampana({
   campanaId,
+  nuevaOferta = null,
 }: {
   campanaId: string
+  /** Asistente de oferta por cuenta del anunciante (ADM-014), si se puede. */
+  nuevaOferta?: Route | null
 }) {
-  return <ListaOfertas ofertas={await ofertasDeCampana(campanaId)} />
+  return (
+    <ListaOfertas
+      ofertas={await ofertasDeCampana(campanaId)}
+      nuevaOferta={nuevaOferta}
+    />
+  )
 }
 
 export function ListaOfertas({
   ofertas,
+  nuevaOferta = null,
 }: {
   ofertas: readonly OfertaDetalle[]
+  nuevaOferta?: Route | null
 }) {
   if (ofertas.length === 0) {
     return (
       <EstadoVacio
         icono={Megaphone}
         titulo="Esta campaña aún no tiene ofertas"
-        descripcion="Las ofertas definen la plataforma, el formato, los cupos por franja y el presupuesto máximo que los medios pueden tomar."
-      />
+        descripcion={
+          nuevaOferta
+            ? "Las ofertas definen la plataforma, el formato, los cupos por franja y el presupuesto máximo que los medios pueden tomar. Puedes crearlas por cuenta del anunciante."
+            : "Las ofertas definen la plataforma, el formato, los cupos por franja y el presupuesto máximo que los medios pueden tomar."
+        }
+      >
+        {nuevaOferta ? (
+          <EnlaceBoton href={nuevaOferta}>
+            <Plus data-icon="inline-start" aria-hidden />
+            Nueva oferta
+          </EnlaceBoton>
+        ) : null}
+      </EstadoVacio>
     )
   }
   return (

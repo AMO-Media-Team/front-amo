@@ -152,5 +152,13 @@ describe("AltaMedio · después del alta", () => {
     expect(
       screen.getByRole("link", { name: /Ver mi nivel y cómo subir/ })
     ).toHaveAttribute("href", "/mi-medio/nivel")
+    expect(
+      screen.getByRole("link", { name: /Ver mi reputación/ })
+    ).toHaveAttribute("href", "/mi-medio/reputacion")
+  })
+
+  it("durante el alta aún no ofrece la reputación", () => {
+    render(<AltaMedio resumen={resumenFijo()} />)
+    expect(screen.queryByRole("link", { name: /Ver mi reputación/ })).toBeNull()
   })
 })

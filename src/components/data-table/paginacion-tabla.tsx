@@ -92,7 +92,8 @@ export function PaginacionTabla({
         className
       )}
     >
-      <p className="cifras text-muted-foreground" aria-live="polite">
+      {/* Sin `aria-live`: el resumen de la tabla ya anuncia el cambio. */}
+      <p className="cifras text-muted-foreground">
         {total === 0 ? (
           "Sin resultados"
         ) : (

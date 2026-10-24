@@ -45,9 +45,11 @@ export function seccionEditable(
     case "tributario":
       return permisos.editar || permisos.tributario
     case "catalogos":
+      return permisos.catalogos
+    // Textos (catálogos) y los parámetros de los titulares o del correo (editar).
     case "legal":
     case "plantillas":
-      return permisos.catalogos
+      return permisos.catalogos || permisos.editar
     default:
       return permisos.editar
   }

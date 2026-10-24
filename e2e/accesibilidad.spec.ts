@@ -1,22 +1,19 @@
-import AxeBuilder from "@axe-core/playwright"
-
+import { infracciones } from "./utilidades/axe"
 import { fijarTema, type Tema } from "./utilidades/interfaz"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
 import { type NombreSesion, sesion } from "./utilidades/sesiones"
 
 /**
  * Accesibilidad automática (axe-core, WCAG 2.2 AA) de las páginas clave en
- * los dos temas y en los tres tamaños de pantalla. Complementa, no sustituye,
- * la revisión con teclado y lector de pantalla.
+ * los dos temas y en los tres tamaños de pantalla, sin ninguna infracción
+ * (de cualquier impacto). Complementa, no sustituye, la revisión con teclado y
+ * lector de pantalla. Las pantallas de cada portal, con sus diálogos y menús
+ * abiertos, están en `accesibilidad-portales.spec.ts`.
  */
 
-const NORMAS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 /** El oscuro es el tema de AMO mientras el navegador no elija otro. */
 const TEMA_PREDETERMINADO: Tema = "dark"
 const TEMA_ALTERNO: Tema = "light"
-
-/** El lienzo WebGL y los controles de Mapbox no son de AMO. */
-const AJENOS = [".mapboxgl-canvas-container", ".mapboxgl-control-container"]
 
 interface Pagina {
   ruta: string
@@ -29,7 +26,10 @@ const paginacion = (page: Page) =>
 const region = (nombre: string) => (page: Page) =>
   page.getByRole("region", { name: nombre, exact: true })
 
-const PAGINAS: Readonly<Record<NombreSesion | "publico", readonly Pagina[]>> = {
+/** Finanzas solo tiene pantallas propias en `accesibilidad-portales.spec.ts`. */
+type Portal = Exclude<NombreSesion, "finanzas"> | "publico"
+
+const PAGINAS: Readonly<Record<Portal, readonly Pagina[]>> = {
   publico: [
     {
       ruta: "/ingresar",
@@ -67,17 +67,6 @@ const PAGINAS: Readonly<Record<NombreSesion | "publico", readonly Pagina[]>> = {
   ],
   anunciante: [{ ruta: "/inicio", lista: region("Cobertura territorial") }],
   medio: [{ ruta: "/inicio", lista: region("Tu reputación") }],
-}
-
-async function infracciones(page: Page): Promise<string[]> {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(NORMAS)
-    .exclude(AJENOS)
-    .analyze()
-  return violations.map(
-    ({ id, impact, help, nodes }) =>
-      `${id} (${impact}): ${help} → ${nodes.map((nodo) => nodo.target.join(" ")).join(" | ")}`
-  )
 }
 
 async function revisarTema(

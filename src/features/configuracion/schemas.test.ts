@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   esquemaActivoMunicipios,
+  esquemaConfirmarParametro,
   esquemaElementoCatalogo,
   esquemaExcepcion,
   esquemaFormato,
@@ -228,6 +229,27 @@ describe("esquemaValorParametro (mismas reglas que fn_validar_configuracion)", (
         actualizadoAt: "",
       }).success
     ).toBe(false)
+  })
+
+  it("confirmar un valor pide la clave y la versión que se tenía a la vista", () => {
+    expect(
+      esquemaConfirmarParametro.safeParse({
+        clave: "privacidad.plazo_consulta_dias",
+        actualizadoAt: MARCA,
+      }).success
+    ).toBe(true)
+    expect(
+      esquemaConfirmarParametro.safeParse({
+        clave: "privacidad",
+        actualizadoAt: MARCA,
+      }).success
+    ).toBe(false)
+    expect(
+      esquemaConfirmarParametro.safeParse({
+        clave: "correo.habilitado",
+        actualizadoAt: "",
+      }).error?.issues[0].message
+    ).toBe("Falta la versión del registro.")
   })
 })
 

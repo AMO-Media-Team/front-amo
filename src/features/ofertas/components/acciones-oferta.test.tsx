@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { exito, fallo } from "@/lib/result"
 
-import { accionesAnunciante } from "../acciones"
+import type { ModoGestion } from "@/features/campanas/rutas-gestion"
+
+import { accionesGestion } from "../acciones"
 import { situacionOferta } from "../presentacion"
 import type { FechasOferta } from "../tipos"
 
@@ -16,6 +18,8 @@ const acciones = vi.hoisted(() => ({
   archivarOferta: vi.fn(),
 }))
 vi.mock("../actions", () => acciones)
+const avisos = vi.hoisted(() => ({ success: vi.fn() }))
+vi.mock("sonner", () => ({ toast: avisos }))
 const enrutador = vi.hoisted(() => ({ replace: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => enrutador }))
 
@@ -25,18 +29,51 @@ import { AvisoEstadoOferta } from "./aviso-estado-oferta"
 const OFERTA = "0192f3a4-5b6c-7d8e-9f01-0000000000f1"
 const CAMPANA = "0192f3a4-5b6c-7d8e-9f01-0000000000c1"
 const PROPIAS = ["ofertas.gestionar_propias"]
+const OPERACIONES = ["ofertas.gestionar", "ofertas.moderar", "ofertas.ver"]
+const ASISTIDO: ModoGestion = {
+  modo: "asistido",
+  anuncianteId: "e2e00000-0000-4000-8000-00000000a001",
+  anunciante: "Café Sierra Alta",
+}
 
-function renderizar(
-  estado: Parameters<typeof accionesAnunciante>[0],
-  cuposOcupados = 0
+type EstadoOferta = Parameters<typeof accionesGestion>[0]
+
+function accionesAnunciante(
+  estado: EstadoOferta,
+  permisos: readonly string[],
+  situacion: { cuposOcupados: number }
 ) {
+  return accionesGestion(estado, "ANUNCIANTE", permisos, situacion)
+}
+
+function renderizar(estado: EstadoOferta, cuposOcupados = 0) {
   const usuario = userEvent.setup()
   render(
     <AccionesOferta
       ofertaId={OFERTA}
       campanaId={CAMPANA}
       titulo="Reel de Halloween"
+      estado={estado}
       opciones={accionesAnunciante(estado, PROPIAS, { cuposOcupados })}
+    />
+  )
+  return usuario
+}
+
+/** El panel de gestión asistida de la ficha interna (ADM-014). */
+function renderizarAsistido(estado: EstadoOferta) {
+  const usuario = userEvent.setup()
+  render(
+    <AccionesOferta
+      ofertaId={OFERTA}
+      campanaId={CAMPANA}
+      titulo="Reel de Halloween"
+      estado={estado}
+      opciones={accionesGestion(estado, "ADMIN", OPERACIONES, {
+        cuposOcupados: 0,
+      })}
+      gestion={ASISTIDO}
+      disposicion="columna"
     />
   )
   return usuario
@@ -55,11 +92,7 @@ const FECHAS: FechasOferta = {
 }
 
 /** La cabecera de la ficha: el aviso del estado y las acciones que admite. */
-function Cabecera({
-  estado,
-}: {
-  estado: Parameters<typeof accionesAnunciante>[0]
-}) {
+function Cabecera({ estado }: { estado: EstadoOferta }) {
   return (
     <>
       <AvisoEstadoOferta
@@ -81,6 +114,7 @@ function Cabecera({
         ofertaId={OFERTA}
         campanaId={CAMPANA}
         titulo="Reel de Halloween"
+        estado={estado}
         opciones={accionesAnunciante(estado, PROPIAS, { cuposOcupados: 0 })}
       />
     </>
@@ -93,6 +127,7 @@ beforeEach(() => {
   acciones.cancelarOferta.mockReset().mockResolvedValue(exito())
   acciones.archivarOferta.mockReset().mockResolvedValue(exito())
   enrutador.replace.mockReset()
+  avisos.success.mockReset()
 })
 
 describe("AccionesOferta", () => {
@@ -375,9 +410,96 @@ describe("AccionesOferta", () => {
         ofertaId={OFERTA}
         campanaId={CAMPANA}
         titulo="Reel"
+        estado="BORRADOR"
         opciones={[]}
       />
     )
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe("AccionesOferta · gestión asistida (ADM-014)", () => {
+  it("editar y el paso que falta llevan a las rutas de Operación", async () => {
+    acciones.enviarOfertaARevision.mockResolvedValue({
+      ...fallo("Carga el paquete creativo con al menos un archivo."),
+      paso: "creativo",
+    })
+    const usuario = renderizarAsistido("BORRADOR")
+    expect(screen.getByRole("link", { name: "Editar" })).toHaveAttribute(
+      "href",
+      `/operacion/ofertas/${OFERTA}/editar`
+    )
+    await usuario.click(
+      screen.getByRole("button", { name: "Enviar a revisión" })
+    )
+    const dialogo = screen.getByRole("alertdialog", {
+      name: "¿Enviar la oferta a revisión?",
+    })
+    expect(dialogo).toHaveTextContent(
+      /Queda en la cola de moderación y Café Sierra Alta recibe un aviso/
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Enviar a revisión" })
+    )
+    const aviso = await within(dialogo).findByRole("alert")
+    expect(
+      within(aviso).getByRole("link", { name: /Ir a «Paquete creativo»/ })
+    ).toHaveAttribute(
+      "href",
+      `/operacion/ofertas/${OFERTA}/editar?paso=creativo`
+    )
+  })
+
+  it("al enviar, el aviso dice que queda en la cola de moderación", async () => {
+    const usuario = renderizarAsistido("DEVUELTA")
+    await usuario.click(
+      screen.getByRole("button", { name: "Reenviar a revisión" })
+    )
+    const dialogo = screen.getByRole("alertdialog")
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Reenviar a revisión" })
+    )
+    await waitFor(() => expect(dialogo).not.toBeInTheDocument())
+    expect(avisos.success).toHaveBeenCalledWith("Oferta reenviada a revisión", {
+      description: "Queda en la cola de moderación.",
+    })
+  })
+
+  it("cancelar un borrador pide motivo al equipo AMO y lo lleva a la acción", async () => {
+    const usuario = renderizarAsistido("BORRADOR")
+    await usuario.click(screen.getByRole("button", { name: "Cancelar oferta" }))
+    const dialogo = screen.getByRole("alertdialog", {
+      name: "¿Cancelar la oferta?",
+    })
+    expect(dialogo).toHaveTextContent(
+      /Se descarta por cuenta de Café Sierra Alta, que recibe un aviso con el motivo/
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Lo solicitó la empresa." })
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Sí, cancelar la oferta" })
+    )
+    await waitFor(() =>
+      expect(acciones.cancelarOferta).toHaveBeenCalledWith({
+        ofertaId: OFERTA,
+        motivo: "Lo solicitó la empresa.",
+      })
+    )
+  })
+
+  it("archivada, vuelve a la ficha interna de la campaña", async () => {
+    const usuario = renderizarAsistido("CANCELADA")
+    await usuario.click(screen.getByRole("button", { name: "Archivar oferta" }))
+    const dialogo = screen.getByRole("alertdialog")
+    expect(dialogo).toHaveTextContent(/también para Café Sierra Alta/)
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Archivar oferta" })
+    )
+    await waitFor(() =>
+      expect(enrutador.replace).toHaveBeenCalledWith(
+        `/operacion/campanas/${CAMPANA}`
+      )
+    )
   })
 })

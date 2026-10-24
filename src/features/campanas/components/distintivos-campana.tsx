@@ -9,6 +9,7 @@ import {
   conteosDeOfertas,
   ESTADOS_MI_CAMPANA,
   textoFase,
+  type VozGestion,
 } from "../presentacion"
 import type { EstadoCampana, OfertasPorEstado } from "../tipos"
 
@@ -23,6 +24,32 @@ export function InsigniaCampana({
     <InsigniaEstado
       catalogo={ESTADOS_MI_CAMPANA}
       estado={estado}
+      className={className}
+    />
+  )
+}
+
+/**
+ * La campaña o la oferta la creó el equipo AMO por cuenta de la empresa
+ * (ADM-014; `gestion_asistida`, la fija la BD). El título se le dirige al
+ * anunciante (`voz="propio"`) o al equipo.
+ */
+export function InsigniaGestionAsistida({
+  voz = "asistido",
+  className,
+}: {
+  voz?: VozGestion
+  className?: string
+}) {
+  return (
+    <InsigniaTono
+      tono="info"
+      etiqueta="Creada por el equipo AMO"
+      titulo={
+        voz === "propio"
+          ? "El equipo AMO la creó por cuenta de tu empresa; cada cambio que hace te llega como aviso."
+          : "El equipo AMO la creó por cuenta del anunciante (gestión asistida)."
+      }
       className={className}
     />
   )

@@ -15,6 +15,7 @@ import {
   vi,
 } from "vitest"
 
+import type { ModoGestion } from "@/features/campanas/rutas-gestion"
 import { exito } from "@/lib/result"
 
 import { FORMATO_RETIRADO, OFERTA_CAMBIO_ESTADO } from "../errores"
@@ -166,8 +167,10 @@ function pintar({
   alActualizar,
   empresaVerificada = true,
   creativos = {},
+  gestion,
 }: {
   campana?: CampanaAsistente
+  gestion?: ModoGestion
   retirados?: FormatoAsistente[]
   empresaVerificada?: boolean
   creativos?: Record<
@@ -201,6 +204,7 @@ function pintar({
           ofertasIniciales={ofertas}
           creativosIniciales={creativos}
           ahora={AHORA.toISOString()}
+          gestion={gestion}
         />
       </NuqsTestingAdapter>
     </QueryClientProvider>
@@ -833,5 +837,62 @@ describe("AsistenteOferta · accesibilidad y avisos", () => {
     })
     await usuario.type(screen.getByLabelText(/Mínimo de seguidores/), "47300")
     expect(screen.getByText(/Para estimar se usa 45\.000/)).toBeInTheDocument()
+  })
+})
+
+describe("AsistenteOferta · gestión asistida (ADM-014)", () => {
+  const ASISTIDO: ModoGestion = {
+    modo: "asistido",
+    anuncianteId: CAMPANA.anuncianteId,
+    anunciante: "Jugos del Valle",
+  }
+
+  it("con la empresa sin verificar lo dice de ella y enlaza a su ficha interna", () => {
+    pintar({
+      gestion: ASISTIDO,
+      empresaVerificada: false,
+      busqueda: `?ofertas=${IDS.ofertaA}&paso=envio`,
+      valores: valoresCompletos(),
+      ofertas: [enCurso(IDS.ofertaA, IDS.igReel, "BORRADOR")],
+      creativos: { [IDS.ofertaA]: { listo: true, archivos: 1, faltan: [] } },
+    })
+    expect(
+      screen.getByText("La empresa aún no está verificada")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "Ver la ficha del anunciante" })
+    ).toHaveAttribute("href", `/operacion/anunciantes/${CAMPANA.anuncianteId}`)
+    expect(screen.queryByText(/tu empresa/i)).not.toBeInTheDocument()
+  })
+
+  it("enviada, va a la ficha interna de la oferta y dice que queda en la cola de moderación", async () => {
+    const usuario = userEvent.setup()
+    acciones.enviarOfertasARevision.mockResolvedValue(
+      exito({
+        ofertas: [enCurso(IDS.ofertaA, IDS.igReel, "EN_REVISION", V2)],
+        enviadas: [IDS.ofertaA],
+        rechazos: [],
+      })
+    )
+    pintar({
+      gestion: ASISTIDO,
+      modo: "editar",
+      busqueda: "?paso=envio",
+      valores: valoresCompletos(),
+      ofertas: [enCurso(IDS.ofertaA, IDS.igReel, "DEVUELTA")],
+      creativos: { [IDS.ofertaA]: { listo: true, archivos: 1, faltan: [] } },
+    })
+    await usuario.click(
+      screen.getByRole("button", { name: "Enviar a revisión" })
+    )
+    await waitFor(() =>
+      expect(enrutador.push).toHaveBeenCalledWith(
+        `/operacion/ofertas/${IDS.ofertaA}`
+      )
+    )
+    expect(avisos.success).toHaveBeenCalledWith("Oferta enviada a revisión", {
+      description:
+        "Queda en la cola de moderación; Jugos del Valle recibe un aviso.",
+    })
   })
 })

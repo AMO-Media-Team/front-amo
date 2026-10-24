@@ -1,14 +1,18 @@
 "use client"
 
 import { BadgeCheck, CircleAlert, Lock, Pencil } from "lucide-react"
-import type { Route } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
 
 import { useAsistente } from "@/components/asistente/asistente"
 import { Button } from "@/components/ui/button"
-import { rutaMiCampana } from "@/features/campanas/rutas"
+import {
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
 import { CampoAreaTexto } from "@/features/configuracion/components/campos"
 import { textoANumero } from "@/features/configuracion/numeros"
 import type { EstadoCreativo } from "@/features/creativos/tipos"
@@ -43,6 +47,8 @@ export interface PropsPasoEnvio {
   ofertas: readonly OfertaEnCurso[]
   creativos: Readonly<Record<string, EstadoCreativo>>
   empresaVerificada: boolean
+  /** El anunciante o el equipo AMO por su cuenta (enlaces y textos). */
+  gestion?: ModoGestion
 }
 
 /** «24 horas, 72 horas y 7 días». */
@@ -146,7 +152,10 @@ export function PasoEnvio({
   ofertas,
   creativos,
   empresaVerificada,
+  gestion = GESTION_PROPIA,
 }: PropsPasoEnvio) {
+  const rutas = rutasGestion(gestion)
+  const asistido = esAsistido(gestion)
   const { control } = useFormContext<ValoresOferta>()
   const [que, quien, cuando, cuanto] = useWatch({
     control,
@@ -167,22 +176,35 @@ export function PasoEnvio({
   return (
     <div className="flex flex-col gap-6">
       {!empresaVerificada ? (
-        <Aviso tono="aviso" titulo="Tu empresa aún no está verificada">
-          Puedes dejar la oferta lista y guardarla como borrador; podrás
-          enviarla a revisión cuando AMO verifique tu empresa.{" "}
-          <Link
-            href={"/empresa" as Route}
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            Ver el estado de mi empresa
-          </Link>
-        </Aviso>
+        asistido ? (
+          <Aviso tono="aviso" titulo="La empresa aún no está verificada">
+            Puedes dejar la oferta lista y guardarla como borrador; se podrá
+            enviar a revisión cuando AMO verifique a {gestion.anunciante}.{" "}
+            <Link
+              href={rutas.empresa}
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Ver la ficha del anunciante
+            </Link>
+          </Aviso>
+        ) : (
+          <Aviso tono="aviso" titulo="Tu empresa aún no está verificada">
+            Puedes dejar la oferta lista y guardarla como borrador; podrás
+            enviarla a revisión cuando AMO verifique tu empresa.{" "}
+            <Link
+              href={rutas.empresa}
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Ver el estado de mi empresa
+            </Link>
+          </Aviso>
+        )
       ) : campana.estado === "BORRADOR" ? (
         <Aviso tono="aviso" titulo="La campaña está en borrador">
           Actívala para poder enviar esta oferta a revisión; mientras tanto,
           guárdala como borrador.{" "}
           <Link
-            href={rutaMiCampana(campana.id)}
+            href={rutas.campana(campana.id)}
             className="font-medium text-foreground underline underline-offset-4"
           >
             Ir a la campaña

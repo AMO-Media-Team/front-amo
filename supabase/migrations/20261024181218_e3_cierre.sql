@@ -102,6 +102,17 @@ grant execute on function public.mi_reputacion() to authenticated;
 update public.plantillas_notificacion set nombre = 'Nueva oferta disponible para tu medio'
 where clave = 'oferta.nueva_elegible' and canal = 'APP' and nombre = 'Nueva oferta disponible';
 
+-- GEO-010 / RNF-REN-02: el detalle del explorador evalúa estas funciones puras fila a fila (decenas de miles de
+-- llamadas) porque su `SET search_path` impide que Postgres las integre en la consulta. Son de invocador, solo comparan
+-- sus parámetros con literales y llaman objetos calificados: sin el SET se integran (inlining) y el p95 baja del umbral
+-- de 300 ms. Supabase las reporta como `function_search_path_mutable` (WARN aceptado, D99).
+alter function private.estados_con_cupo() reset search_path;
+alter function private.consume_cupo(public.asignacion_estado, public.asignacion_estado) reset search_path;
+alter function private.cumplimiento_aplica(public.asignacion_estado, public.asignacion_estado, public.cancelacion_causa,
+                                           timestamptz, timestamptz) reset search_path;
+alter function private.cumplimiento_ok(public.asignacion_estado, public.cancelacion_causa, timestamptz, timestamptz,
+                                       timestamptz) reset search_path;
+
 -- 2. ADM-014 · Gestión asistida por cuenta del anunciante ------------------------------------------------------------
 -- El equipo AMO (campanas.gestionar / ofertas.gestionar) crea y gestiona campañas y ofertas de un anunciante. La base ya
 -- lo permitía (RLS, transiciones ADMIN); aquí queda la marca persistente, la bitácora con el propietario y el aviso.

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 
+import { valoresNuevaCampanaAsistida } from "./formularios"
 import {
+  CAMPOS_CAMPANA_ASISTIDA,
   esquemaCancelarCampana,
   esquemaEditarCampana,
   esquemaNuevaCampana,
+  esquemaNuevaCampanaAsistida,
   mensajePresupuestoMinimo,
   type ReglasCampana,
 } from "./schemas"
@@ -194,5 +197,61 @@ describe("esquemaCancelarCampana", () => {
         motivo: "  Cambió la estrategia de la marca.  ",
       }).data?.motivo
     ).toBe("Cambió la estrategia de la marca.")
+  })
+})
+
+describe("esquemaNuevaCampanaAsistida (ADM-014)", () => {
+  const ANUNCIANTE = "e2e00000-0000-4000-8000-00000000a001"
+
+  it("exige elegir el anunciante, con las mismas reglas de la campaña", () => {
+    const sinElegir = esquemaNuevaCampanaAsistida(REGLAS_NUEVA).safeParse({
+      ...VALIDA,
+      anuncianteId: "",
+    })
+    expect(errores(sinElegir)).toEqual({
+      anuncianteId: ["Elige el anunciante."],
+    })
+    const raro = esquemaNuevaCampanaAsistida(REGLAS_NUEVA).safeParse({
+      ...VALIDA,
+      anuncianteId: "no-es-un-id",
+    })
+    expect(errores(raro)).toEqual({
+      anuncianteId: ["Elige el anunciante de la lista."],
+    })
+    const pasado = esquemaNuevaCampanaAsistida(REGLAS_NUEVA).safeParse({
+      ...VALIDA,
+      fechaInicio: "2026-10-01",
+      anuncianteId: ANUNCIANTE,
+    })
+    expect(errores(pasado).fechaInicio).toEqual([
+      "La campaña no puede empezar antes de hoy.",
+    ])
+  })
+
+  it("con el anunciante elegido, entrega los mismos datos más su id", () => {
+    const resultado = esquemaNuevaCampanaAsistida(REGLAS_NUEVA).safeParse({
+      ...VALIDA,
+      anuncianteId: ANUNCIANTE,
+    })
+    expect(resultado.success).toBe(true)
+    expect(resultado.data?.anuncianteId).toBe(ANUNCIANTE)
+    expect(resultado.data?.presupuesto).toBe(25_000_000)
+  })
+
+  it("el anuncianteId es un campo que puede recibir el error del servidor", () => {
+    expect(CAMPOS_CAMPANA_ASISTIDA).toContain("anuncianteId")
+    expect(valoresNuevaCampanaAsistida(ANUNCIANTE).anuncianteId).toBe(
+      ANUNCIANTE
+    )
+    expect(valoresNuevaCampanaAsistida(null).anuncianteId).toBe("")
+  })
+
+  it("el esquema del anunciante ignora un anuncianteId en la entrada", () => {
+    const resultado = esquemaNuevaCampana(REGLAS_NUEVA).safeParse({
+      ...VALIDA,
+      anuncianteId: ANUNCIANTE,
+    })
+    expect(resultado.success).toBe(true)
+    expect(resultado.data).not.toHaveProperty("anuncianteId")
   })
 })

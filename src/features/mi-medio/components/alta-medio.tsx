@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Gauge } from "lucide-react"
+import { ArrowRight, Award, Check, Gauge } from "lucide-react"
 import { useId } from "react"
 
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
@@ -151,6 +151,40 @@ function TarjetaNivel({ resumen }: { resumen: ResumenMiMedio }) {
 }
 
 /**
+ * Acceso a «Reputación» (MED-016) una vez verificado: durante el alta aún no
+ * hay negocios que la formen.
+ */
+function TarjetaReputacion() {
+  const idTitulo = useId()
+  return (
+    <section
+      aria-labelledby={idTitulo}
+      className="flex flex-col gap-3 rounded-2xl border bg-card p-4 sm:p-5"
+    >
+      <h2
+        id={idTitulo}
+        className="flex items-center gap-2 font-heading text-[0.9375rem] leading-snug font-semibold"
+      >
+        <Award aria-hidden className="size-4 text-primary" />
+        Tu reputación
+      </h2>
+      <p className="text-sm text-pretty text-muted-foreground">
+        Tu cumplimiento, tus publicaciones y tu multiplicador de calidad: lo que
+        habla de tu medio ante los anunciantes.
+      </p>
+      <EnlaceBoton
+        href={RUTAS_MI_MEDIO.reputacion}
+        variant="outline"
+        className="w-full"
+      >
+        Ver mi reputación
+        <ArrowRight data-icon="inline-end" aria-hidden />
+      </EnlaceBoton>
+    </section>
+  )
+}
+
+/**
  * Situación de la verificación, lista de alta (o de información, ya
  * verificado) y la orientación de al lado. La usan «Mi medio» y el inicio del
  * medio mientras no esté verificado. En móvil, una columna en orden de
@@ -207,6 +241,7 @@ export function AltaMedio({
       <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
         {durante ? <AsiFunciona situacion={situacion} /> : null}
         <TarjetaNivel resumen={resumen} />
+        {durante ? null : <TarjetaReputacion />}
       </div>
     </div>
   )

@@ -15,10 +15,11 @@ import {
   Target,
   UsersRound,
 } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, Suspense } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { banderaEmoji } from "@/features/accesos/catalogo"
+import { InsigniaReclamoEnTramite } from "@/features/privacidad/components/insignia-reclamo"
 import {
   formatearCOP,
   formatearCOPCompacto,
@@ -155,6 +156,9 @@ export function CabeceraMedio({
             />
           </span>
           {medio.esDemo ? <InsigniaDemo /> : null}
+          <Suspense fallback={null}>
+            <InsigniaReclamoEnTramite medioId={medio.id} />
+          </Suspense>
         </>
       }
       lateral={

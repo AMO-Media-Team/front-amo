@@ -1,11 +1,16 @@
 /**
  * Regla 5 — Métricas atípicas pendientes de validar (alertas de desviación
  * frente al histórico o de alcance mayor al múltiplo de seguidores). Es
- * `critico` si la más antigua espera más de 48 horas.
+ * `critico` si la más antigua espera más de 48 horas y enlaza a la cola de
+ * validación con solo las que tienen alerta (DSH-003); a quien no valida
+ * métricas (`validaMetricas: false`), al listado de asignaciones con alerta.
  */
 import { formatearNumero, formatearRelativo } from "@/lib/format"
 
-import { construirHref, RUTAS_INSIGHTS } from "../rutas"
+import {
+  RUTA_ASIGNACIONES_METRICAS_ATIPICAS,
+  RUTA_COLA_METRICAS_ATIPICAS,
+} from "../rutas"
 import { capitalizar, enumerar } from "../textos"
 import type { EntradaInsights, Insight } from "../tipos"
 
@@ -52,9 +57,15 @@ export function reglaMetricasAtipicas(
     metrica: "metricas_pendientes",
     valor: atipicas.total,
     magnitud: Math.min(1, atipicas.total / PENDIENTES_SATURACION),
-    accion: {
-      etiqueta: "Revisar la cola de validación",
-      href: construirHref(RUTAS_INSIGHTS.asignaciones, { alerta: "metricas" }),
-    },
+    accion:
+      entrada.validaMetricas === false
+        ? {
+            etiqueta: "Ver las asignaciones con alerta",
+            href: RUTA_ASIGNACIONES_METRICAS_ATIPICAS,
+          }
+        : {
+            etiqueta: "Revisar la cola de validación",
+            href: RUTA_COLA_METRICAS_ATIPICAS,
+          },
   }
 }

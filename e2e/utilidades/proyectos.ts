@@ -68,7 +68,29 @@ export const SPECS_FINANZAS = /[\\/]finanzas-[^\\/]*\.spec\.ts$/
 export const PROYECTO_CIERRE = "cierre"
 export const SPECS_CIERRE = /[\\/]cierre-[^\\/]*\.spec\.ts$/
 
-/** Tablet y móvil emulan pantalla táctil (`hasTouch`). */
+/**
+ * Matriz de navegadores (RNF-COM-01): Firefox y Safari de escritorio, Safari de
+ * iOS (WebKit) y Chrome para Android, sobre las pruebas de solo lectura de humo,
+ * navegación, inicio, mapa y accesibilidad. Edge usa el mismo motor que Chrome (los proyectos
+ * de escritorio, tablet y móvil).
+ */
+export const PROYECTO_FIREFOX = "firefox"
+export const PROYECTO_SAFARI = "safari"
+export const PROYECTO_SAFARI_IOS = "safari-ios"
+export const PROYECTO_CHROME_ANDROID = "chrome-android"
+export const SPECS_MATRIZ =
+  /[\\/](?:smoke|navegacion|inicio|mapa|accesibilidad)\.spec\.ts$/
+
+/** Proyectos con pantalla de teléfono (390 px o similar). */
+export function esMovil(proyecto: string): boolean {
+  return (
+    proyecto === PROYECTO_MOVIL ||
+    proyecto === PROYECTO_SAFARI_IOS ||
+    proyecto === PROYECTO_CHROME_ANDROID
+  )
+}
+
+/** Tablet y teléfonos emulan pantalla táctil (`hasTouch`). */
 export function esTactil(proyecto: string): boolean {
-  return proyecto === PROYECTO_TABLET || proyecto === PROYECTO_MOVIL
+  return proyecto === PROYECTO_TABLET || esMovil(proyecto)
 }

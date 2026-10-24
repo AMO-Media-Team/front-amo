@@ -223,8 +223,47 @@ describe("Reputacion", () => {
     expect(
       screen.getByText("Sin historial suficiente (1 de 3 negocios)")
     ).toBeInTheDocument()
-    expect(screen.getByText("Aún sin calificaciones")).toBeInTheDocument()
+    expect(
+      screen.getByText("Llega con la calificación de los anunciantes")
+    ).toBeInTheDocument()
     expect(screen.getAllByText("—")).toHaveLength(3)
+  })
+
+  it("el mínimo de negocios es el vigente que trae la reputación", () => {
+    render(
+      <Reputacion
+        cumplimiento={filaKpi("tasa_cumplimiento", null, null, { n: 4 })}
+        calificacion={null}
+        multiplicador={null}
+        publicaciones={null}
+        nMinimoCumplimiento={5}
+      />
+    )
+    expect(
+      screen.getByText("Sin historial suficiente (4 de 5 negocios)")
+    ).toBeInTheDocument()
+  })
+
+  it("enlaza al detalle en «Mi medio › Reputación» solo si se puede abrir", () => {
+    const props = {
+      cumplimiento: undefined,
+      calificacion: null,
+      multiplicador: null,
+      publicaciones: 2,
+      nMinimoCumplimiento: 3,
+    }
+    const { unmount } = render(
+      <Reputacion
+        {...props}
+        enlaceReputacion={"/mi-medio/reputacion" as Route}
+      />
+    )
+    expect(
+      screen.getByRole("link", { name: "Ver tu reputación" })
+    ).toHaveAttribute("href", "/mi-medio/reputacion")
+    unmount()
+    render(<Reputacion {...props} enlaceReputacion={null} />)
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
   })
 })
 

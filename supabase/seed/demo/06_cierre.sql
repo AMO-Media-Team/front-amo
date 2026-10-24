@@ -1,7 +1,8 @@
 -- Datos demo · paso 06 · cierre (docs/modelo-datos.md §10.2 paso 7 y §10.4)
 -- Se ejecuta DESPUÉS de la operación (03_mes.sql) y de las finanzas (04_finanzas.sql), siempre con amo.modo_carga:
---   demo_cierre(semilla): estado final al «hoy» de la demo (suspensiones de medios y anunciantes) y los eventos de
---     configuración que faltan en la bitácora (revisión de tarifas, excepciones de comisión).
+--   demo_cierre(semilla): estado final al «hoy» de la demo (suspensiones de medios y anunciantes), los eventos de
+--     configuración que faltan en la bitácora (revisión de tarifas, excepciones de comisión) y los indicadores de
+--     cumplimiento de los medios (private.recalcular_indicadores_medios, el mismo cálculo del cron).
 --   demo_volcar_bitacora(mes): pasa a public.bitacora (origen DEMO, es_demo) los eventos en espera anteriores al fin del
 --     mes, en orden cronológico. Una llamada por mes, en orden; es idempotente porque vacía lo que vuelca.
 --   demo_volcar_avisos(dias): pasa a public.notificaciones los avisos de los últimos `dias` (90) con el texto de su
@@ -70,6 +71,10 @@ begin
          or ce.campana_id in (select c.id from public.campanas c where c.es_demo))
     and ce.created_at <= v_hoy;
   get diagnostics v_n = row_count; r := r || jsonb_build_object('eventos', v_n);
+
+  -- Indicadores de cumplimiento y reputación de los medios (MED-016) con la operación ya cargada: los mismos que deja el
+  -- cron cada noche, para que la demo no espere a la primera corrida.
+  perform private.recalcular_indicadores_medios();
 
   return r || jsonb_build_object('eventos_en_espera', (select count(*) from private.demo_eventos),
                                  'avisos_en_espera', (select count(*) from private.demo_avisos));

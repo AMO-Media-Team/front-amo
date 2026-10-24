@@ -10,6 +10,7 @@ import { expect, type Page, test as preparar } from "./utilidades/prueba"
 import {
   credencialesDemo,
   CUENTA_INTERNA,
+  ingresarComoLecturaFinanzas,
   type NombreSesion,
   sesion,
 } from "./utilidades/sesiones"
@@ -36,6 +37,13 @@ preparar("sesión interna (administrador con TOTP)", async ({ page }) => {
   const cuenta = await prepararCuentaMfa(servicio, CUENTA_INTERNA)
   await ingresarConMfa(page, cuenta)
   await guardarSesion(page, "interno")
+})
+
+preparar("sesión de Finanzas de solo lectura (con TOTP)", async ({ page }) => {
+  // Puede esperar al siguiente periodo del código (hasta 30 s).
+  preparar.setTimeout(90_000)
+  await ingresarComoLecturaFinanzas(page)
+  await guardarSesion(page, "finanzas")
 })
 
 preparar("sesión del anunciante demo", async ({ page }) => {

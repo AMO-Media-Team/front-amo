@@ -642,3 +642,62 @@ html [data-sonner-toaster][data-sonner-theme] {
   --animate-aurora-desplazar: none;
   --animate-girar-lento: none;
 }
+
+/* Las entradas y salidas de diálogos, hojas, popovers y menús (`animate-in`,
+   `animate-out` y los acordeones de tw-animate-css, que se escriben con
+   variantes como `data-open:animate-in`) y las transiciones de Base UI
+   (`data-starting-style`, `data-ending-style`) aparecen sin desplazarse ni
+   escalar. Base UI desmonta el popup al no encontrar animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-in"],
+  [class*="animate-out"],
+  [class*="animate-accordion-"],
+  [class*="animate-collapsible-"] {
+    animation: none !important;
+  }
+
+  [data-starting-style],
+  [data-ending-style] {
+    transition-duration: 0s !important;
+  }
+}
+
+:root[data-movimiento="reducido"] {
+  scroll-behavior: auto;
+
+  & [class*="animate-in"],
+  & [class*="animate-out"],
+  & [class*="animate-accordion-"],
+  & [class*="animate-collapsible-"] {
+    animation: none !important;
+  }
+
+  & [data-starting-style],
+  & [data-ending-style] {
+    transition-duration: 0s !important;
+  }
+
+  &::view-transition-group(*),
+  &::view-transition-old(*),
+  &::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* ── Foco no tapado (WCAG 2.4.11) ────────────────────────────────────────── */
+
+/* Al tabular, el navegador desplaza el elemento enfocado dentro de este margen:
+   ni la barra superior fija (56 px), ni los pies de acciones fijos
+   (`PieAcciones`), ni la barra inferior del medio en el teléfono lo tapan. */
+html {
+  scroll-padding-top: 4.5rem;
+  scroll-padding-bottom: 6rem;
+}
+
+@media (width < 48rem) {
+  html {
+    scroll-padding-bottom: calc(
+      3.5rem + 1px + env(safe-area-inset-bottom) + 6rem
+    );
+  }
+}

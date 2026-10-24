@@ -1,6 +1,7 @@
 "use client"
 
 import { CircleAlert, Lock } from "lucide-react"
+import type { Route } from "next"
 import Link from "next/link"
 import { useId } from "react"
 import { useFormContext, useWatch } from "react-hook-form"
@@ -19,7 +20,11 @@ import {
   CampoCifra,
   CampoTexto,
 } from "@/features/configuracion/components/campos"
-import { rutaOfertaAnunciante } from "@/features/ofertas/rutas"
+import {
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
 import { cn } from "@/lib/utils"
 
 import { FORMATO_RETIRADO } from "../errores"
@@ -48,6 +53,8 @@ export interface PropsPasoQue {
   onAlternarFormato: (formatoId: string, marcar: boolean) => void
   /** Quita un formato retirado (descarta su borrador, confirmando). */
   onQuitarRetirado: (formatoId: string) => void
+  /** El anunciante o el equipo AMO por su cuenta (decide los enlaces). */
+  gestion?: ModoGestion
 }
 
 function TarjetaFormato({
@@ -114,13 +121,13 @@ const clasesEnlace =
  * una oferta devuelta se cancela desde su ficha.
  */
 function FormatosRetirados({
-  campanaId,
+  rutaOferta,
   formatoIds,
   retirados,
   ofertas,
   onQuitar,
 }: {
-  campanaId: string
+  rutaOferta: (ofertaId: string) => Route
   formatoIds: readonly string[]
   retirados: readonly FormatoAsistente[]
   ofertas: readonly OfertaEnCurso[]
@@ -149,7 +156,7 @@ function FormatosRetirados({
               <span className="min-w-0 font-medium">{nombre}</span>
               {oferta?.estado === "DEVUELTA" ? (
                 <Link
-                  href={rutaOfertaAnunciante(campanaId, oferta.ofertaId)}
+                  href={rutaOferta(oferta.ofertaId)}
                   className={clasesEnlace}
                 >
                   Cancélala desde su ficha
@@ -188,7 +195,10 @@ export function PasoQue({
   maximoArchivoMb,
   onAlternarFormato,
   onQuitarRetirado,
+  gestion = GESTION_PROPIA,
 }: PropsPasoQue) {
+  const rutas = rutasGestion(gestion)
+  const rutaOferta = (ofertaId: string) => rutas.oferta(campanaId, ofertaId)
   const { control, getFieldState, formState } = useFormContext<ValoresOferta>()
   const elegidos = useWatch({ control, name: "que.formatoIds" })
   const idAyuda = useId()
@@ -248,7 +258,7 @@ export function PasoQue({
                 )}
                 {oferta ? (
                   <Link
-                    href={rutaOfertaAnunciante(campanaId, oferta.ofertaId)}
+                    href={rutaOferta(oferta.ofertaId)}
                     className={cn(clasesEnlace, "text-sm")}
                   >
                     Ir a la ficha de la oferta
@@ -325,7 +335,7 @@ export function PasoQue({
         )}
         {retiradosElegidos.length > 0 ? (
           <FormatosRetirados
-            campanaId={campanaId}
+            rutaOferta={rutaOferta}
             formatoIds={retiradosElegidos}
             retirados={retirados}
             ofertas={ofertas}

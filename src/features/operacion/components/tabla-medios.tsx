@@ -25,7 +25,12 @@ import {
   PLATAFORMAS,
   TIPOS_MEDIO,
 } from "../estados"
-import { estadoTablaMedios, NIVELES_VERIFICACION } from "../estado-tablas"
+import {
+  estadoTablaMedios,
+  ETIQUETAS_SEGMENTO_MEDIO,
+  NIVELES_VERIFICACION,
+  SEGMENTOS_MEDIO,
+} from "../estado-tablas"
 import {
   contar,
   formatearCalificacion,
@@ -122,7 +127,10 @@ interface TablaMediosProps {
   categorias: readonly OpcionCatalogo[]
   /** El GMV solo llega a quien ve asignaciones. */
   conGmv: boolean
-  /** La señal "en riesgo" solo existe para quien ve el panel administrativo. */
+  /**
+   * La señal «en riesgo» solo existe para quien ve el panel administrativo;
+   * «cerca del tope anual», para todo el que ve medios.
+   */
   conSegmentoRiesgo: boolean
 }
 
@@ -349,17 +357,18 @@ export function TablaMedios({
           Object.keys(TIPOS_MEDIO) as (keyof typeof TIPOS_MEDIO)[]
         ).map((tipo) => ({ valor: tipo, etiqueta: TIPOS_MEDIO[tipo] })),
       },
-      ...(conSegmentoRiesgo
-        ? [
-            {
-              clave: "segmento" as const,
-              titulo: "Señales",
-              opciones: [
-                { valor: "en_riesgo", etiqueta: "En riesgo de abandono" },
-              ],
-            },
-          ]
-        : []),
+      {
+        clave: "segmento",
+        titulo: "Señales",
+        // «En riesgo» solo para quien ve el panel administrativo; «Cerca del
+        // tope anual» para todo el que ve medios (CFG-005).
+        opciones: SEGMENTOS_MEDIO.filter(
+          (segmento) => segmento !== "en_riesgo" || conSegmentoRiesgo
+        ).map((segmento) => ({
+          valor: segmento,
+          etiqueta: ETIQUETAS_SEGMENTO_MEDIO[segmento],
+        })),
+      },
     ],
     [categorias, conSegmentoRiesgo]
   )

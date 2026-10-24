@@ -14,11 +14,14 @@ import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EncabezadoPagina } from "@/components/layout/encabezado-pagina"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { TituloMiga } from "@/components/layout/titulo-miga"
-import { rutaMiCampana } from "@/features/campanas/rutas"
+import { AvisoModoAsistido } from "@/features/campanas/components/aviso-modo-asistido"
+import { situacionEmpresa } from "@/features/campanas/queries"
 import {
-  rutaOfertaAnunciante,
-  rutaOfertasDeCampana,
-} from "@/features/ofertas/rutas"
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { formatearFechaHora } from "@/lib/format"
 
@@ -34,12 +37,17 @@ import {
   mediosExcluidos,
   ofertasParaAsistente,
 } from "../queries"
-import type { OfertaGuardadaBd } from "../tipos"
+import type { EstadoAnunciante, OfertaGuardadaBd } from "../tipos"
 import { AsistenteOferta } from "./asistente-oferta"
 
 type PropsSeccion = {
   usuario: UsuarioSesion
   campanaId: string
+  /**
+   * El equipo AMO por cuenta del anunciante dueño de la campaña (ADM-014):
+   * sin empresa propia, con los enlaces de Operación y el aviso visible.
+   */
+  asistido?: boolean
 } & (
   | { modo: "nueva"; ofertaIds: readonly string[] }
   | { modo: "editar"; ofertaId: string }
@@ -74,7 +82,13 @@ function Encabezado({
   )
 }
 
-function Devolucion({ oferta }: { oferta: OfertaGuardadaBd }) {
+function Devolucion({
+  oferta,
+  asistido,
+}: {
+  oferta: OfertaGuardadaBd
+  asistido: boolean
+}) {
   return (
     <section
       aria-labelledby="asistente-devolucion"
@@ -89,7 +103,7 @@ function Devolucion({ oferta }: { oferta: OfertaGuardadaBd }) {
           id="asistente-devolucion"
           className="text-[0.9375rem] font-semibold"
         >
-          AMO te pidió ajustes
+          {asistido ? "La moderación pidió ajustes" : "AMO te pidió ajustes"}
         </h2>
         {oferta.comentarioModeracion ? (
           <p className="text-sm break-words whitespace-pre-line">
@@ -100,8 +114,9 @@ function Devolucion({ oferta }: { oferta: OfertaGuardadaBd }) {
           {oferta.devueltaAt
             ? `Devuelta el ${formatearFechaHora(oferta.devueltaAt)}. `
             : ""}
-          Corrige lo que te piden y vuelve a enviarla a revisión al final del
-          asistente.
+          {asistido
+            ? "Corrige lo que piden y vuelve a enviarla a revisión al final del asistente."
+            : "Corrige lo que te piden y vuelve a enviarla a revisión al final del asistente."}
         </p>
       </div>
     </section>
@@ -109,13 +124,35 @@ function Devolucion({ oferta }: { oferta: OfertaGuardadaBd }) {
 }
 
 /**
+ * La empresa por cuya cuenta actúa el equipo AMO (ADM-014): su nombre y su
+ * verificación si quien actúa puede verla (`anunciantes.ver`); si no, se
+ * nombra genéricamente y no se anticipa el bloqueo (decide la BD).
+ */
+async function gestionAsistida(
+  anuncianteId: string
+): Promise<{ gestion: ModoGestion; estado: EstadoAnunciante | null }> {
+  const empresa = await situacionEmpresa(anuncianteId)
+  return {
+    gestion: {
+      modo: "asistido",
+      anuncianteId,
+      anunciante: empresa?.nombre ?? "el anunciante",
+    },
+    estado: empresa?.estado ?? null,
+  }
+}
+
+/**
  * Datos y asistente de oferta (servidor). La campaña y las ofertas se leen
- * con la sesión (RLS: solo las de la empresa); lo que no existe o no se ve
- * es un 404, sin revelar si es de otra empresa.
+ * con la sesión (RLS: solo las de la empresa; en la gestión asistida, las
+ * que el rol interno puede ver); lo que no existe o no se ve es un 404, sin
+ * revelar si es de otra empresa.
  */
 export async function SeccionAsistente(props: PropsSeccion) {
   const { usuario, campanaId } = props
-  if (!usuario.anuncianteId) {
+  const asistido = props.asistido === true
+  const anuncianteId = asistido ? null : usuario.anuncianteId
+  if (!asistido && !anuncianteId) {
     return (
       <EstadoVacio
         icono={Building2}
@@ -125,20 +162,31 @@ export async function SeccionAsistente(props: PropsSeccion) {
     )
   }
   const ofertaEditada = props.modo === "editar" ? props.ofertaId : undefined
-  const [campana, catalogo, configuracion, estado] = await Promise.all([
+  const [campana, catalogo, configuracion, estadoPropio] = await Promise.all([
     campanaParaAsistente(campanaId, ofertaEditada),
     catalogoAsistente(),
     configuracionAsistente(),
-    estadoEmpresa(usuario.anuncianteId),
+    anuncianteId ? estadoEmpresa(anuncianteId) : null,
   ])
   if (!campana) notFound()
+  const { gestion, estado } = asistido
+    ? await gestionAsistida(campana.anuncianteId)
+    : { gestion: GESTION_PROPIA, estado: estadoPropio }
+  const rutas = rutasGestion(gestion)
+  const aviso = esAsistido(gestion) ? (
+    <AvisoModoAsistido
+      anunciante={gestion.anunciante}
+      estado={estado}
+      enlace={estado ? rutas.empresa : null}
+    />
+  ) : null
 
   const ofertas = await ofertasParaAsistente(
     campanaId,
     props.modo === "editar" ? [props.ofertaId] : props.ofertaIds
   )
   const volverCampana = {
-    href: rutaOfertasDeCampana(campana.id),
+    href: rutas.ofertasCampana(campana.id),
     titulo: campana.nombre,
   }
 
@@ -151,7 +199,7 @@ export async function SeccionAsistente(props: PropsSeccion) {
           <TituloMiga titulo="Editar oferta" />
           <Encabezado
             volver={{
-              href: rutaOfertaAnunciante(campana.id, oferta.ofertaId),
+              href: rutas.oferta(campana.id, oferta.ofertaId),
               titulo: oferta.titulo,
             }}
             antetitulo={campana.nombre}
@@ -163,13 +211,13 @@ export async function SeccionAsistente(props: PropsSeccion) {
             titulo="Esta oferta ya no se edita"
             descripcion={
               oferta.estado === "EN_REVISION"
-                ? "Está en revisión. Si necesitas cambiarla, retírala de revisión desde su ficha y vuelve a editarla."
+                ? asistido
+                  ? "Está en revisión. Si hay que cambiarla, retírala de revisión desde su ficha y vuelve a editarla."
+                  : "Está en revisión. Si necesitas cambiarla, retírala de revisión desde su ficha y vuelve a editarla."
                 : "Ya pasó por la moderación. Para cambiar su contenido, carga una nueva versión del paquete creativo desde su ficha."
             }
           >
-            <EnlaceBoton
-              href={rutaOfertaAnunciante(campana.id, oferta.ofertaId)}
-            >
+            <EnlaceBoton href={rutas.oferta(campana.id, oferta.ofertaId)}>
               Ver la oferta
             </EnlaceBoton>
           </EstadoVacio>
@@ -184,7 +232,7 @@ export async function SeccionAsistente(props: PropsSeccion) {
       <>
         <TituloMiga titulo="Nueva oferta" />
         <Encabezado
-          volver={{ href: rutaMiCampana(campana.id), titulo: campana.nombre }}
+          volver={{ href: rutas.campana(campana.id), titulo: campana.nombre }}
           antetitulo={campana.nombre}
           titulo="Nueva oferta"
           descripcion="Crea una oferta de pauta para esta campaña."
@@ -194,7 +242,7 @@ export async function SeccionAsistente(props: PropsSeccion) {
           titulo="Esta campaña no admite ofertas nuevas"
           descripcion={CAMPANA_SIN_OFERTAS}
         >
-          <EnlaceBoton href={rutaMiCampana(campana.id)} variant="outline">
+          <EnlaceBoton href={rutas.campana(campana.id)} variant="outline">
             Volver a la campaña
           </EnlaceBoton>
         </EstadoVacio>
@@ -226,7 +274,7 @@ export async function SeccionAsistente(props: PropsSeccion) {
         volver={
           props.modo === "editar" && ofertas[0]
             ? {
-                href: rutaOfertaAnunciante(campana.id, ofertas[0].ofertaId),
+                href: rutas.oferta(campana.id, ofertas[0].ofertaId),
                 titulo: ofertas[0].titulo,
               }
             : volverCampana
@@ -235,16 +283,21 @@ export async function SeccionAsistente(props: PropsSeccion) {
         titulo={titulo}
         descripcion={
           props.modo === "nueva"
-            ? "Define qué se publica, a quién le llega, cuándo y cuánto inviertes. El precio de cada medio lo calcula AMO."
+            ? asistido
+              ? "Define qué se publica, a quién le llega, cuándo y cuánto invierte la empresa. El precio de cada medio lo calcula AMO."
+              : "Define qué se publica, a quién le llega, cuándo y cuánto inviertes. El precio de cada medio lo calcula AMO."
             : "Ajusta la oferta y vuelve a enviarla a revisión."
         }
       />
-      {devuelta ? <Devolucion oferta={devuelta} /> : null}
+      {aviso}
+      {devuelta ? <Devolucion oferta={devuelta} asistido={asistido} /> : null}
       <AsistenteOferta
         key={ofertas.map((oferta) => oferta.ofertaId).join() || "nueva"}
         modo={props.modo}
         campana={campana}
-        empresaVerificada={estado === "VERIFICADO"}
+        empresaVerificada={
+          estado === "VERIFICADO" || (asistido && estado === null)
+        }
         catalogo={catalogo}
         formatosRetirados={retirados}
         configuracion={configuracion}
@@ -259,6 +312,7 @@ export async function SeccionAsistente(props: PropsSeccion) {
         )}
         creativosIniciales={creativos}
         ahora={ahora.toISOString()}
+        gestion={gestion}
       />
     </>
   )

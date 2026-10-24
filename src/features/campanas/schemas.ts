@@ -211,6 +211,27 @@ export function esquemaNuevaCampana(reglas: ReglasCampana) {
     .superRefine((datos, ctx) => validarReglas(datos, reglas, ctx))
 }
 
+/**
+ * Campaña nueva por cuenta de un anunciante (ADM-014): lo mismo más la
+ * empresa elegida. Al anunciante nunca se le lee de la entrada: es la suya.
+ */
+export function esquemaNuevaCampanaAsistida(reglas: ReglasCampana) {
+  return z
+    .object({
+      ...camposCampana,
+      anuncianteId: z
+        .string({ error: "Elige el anunciante." })
+        .min(1, { error: "Elige el anunciante.", abort: true })
+        .pipe(z.uuid({ error: "Elige el anunciante de la lista." })),
+    })
+    .superRefine((datos, ctx) => validarReglas(datos, reglas, ctx))
+}
+
+export const CAMPOS_CAMPANA_ASISTIDA = [
+  ...CAMPOS_CAMPANA,
+  "anuncianteId",
+] as const
+
 /** Edición: lo mismo, con el registro y su versión (bloqueo optimista). */
 export function esquemaEditarCampana(reglas: ReglasCampana) {
   return z
@@ -227,6 +248,10 @@ export function esquemaEditarCampana(reglas: ReglasCampana) {
 
 export type EntradaNuevaCampana = z.input<
   ReturnType<typeof esquemaNuevaCampana>
+>
+export type DatosNuevaCampana = z.output<ReturnType<typeof esquemaNuevaCampana>>
+export type EntradaNuevaCampanaAsistida = z.input<
+  ReturnType<typeof esquemaNuevaCampanaAsistida>
 >
 export type EntradaEditarCampana = z.input<
   ReturnType<typeof esquemaEditarCampana>

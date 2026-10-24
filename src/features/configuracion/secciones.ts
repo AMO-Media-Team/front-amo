@@ -85,15 +85,15 @@ export const INFO_SECCIONES: Readonly<Record<Seccion, InfoSeccion>> = {
   },
   legal: {
     titulo: "Legal",
-    resumen: "Términos y política de datos",
+    resumen: "Términos, datos y titulares",
     descripcion:
-      "Versiones de los términos y de la política de tratamiento de datos (Ley 1581). Una versión publicada no se modifica.",
+      "Versiones de los términos y de la política de tratamiento de datos (Ley 1581), y los plazos para atender a los titulares. Una versión publicada no se modifica.",
   },
   plantillas: {
     titulo: "Plantillas",
-    resumen: "Textos de notificaciones",
+    resumen: "Avisos y envío por correo",
     descripcion:
-      "Textos de los avisos que reciben las personas en la aplicación y por correo, con sus variables.",
+      "Textos de los avisos que reciben las personas en la aplicación y por correo, con sus variables, y si el envío por correo está encendido.",
   },
 }
 

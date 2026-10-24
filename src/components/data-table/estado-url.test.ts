@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   definirEstadoTabla,
+  describirResultados,
   desplazamiento,
   filtroDeIds,
   filtroDeOpciones,
@@ -154,6 +155,35 @@ describe("paginación", () => {
     expect(rangoVisible(3, 20, 57)).toEqual({ desde: 41, hasta: 57 })
     expect(rangoVisible(9, 20, 57)).toEqual({ desde: 41, hasta: 57 })
     expect(rangoVisible(1, 20, 0)).toEqual({ desde: 0, hasta: 0 })
+  })
+})
+
+describe("describirResultados", () => {
+  it("anuncia el total y, con varias páginas, las filas visibles", () => {
+    expect(describirResultados(1, 20, 0)).toBe("Sin resultados")
+    expect(describirResultados(1, 20, 1)).toBe("1 resultado")
+    expect(describirResultados(1, 20, 20)).toBe("20 resultados")
+    expect(describirResultados(2, 20, 57)).toBe(
+      "57 resultados; se muestran del 21 al 40"
+    )
+    // Página fuera de rango: la última que existe.
+    expect(describirResultados(9, 20, 57)).toBe(
+      "57 resultados; se muestran del 41 al 57"
+    )
+    expect(describirResultados(1, 100, 1234)).toBe(
+      "1.234 resultados; se muestran del 1 al 100"
+    )
+  })
+
+  it("dice el orden antes del rango (con un solo resultado no importa)", () => {
+    const orden = "nombre en orden ascendente"
+    expect(describirResultados(2, 20, 57, orden)).toBe(
+      "57 resultados, ordenados por nombre en orden ascendente; se muestran del 21 al 40"
+    )
+    expect(describirResultados(1, 20, 3, orden)).toBe(
+      "3 resultados, ordenados por nombre en orden ascendente"
+    )
+    expect(describirResultados(1, 20, 1, orden)).toBe("1 resultado")
   })
 })
 

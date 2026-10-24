@@ -3,7 +3,9 @@
  * Server Actions de campañas con el DAL, Supabase y las lecturas simulados:
  * archivar va por `archivar_campana_srv` con el actor y su sesión (no por la
  * máquina de estados) y el presupuesto que la BD rechaza al editar se explica
- * con la cifra vigente, igual que el formulario.
+ * con la cifra vigente, igual que el formulario. En la gestión asistida
+ * (ADM-014) las acciones aceptan el permiso del anunciante o el del equipo
+ * AMO y solo al anunciante se le exige empresa propia.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -15,8 +17,11 @@ const estado = vi.hoisted(() => ({
   orden: [] as string[],
   usuario: {
     id: "u1",
+    rol: { tipo: "ANUNCIANTE" as "ANUNCIANTE" | "ADMIN" },
     anuncianteId: "e2e00000-0000-4000-8000-00000000a001" as string | null,
   },
+  insercion: null as Record<string, unknown> | null,
+  lecturas: [] as string[],
   rpcServicio: [] as { nombre: string; args: Record<string, unknown> }[],
   errorServicio: null as unknown,
   transiciones: [] as unknown[],
@@ -56,7 +61,14 @@ vi.mock("@/lib/negocio/transicionar", () => ({
   }),
 }))
 vi.mock("./queries", () => ({
-  obtenerMiCampana: vi.fn(async () => estado.campana),
+  obtenerMiCampana: vi.fn(async (anuncianteId: string) => {
+    estado.lecturas.push(`propia:${anuncianteId}`)
+    return estado.campana
+  }),
+  obtenerCampanaGestionable: vi.fn(async () => {
+    estado.lecturas.push("gestionable")
+    return estado.campana
+  }),
   ofertasDeMiCampana: vi.fn(async () => []),
 }))
 vi.mock("@/lib/supabase/server", () => ({
@@ -64,6 +76,14 @@ vi.mock("@/lib/supabase/server", () => ({
     from: () => {
       let actualiza = false
       const cadena = {
+        insert: (fila: Record<string, unknown>) => {
+          estado.insercion = fila
+          return {
+            select: () => ({
+              single: async () => ({ data: { id: CAMPANA_ID }, error: null }),
+            }),
+          }
+        },
         update: () => {
           actualiza = true
           return cadena
@@ -81,7 +101,11 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }))
 
-const { archivarCampana, editarCampana } = await import("./actions")
+const { activarCampana, archivarCampana, crearCampana, editarCampana } =
+  await import("./actions")
+
+const PERMISOS_DAL = "dal:campanas.gestionar_propias,campanas.gestionar"
+const OTRA_EMPRESA = "0199f3a0-0000-7000-8000-0000000000b2"
 
 function campana(cambios: Partial<MiCampana> = {}): MiCampana {
   return {
@@ -102,11 +126,19 @@ function campana(cambios: Partial<MiCampana> = {}): MiCampana {
     creadaAt: "2026-10-20T14:00:00+00:00",
     actualizadaAt: "2026-10-21T14:00:00+00:00",
     esDemo: false,
+    gestionAsistida: false,
     ...cambios,
   }
 }
 
 beforeEach(() => {
+  estado.usuario = {
+    id: "u1",
+    rol: { tipo: "ANUNCIANTE" },
+    anuncianteId: "e2e00000-0000-4000-8000-00000000a001",
+  }
+  estado.insercion = null
+  estado.lecturas = []
   estado.orden = []
   estado.rpcServicio = []
   estado.errorServicio = null
@@ -120,7 +152,7 @@ beforeEach(() => {
 describe("archivarCampana", () => {
   it("archiva con el actor y su sesión, después del DAL", async () => {
     const resultado = await archivarCampana({ campanaId: CAMPANA_ID })
-    expect(estado.orden).toEqual(["dal:campanas.gestionar_propias", "contexto"])
+    expect(estado.orden).toEqual([PERMISOS_DAL, "contexto"])
     expect(estado.rpcServicio).toEqual([
       {
         nombre: "archivar_campana_srv",
@@ -199,5 +231,109 @@ describe("editarCampana · presupuesto rechazado por la BD", () => {
       error: rechazo.details,
       erroresCampo: { presupuesto: [rechazo.details] },
     })
+  })
+})
+
+describe("gestión asistida (ADM-014)", () => {
+  const nueva = {
+    nombre: "Temporada navideña",
+    marca: "Marca",
+    objetivo: "",
+    fechaInicio: "2099-11-01",
+    fechaFin: "2099-12-31",
+    presupuesto: "25.000.000",
+  }
+
+  function comoEquipoAmo() {
+    estado.usuario = { id: "op1", rol: { tipo: "ADMIN" }, anuncianteId: null }
+  }
+
+  it("el anunciante crea en su empresa aunque la entrada diga otra", async () => {
+    const resultado = await crearCampana({
+      ...nueva,
+      anuncianteId: OTRA_EMPRESA,
+    })
+    expect(estado.orden).toEqual([PERMISOS_DAL])
+    expect(resultado).toEqual({ ok: true, datos: { id: CAMPANA_ID } })
+    expect(estado.insercion?.anunciante_id).toBe(
+      "e2e00000-0000-4000-8000-00000000a001"
+    )
+  })
+
+  it("al anunciante sin empresa no se le crea nada", async () => {
+    estado.usuario.anuncianteId = null
+    const resultado = await crearCampana(nueva)
+    expect(resultado.ok).toBe(false)
+    expect(estado.insercion).toBeNull()
+  })
+
+  it("el equipo AMO crea en la empresa que eligió, sin empresa propia", async () => {
+    comoEquipoAmo()
+    const resultado = await crearCampana({
+      ...nueva,
+      anuncianteId: OTRA_EMPRESA,
+    })
+    expect(resultado).toEqual({ ok: true, datos: { id: CAMPANA_ID } })
+    expect(estado.insercion).toMatchObject({
+      anunciante_id: OTRA_EMPRESA,
+      nombre: "Temporada navideña",
+      presupuesto_total: 25_000_000,
+    })
+    expect(estado.insercion).not.toHaveProperty("anuncianteId")
+  })
+
+  it("el equipo AMO debe elegir el anunciante (error en su campo)", async () => {
+    comoEquipoAmo()
+    const resultado = await crearCampana(nueva)
+    expect(resultado).toMatchObject({
+      ok: false,
+      erroresCampo: { anuncianteId: ["Elige el anunciante."] },
+    })
+    expect(estado.insercion).toBeNull()
+  })
+
+  it("el equipo AMO edita sin filtrar por una empresa propia (la RLS decide)", async () => {
+    comoEquipoAmo()
+    const resultado = await editarCampana({
+      campanaId: CAMPANA_ID,
+      actualizadoAt: "2026-10-21T14:00:00+00:00",
+      nombre: "Temporada navideña",
+      marca: "Marca",
+      objetivo: "",
+      fechaInicio: "2026-11-01",
+      fechaFin: "2026-12-31",
+      presupuesto: "30.000.000",
+    })
+    expect(resultado).toEqual({
+      ok: true,
+      datos: { actualizadoAt: "2026-10-21T14:00:00+00:00" },
+    })
+    expect(estado.lecturas).toEqual(["gestionable"])
+  })
+
+  it("el anunciante edita leyendo solo su empresa", async () => {
+    await editarCampana({
+      campanaId: CAMPANA_ID,
+      actualizadoAt: "2026-10-21T14:00:00+00:00",
+      nombre: "Temporada navideña",
+      marca: "Marca",
+      objetivo: "",
+      fechaInicio: "2026-11-01",
+      fechaFin: "2026-12-31",
+      presupuesto: "30.000.000",
+    })
+    expect(estado.lecturas).toEqual([
+      "propia:e2e00000-0000-4000-8000-00000000a001",
+    ])
+  })
+
+  it("activar acepta cualquiera de los dos permisos y va por la máquina de estados", async () => {
+    comoEquipoAmo()
+    const resultado = await activarCampana({ campanaId: CAMPANA_ID })
+    expect(resultado.ok).toBe(true)
+    expect(estado.orden).toEqual([PERMISOS_DAL, "contexto"])
+    expect(estado.transiciones).toEqual([
+      { entidad: "campanas", id: CAMPANA_ID, hacia: "ACTIVA" },
+    ])
   })
 })

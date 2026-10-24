@@ -66,6 +66,8 @@ export interface MiCampana {
   /** Versión del registro (`updated_at`) para no pisar cambios ajenos. */
   actualizadaAt: string
   esDemo: boolean
+  /** La creó el equipo AMO por cuenta de la empresa (ADM-014; la fija la BD). */
+  gestionAsistida: boolean
 }
 
 /** Oferta de la campaña tal como la lista su ficha y el inicio. */

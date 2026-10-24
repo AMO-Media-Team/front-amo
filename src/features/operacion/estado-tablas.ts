@@ -3,7 +3,8 @@
  * las páginas y las tablas): búsqueda, filtros facetados, orden y página.
  * Las claves de los filtros son también las de los enlaces que llegan desde
  * otros módulos (`/operacion/medios?segmento=en_riesgo`,
- * `/operacion/asignaciones?alerta=metricas`, `?medio=<id>`, `?campana=<id>`).
+ * `/operacion/medios?segmento=cerca_tope`, `/operacion/asignaciones?alerta=metricas`,
+ * `?medio=<id>`, `?campana=<id>`).
  */
 import { createParser, parseAsArrayOf } from "nuqs/server"
 
@@ -25,8 +26,20 @@ export const CODIGOS_DEPARTAMENTO = DEPARTAMENTOS.map(
 
 export const NIVELES_VERIFICACION = ["0", "1", "2", "3"] as const
 
-/** Señales de riesgo que otros módulos enlazan (insights del panel). */
-export const SEGMENTOS_MEDIO = ["en_riesgo"] as const
+/**
+ * Señales del listado de medios: en riesgo de abandono (insights del panel) y
+ * cerca del tope anual de su nivel (CFG-005: pasaron el porcentaje de alerta).
+ */
+export const SEGMENTOS_MEDIO = ["en_riesgo", "cerca_tope"] as const
+
+export type SegmentoMedio = (typeof SEGMENTOS_MEDIO)[number]
+
+/** Rótulo de cada señal en el filtro. */
+export const ETIQUETAS_SEGMENTO_MEDIO: Readonly<Record<SegmentoMedio, string>> =
+  {
+    en_riesgo: "En riesgo de abandono",
+    cerca_tope: "Cerca del tope anual",
+  }
 
 /** Alertas de integridad de métricas pendientes de validar. */
 export const ALERTAS_ASIGNACION = ["metricas"] as const
@@ -105,6 +118,9 @@ export const CAMPOS_ORDEN_CAMPANAS = [
   "creado",
 ] as const
 
+/** Origen de la campaña: `asistida` = creada por el equipo AMO por cuenta del anunciante (ADM-014). */
+export const ORIGENES_CAMPANA = ["asistida"] as const
+
 export const estadoTablaCampanas = definirEstadoTabla({
   camposOrden: CAMPOS_ORDEN_CAMPANAS,
   ordenPorDefecto: { campo: "inicio", descendente: true },
@@ -112,6 +128,7 @@ export const estadoTablaCampanas = definirEstadoTabla({
     estado: filtroDeOpciones(ENUMS.campana_estado),
     anunciante: filtroDeIds(),
     plataforma: filtroDeOpciones(ENUMS.plataforma),
+    origen: filtroDeOpciones(ORIGENES_CAMPANA),
   },
 })
 

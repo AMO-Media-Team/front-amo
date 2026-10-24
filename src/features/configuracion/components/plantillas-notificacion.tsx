@@ -8,10 +8,11 @@ import {
   ChevronRight,
   History,
   Mail,
+  MailX,
   Search,
   TriangleAlert,
 } from "lucide-react"
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { FormProvider, useForm, useFormState, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -29,13 +30,22 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatearRelativo } from "@/lib/format"
-import { normalizarNombreGeo } from "@/lib/geo/normalizar"
 import { cn } from "@/lib/utils"
 
 import { guardarPlantilla } from "../actions"
 import { valoresPlantilla } from "../formularios"
-import { agruparPlantillas, ejemploDe, revisarVariables } from "../plantillas"
+import {
+  agruparPlantillas,
+  CANALES_PLANTILLA,
+  type CanalPlantilla,
+  contarPorCanal,
+  ejemploDe,
+  ETIQUETAS_CANAL_PLANTILLA,
+  filtrarPlantillas,
+  revisarVariables,
+} from "../plantillas"
 import { NOMBRES_CANAL, pluralizar } from "../presentacion"
 import { type EntradaPlantilla, esquemaPlantilla } from "../schemas"
 import type { CanalNotificacion, Plantilla } from "../tipos"
@@ -68,30 +78,50 @@ const ICONOS_CANAL: Readonly<Record<CanalNotificacion, typeof Mail>> = {
   PUSH: BellRing,
 }
 
+/** Segmentos del filtro por canal (el mismo trazo que los demás filtros). */
+const CLASE_CANALES =
+  "max-w-full flex-wrap gap-1 rounded-xl border bg-card/60 p-1 [&>[data-slot=toggle-group-item]]:h-8 [&>[data-slot=toggle-group-item]]:rounded-lg [&>[data-slot=toggle-group-item]]:px-3 [&>[data-slot=toggle-group-item]]:text-xs [&>[data-slot=toggle-group-item]]:data-pressed:bg-primary/12 [&>[data-slot=toggle-group-item]]:data-pressed:font-semibold [&>[data-slot=toggle-group-item]]:data-pressed:text-foreground"
+
+/** Si el envío por correo está apagado, las plantillas de correo esperan. */
+function AvisoCorreoApagado() {
+  return (
+    <p className="mx-4 mt-3 flex gap-2 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2.5 text-[0.8125rem] text-pretty sm:mx-5">
+      <MailX aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+      <span>
+        <span className="font-semibold">El envío por correo está apagado.</span>{" "}
+        Estos textos se usarán cuando se encienda «Envío por correo», arriba en
+        esta sección; mientras tanto, los avisos solo llegan a la aplicación.
+      </span>
+    </p>
+  )
+}
+
 /**
  * Plantillas de los avisos que reciben las personas (en la aplicación y por
- * correo). Se editan el texto y el asunto con sus variables `{{x}}`; la
- * vista previa usa valores de ejemplo. Las plantillas nuevas llegan por
- * migración (no se crean aquí).
+ * correo), filtradas por canal y por texto. Se editan el texto y el asunto
+ * con sus variables `{{x}}`; la vista previa usa valores de ejemplo. Las
+ * plantillas nuevas llegan por migración (no se crean aquí). Con el correo
+ * apagado (NOT-004), la vista de correo lo advierte.
  */
 export function PlantillasNotificacion({
   plantillas,
+  correoHabilitado,
 }: {
   plantillas: readonly Plantilla[]
+  /** `correo.habilitado`: sin él, las de correo no se envían. */
+  correoHabilitado: boolean
 }) {
   const [busqueda, setBusqueda] = useState("")
+  const [canal, setCanal] = useState<CanalPlantilla>("APP")
   const [elegida, setElegida] = useState<Plantilla | null>(null)
   const [abierta, setAbierta] = useState(false)
   const permisos = usePermisosConfiguracion()
-  const texto = normalizarNombreGeo(busqueda)
-  const filtradas = plantillas.filter(
-    (p) =>
-      !texto ||
-      normalizarNombreGeo(p.nombre).includes(texto) ||
-      p.clave.includes(busqueda.trim().toLowerCase())
-  )
+  const idCanal = useId()
+  const conteo = contarPorCanal(plantillas)
+  const filtradas = filtrarPlantillas(plantillas, { canal, busqueda })
   const grupos = agruparPlantillas(filtradas)
   const inactivas = plantillas.filter((p) => !p.activa).length
+  const nombreCanal = ETIQUETAS_CANAL_PLANTILLA[canal].toLowerCase()
 
   return (
     <Bloque
@@ -110,7 +140,41 @@ export function PlantillasNotificacion({
         />
       ) : (
         <>
-          <div className="border-b px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:px-5">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span
+                id={idCanal}
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Canal
+              </span>
+              <ToggleGroup
+                aria-labelledby={idCanal}
+                value={[canal]}
+                onValueChange={(valor) => {
+                  const [elegido] = valor
+                  // Tocar la opción activa no la desmarca: siempre hay una.
+                  if (elegido === "APP" || elegido === "EMAIL") {
+                    setCanal(elegido)
+                  }
+                }}
+                className={CLASE_CANALES}
+              >
+                {CANALES_PLANTILLA.map((opcion) => {
+                  const Icono = ICONOS_CANAL[opcion]
+                  return (
+                    <ToggleGroupItem key={opcion} value={opcion}>
+                      <Icono aria-hidden />
+                      {ETIQUETAS_CANAL_PLANTILLA[opcion]}{" "}
+                      <span className="cifras text-muted-foreground">
+                        {conteo[opcion]}{" "}
+                        <span className="sr-only">plantillas</span>
+                      </span>
+                    </ToggleGroupItem>
+                  )
+                })}
+              </ToggleGroup>
+            </div>
             <InputGroup className="sm:max-w-72">
               <InputGroupAddon>
                 <Search aria-hidden />
@@ -123,9 +187,17 @@ export function PlantillasNotificacion({
               />
             </InputGroup>
           </div>
+          {canal === "EMAIL" && !correoHabilitado ? (
+            <AvisoCorreoApagado />
+          ) : null}
+          {/* Cuántas quedan a la vista, para lectores de pantalla. */}
+          <p role="status" className="sr-only">
+            {pluralizar(filtradas.length, "plantilla", "plantillas")} de{" "}
+            {nombreCanal}
+          </p>
           {grupos.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-              Ninguna plantilla coincide con «{busqueda}».
+              Ninguna plantilla de {nombreCanal} coincide con «{busqueda}».
             </p>
           ) : (
             <div className="@container">
