@@ -27,12 +27,12 @@ const ESTADOS: readonly EstadoDocumentoSoporte[] = [
   "ANULADO",
 ]
 const PLATAFORMAS: readonly Plataforma[] = ["INSTAGRAM", "FACEBOOK", "TIKTOK"]
-const TIPOS_RETENCION: readonly TipoRetencion[] = [
+export const TIPOS_RETENCION: readonly TipoRetencion[] = [
   "RETEFUENTE",
   "RETEICA",
   "RETEIVA",
 ]
-const TIPOS_DOCUMENTO: readonly TipoDocumentoIdentidad[] = [
+export const TIPOS_DOCUMENTO: readonly TipoDocumentoIdentidad[] = [
   "CC",
   "CE",
   "PPT",

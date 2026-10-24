@@ -111,7 +111,8 @@ export async function cargarPagos(
 /**
  * URL firmada (como usuario, para descargar con un nombre legible) del
  * soporte de pago, el documento soporte o la factura de una liquidación
- * propia. La ruta sale de la fila que devuelve la RPC con la sesión.
+ * propia. La ruta sale de la fila que devuelve la RPC con la sesión. La
+ * anulada (la RPC la devuelve pedida por `id`) ya no tiene archivos.
  */
 export async function firmarArchivoLiquidacion(
   entrada: EntradaFirmarArchivo
@@ -134,6 +135,7 @@ export async function firmarArchivoLiquidacion(
     if (error) return falloBd("leer la liquidación del archivo", error)
     const fila = data.at(0)
     if (!fila) return fallo(MENSAJES_GANANCIAS.noEncontrada)
+    if (fila.estado === "ANULADA") return fallo(MENSAJES_GANANCIAS.anulada)
     const ruta = rutaArchivo(fila, archivo)
     if (!ruta) return fallo(MENSAJES_GANANCIAS.sinArchivo)
     return await firmarDescarga({

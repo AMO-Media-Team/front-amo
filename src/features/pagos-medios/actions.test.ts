@@ -35,9 +35,6 @@ const estado = vi.hoisted(() => ({
   preparadas: [] as Record<string, unknown>[],
   confirmados: [] as Record<string, unknown>[],
   resultadoConfirmar: null as unknown,
-  copias: [] as { origen: string; destino: string }[],
-  errorCopia: null as unknown,
-  liquidacionesArchivo: [] as unknown[],
 }))
 
 vi.mock("server-only", () => ({}))
@@ -74,10 +71,6 @@ vi.mock("@/lib/auth/contexto-actor", () => ({
               estado.retiradas.push(rutas)
               return { error: null }
             },
-            copy: async (origen: string, destino: string) => {
-              estado.copias.push({ origen, destino })
-              return { data: { path: destino }, error: estado.errorCopia }
-            },
           }),
         },
       },
@@ -91,10 +84,6 @@ vi.mock("@/lib/supabase/server", () => ({
         eq: () => ({
           maybeSingle: async () => ({
             data: estado.filaDispersion,
-            error: null,
-          }),
-          overrideTypes: async () => ({
-            data: estado.liquidacionesArchivo,
             error: null,
           }),
         }),
@@ -155,7 +144,6 @@ const {
   descargarArchivoPagos,
   generarArchivoPagos,
   prepararSoportePago,
-  registrarPagoArchivo,
   registrarPagoLiquidacion,
 } = await import("./actions")
 
@@ -214,9 +202,6 @@ beforeEach(() => {
   estado.preparadas = []
   estado.confirmados = []
   estado.resultadoConfirmar = null
-  estado.copias = []
-  estado.errorCopia = null
-  estado.liquidacionesArchivo = []
 })
 
 describe("generarArchivoPagos (LIQ-005)", () => {
@@ -363,6 +348,20 @@ describe("generarArchivoPagos (LIQ-005)", () => {
     expect(resultado).toEqual(fallo(MENSAJES_PAGOS.noAprobada))
     expect(estado.retiradas).toEqual([[estado.subidas[0].ruta]])
     expect(estado.firmas).toEqual([])
+  })
+
+  it("si se perdió la respuesta del registro, no retira el CSV: pudo quedar registrado", async () => {
+    // postgrest-js no lanza ante un fallo de red: devuelve un error sin código.
+    estado.respuestas.registrar_dispersion_srv = {
+      data: null,
+      error: { code: "", message: "FetchError: socket hang up", details: "" },
+    }
+    const resultado = await generarArchivoPagos(entrada)
+    expect(resultado).toEqual(fallo(MENSAJES_PAGOS.respuestaPerdida))
+    expect(estado.retiradas).toEqual([])
+    expect(estado.firmas).toEqual([])
+    // Se refresca para que «Archivos de pagos» muestre lo que haya quedado.
+    expect(estado.revalidadas).toContain("/finanzas/pagos:layout")
   })
 
   it("si falla la subida, no registra", async () => {
@@ -561,147 +560,5 @@ describe("registrarPagoLiquidacion (LIQ-006)", () => {
     const resultado = await registrarPagoLiquidacion(entrada)
     expect(resultado.ok).toBe(false)
     expect(estado.revalidadas).toContain("/finanzas/liquidaciones:layout")
-  })
-})
-
-describe("registrarPagoArchivo (un comprobante para todo el archivo)", () => {
-  const LIQ_C = "0199f3a0-0000-7000-8000-00000000a503"
-  const soportePath = `liquidacion/${LIQ_A}/pago/0199f3a0-0000-7000-8000-0000000000f1.pdf`
-  const entrada = {
-    dispersionId: DISPERSION,
-    liquidacionIds: [LIQ_A, LIQ_B],
-    fecha: "2026-10-20",
-    referencia: "TRF-LOTE-1",
-    soportePath,
-  }
-
-  beforeEach(() => {
-    estado.liquidacionesArchivo = [
-      { id: LIQ_A, estado: "APROBADA", medio: { nombre: "Radio Pasto" } },
-      { id: LIQ_B, estado: "APROBADA", medio: { nombre: "La Voz" } },
-      { id: LIQ_C, estado: "PAGADA", medio: { nombre: "Estéreo Sur" } },
-    ]
-  })
-
-  it("copia el comprobante a las demás y registra cada una con su propia ruta", async () => {
-    const resultado = await registrarPagoArchivo(entrada)
-    expect(estado.orden[0]).toBe("dal:liquidaciones.registrar_pago")
-    expect(estado.copias).toHaveLength(1)
-    expect(estado.copias[0]?.origen).toBe(soportePath)
-    expect(estado.copias[0]?.destino).toMatch(
-      new RegExp(`^liquidacion/${LIQ_B}/pago/[0-9a-f-]{36}\\.pdf$`)
-    )
-    expect(
-      estado.rpc.map((llamada) => [
-        llamada.nombre,
-        llamada.argumentos.p_liquidacion_id,
-        llamada.argumentos.p_soporte_path,
-        llamada.argumentos.p_referencia,
-      ])
-    ).toEqual([
-      ["registrar_pago_liquidacion_srv", LIQ_A, soportePath, "TRF-LOTE-1"],
-      [
-        "registrar_pago_liquidacion_srv",
-        LIQ_B,
-        estado.copias[0]?.destino,
-        "TRF-LOTE-1",
-      ],
-    ])
-    expect(resultado).toEqual(
-      exito({
-        registradas: [
-          { id: LIQ_A, medio: "Radio Pasto" },
-          { id: LIQ_B, medio: "La Voz" },
-        ],
-        fallidas: [],
-      })
-    )
-    expect(estado.revalidadas).toContain("/finanzas/pagos:layout")
-  })
-
-  it("acepta el comprobante ya subido a otra liquidación del archivo (reintento)", async () => {
-    const resultado = await registrarPagoArchivo({
-      ...entrada,
-      liquidacionIds: [LIQ_B],
-      soportePath: `liquidacion/${LIQ_C}/pago/0199f3a0-0000-7000-8000-0000000000f1.pdf`,
-    })
-    expect(resultado.ok).toBe(true)
-    expect(estado.copias).toHaveLength(1)
-  })
-
-  it("cada fallo queda en su fila (con su copia retirada) y las demás se pagan", async () => {
-    estado.colas.registrar_pago_liquidacion_srv = [
-      { data: null, error: null },
-      {
-        data: null,
-        error: {
-          code: "P0001",
-          message: "AMO_DOCUMENTO_SOPORTE_REQUERIDO",
-          details: "Registra el número y el archivo de la factura del medio.",
-        },
-      },
-    ]
-    const resultado = await registrarPagoArchivo(entrada)
-    expect(resultado).toEqual(
-      exito({
-        registradas: [{ id: LIQ_A, medio: "Radio Pasto" }],
-        fallidas: [
-          {
-            id: LIQ_B,
-            medio: "La Voz",
-            mensaje:
-              "Documento soporte requerido: registra el número y el archivo de la factura del medio.",
-          },
-        ],
-      })
-    )
-    expect(estado.retiradas).toEqual([[estado.copias[0]?.destino]])
-  })
-
-  it("una que ya no está aprobada o cuya copia falla no se registra", async () => {
-    estado.errorCopia = { statusCode: "500" }
-    const resultado = await registrarPagoArchivo({
-      ...entrada,
-      liquidacionIds: [LIQ_C, LIQ_B],
-    })
-    expect(resultado).toEqual(
-      exito({
-        registradas: [],
-        fallidas: [
-          {
-            id: LIQ_C,
-            medio: "Estéreo Sur",
-            mensaje: MENSAJES_PAGOS.noAprobadaUna,
-          },
-          {
-            id: LIQ_B,
-            medio: "La Voz",
-            mensaje: MENSAJES_PAGOS.soporteNoCopiado,
-          },
-        ],
-      })
-    )
-    expect(estado.rpc).toEqual([])
-  })
-
-  it("rechaza liquidaciones de otro archivo o un soporte ajeno sin tocar nada", async () => {
-    expect(
-      await registrarPagoArchivo({
-        ...entrada,
-        liquidacionIds: ["0199f3a0-0000-7000-8000-00000000a5ff"],
-      })
-    ).toEqual(fallo(MENSAJES_PAGOS.fueraDelArchivo))
-    expect(
-      await registrarPagoArchivo({
-        ...entrada,
-        soportePath: `liquidacion/0199f3a0-0000-7000-8000-00000000a5ff/pago/0199f3a0-0000-7000-8000-0000000000f1.pdf`,
-      })
-    ).toEqual(
-      fallo(MENSAJES_PAGOS.soporteAjeno, {
-        soporte: [MENSAJES_PAGOS.soporteAjeno],
-      })
-    )
-    expect(estado.copias).toEqual([])
-    expect(estado.rpc).toEqual([])
   })
 })

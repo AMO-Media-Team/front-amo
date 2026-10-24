@@ -7,6 +7,7 @@
  */
 import { normalizarBusqueda } from "@/features/operacion/formato"
 import type { Tono } from "@/features/operacion/estados"
+import { formatearNumero } from "@/lib/format"
 
 import type {
   LiquidacionPorPagar,
@@ -57,6 +58,28 @@ export const PREPARACION: Readonly<
       "Se envió al banco en un archivo anterior: registra su pago cuando se confirme.",
     tono: "info",
   },
+}
+
+/** Rótulos cortos de las tarjetas de «Por pagar» (la etiqueta completa va de ayuda). */
+export const ROTULOS_PREPARACION: Readonly<Record<EstadoPreparacion, string>> =
+  {
+    lista: "Listas",
+    sin_documento: "Sin documento",
+    sin_datos_pago: "Datos incompletos",
+    en_archivo: "En un archivo",
+  }
+
+/**
+ * Nombre accesible de la tarjeta que filtra por situación: empieza por lo que
+ * se ve (rótulo y cifra) y sigue con la etiqueta completa (WCAG 2.5.3: quien
+ * dice «pulsar Sin documento» la activa). «Sin documento: 2. Falta documento
+ * soporte o factura».
+ */
+export function nombreTarjetaPreparacion(
+  estado: EstadoPreparacion,
+  cantidad: number
+): string {
+  return `${ROTULOS_PREPARACION[estado]}: ${formatearNumero(cantidad)}. ${PREPARACION[estado].etiqueta}`
 }
 
 /** ¿Puede ir en un archivo de pagos? (documento y datos de pago listos). */

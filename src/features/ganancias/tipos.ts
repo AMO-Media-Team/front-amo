@@ -36,6 +36,8 @@ export interface ResumenGanancias {
   /** El medio no factura: sus pagos llevan documento soporte. */
   requiereDocumentoSoporte: boolean
   segSocialPendiente: boolean
+  /** Con la política BLOQUEAR, sin la planilla no se aprueba ni se paga. */
+  segSocialBloquea: boolean
 }
 
 /** Documento soporte vigente (no anulado) de una liquidación. */
@@ -55,7 +57,10 @@ export interface FacturaMedio {
   conArchivo: boolean
 }
 
-/** Una liquidación del medio (`mis_liquidaciones_medio`); nunca una anulada. */
+/**
+ * Una liquidación del medio (`mis_liquidaciones_medio`). La anulada no sale en
+ * la lista: solo llega pedida por su `id` (el aviso de anulación lleva a ella).
+ */
 export interface LiquidacionMedio {
   id: string
   /** 'YYYY-MM-DD'. */

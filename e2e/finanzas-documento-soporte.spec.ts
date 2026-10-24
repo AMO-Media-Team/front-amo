@@ -29,9 +29,10 @@ import { sesion } from "./utilidades/sesiones"
  *   - Finanzas emite el documento de una liquidación aprobada: queda EMITIDO con número de la resolución,
  *     PDF y archivo `AMO-DS-1` para el proveedor (se descargan con nombre legible), el foco va al estado
  *     del documento y la bitácora registra el revelado de los datos del medio y las URL firmadas.
- *   - Registra el CUDS (el error de formato queda junto al campo); con CUDS no se anula sin nota de
- *     ajuste: registra la nota con su PDF, anula el documento con un motivo, el anulado queda en el
- *     historial y se emite otro con un número nuevo.
+ *   - Registra el CUDS (el error de formato queda junto al campo): el PDF se rehace desde el archivo
+ *     `AMO-DS-1` ya guardado (el que se transmitió), que no se reemplaza, y no se vuelven a revelar los
+ *     datos del medio. Con CUDS no se anula sin nota de ajuste: registra la nota con su PDF, anula el
+ *     documento con un motivo, el anulado queda en el historial y se emite otro con un número nuevo.
  *   Antes y después, `restablecerFinanzasE2E()` limpia lo de los medios de Finanzas.
  */
 
@@ -40,6 +41,21 @@ function seccion(page: Page): Locator {
   return page
     .getByRole("heading", { level: 2, name: "Documento soporte", exact: true })
     .locator("xpath=ancestor::section[1]")
+}
+
+/** Rutas de los archivos del documento vigente de la liquidación (leídas como servicio). */
+async function archivosDelDocumento(liquidacionId: string): Promise<{
+  pdf: string | null
+  proveedor: string | null
+}> {
+  const { data, error } = await clienteDeLectura()
+    .from("documentos_soporte")
+    .select("archivo_path, archivo_proveedor_path")
+    .eq("liquidacion_id", liquidacionId)
+    .neq("estado", "ANULADO")
+    .single()
+  if (error) throw new Error(`No se pudo leer el documento (${error.code}).`)
+  return { pdf: data.archivo_path, proveedor: data.archivo_proveedor_path }
 }
 
 /** El estado del documento: recibe el foco tras cada cambio. */
@@ -272,6 +288,8 @@ test.describe("documento soporte · emisión y corrección", () => {
     })
     const tarjeta = seccion(page)
     await esperarEstado(page, "Pendiente de transmisión a la DIAN")
+    const antes = await archivosDelDocumento(aprobada.liquidacionId)
+    const desde = new Date().toISOString()
 
     await test.step("el CUDS mal copiado se explica junto al campo", async () => {
       await tarjeta.getByRole("button", { name: "Registrar CUDS" }).click()
@@ -297,6 +315,25 @@ test.describe("documento soporte · emisión y corrección", () => {
               .documentoSoporte?.cuds
         )
         .toBe(cuds)
+    })
+
+    await test.step("el PDF nuevo sale del archivo transmitido, que no se reemplaza", async () => {
+      await expect
+        .poll(
+          async () => (await archivosDelDocumento(aprobada.liquidacionId)).pdf
+        )
+        .not.toBe(antes.pdf)
+      const despues = await archivosDelDocumento(aprobada.liquidacionId)
+      expect(despues.proveedor).toBe(antes.proveedor)
+      // Sin volver a revelar los datos del medio.
+      const { data: revelados } = await clienteDeLectura()
+        .from("bitacora")
+        .select("id")
+        .eq("accion", "REVELAR_DATO")
+        .eq("entidad", "medios_privado")
+        .eq("entidad_id", aprobada.medioId)
+        .gte("created_at", desde)
+      expect(revelados ?? []).toEqual([])
     })
 
     await test.step("con CUDS no se ofrece anular: primero la nota de ajuste", async () => {
@@ -335,7 +372,7 @@ test.describe("documento soporte · emisión y corrección", () => {
       ).toBeVisible()
     })
 
-    await test.step("se anula con un motivo y queda en el historial", async () => {
+    await test.step("se anula con un motivo y sigue a la vista con su nota", async () => {
       await tarjeta.getByRole("button", { name: "Anular documento" }).click()
       const dialogo = page.getByRole("alertdialog", {
         name: `¿Anular el documento soporte ${numero}?`,
@@ -350,11 +387,10 @@ test.describe("documento soporte · emisión y corrección", () => {
       await expect(estado(page)).toContainText(
         `El documento ${numero} se anuló.`
       )
-      const historial = tarjeta.getByRole("region", {
-        name: "Documentos anteriores",
-      })
-      await expect(historial).toContainText(numero)
-      await expect(historial).toContainText("nota de ajuste NA-E2E-")
+      // Mientras no haya otro, el anulado es el último documento de la liquidación: se ve con su nota.
+      await expect(tarjeta).toContainText(numero)
+      await expect(tarjeta).toContainText("Anulado")
+      await expect(tarjeta).toContainText("NA-E2E-")
     })
 
     await test.step("se emite otro con un número nuevo", async () => {
@@ -377,6 +413,12 @@ test.describe("documento soporte · emisión y corrección", () => {
         .toMatch(/\S/)
       const nueva = await leerLiquidacionFinanzasE2E(aprobada.liquidacionId)
       expect(nueva.documentoSoporte?.numero).not.toBe(numero)
+      // El anulado pasa al historial, con su nota de ajuste.
+      const historial = tarjeta.getByRole("region", {
+        name: "Documentos anteriores",
+      })
+      await expect(historial).toContainText(numero)
+      await expect(historial).toContainText("nota de ajuste NA-E2E-")
     })
   })
 })

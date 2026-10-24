@@ -280,6 +280,65 @@ describe("SeccionDocumentoSoporte · emitido", () => {
     await waitFor(() => expect(estado()).toHaveFocus())
   })
 
+  it("un CUDS que rechaza el servidor deja el foco en el campo cuando termina de registrar", async () => {
+    const mensaje = "Ese CUDS ya está registrado en otro documento soporte."
+    let responder: (valor: unknown) => void = () => {}
+    acciones.registrarCuds.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver
+      })
+    )
+    const usuario = userEvent.setup()
+    render(<Seccion />)
+
+    await usuario.click(screen.getByRole("button", { name: "Registrar CUDS" }))
+    const dialogo = await screen.findByRole("dialog", {
+      name: "Registrar el CUDS",
+    })
+    const campo = within(dialogo).getByLabelText("CUDS")
+    await usuario.type(campo, CUDS)
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Registrar CUDS" })
+    )
+    // Mientras registra, el campo está deshabilitado.
+    await waitFor(() => expect(campo).toBeDisabled())
+
+    responder(fallo(mensaje, { cuds: [mensaje] }))
+    await waitFor(() => expect(campo).toBeEnabled())
+    expect(campo).toHaveAccessibleDescription(new RegExp(`^${mensaje}`))
+    await waitFor(() => expect(campo).toHaveFocus())
+  })
+
+  it("la descarga sigue enfocable mientras firma y, si falla, se puede reintentar", async () => {
+    let responder: (valor: unknown) => void = () => {}
+    acciones.firmarArchivoDocumentoSoporte.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver
+      })
+    )
+    const usuario = userEvent.setup()
+    render(<Seccion />)
+
+    const boton = screen.getByRole("button", {
+      name: "PDF del documento (DS10)",
+    })
+    await usuario.click(boton)
+    await waitFor(() => expect(boton).toHaveAttribute("aria-busy", "true"))
+    expect(boton).toHaveAttribute("aria-disabled", "true")
+    expect(boton).not.toHaveAttribute("disabled")
+    expect(boton).toHaveFocus()
+
+    responder(fallo("No encontramos el archivo o no tienes acceso a él."))
+    await waitFor(() => expect(boton).not.toHaveAttribute("aria-busy"))
+    expect(avisos.error).toHaveBeenCalledWith(
+      "No encontramos el archivo o no tienes acceso a él.",
+      { description: expect.any(String) }
+    )
+    expect(boton).toHaveFocus()
+    expect(boton).toBeEnabled()
+    expect(boton).not.toHaveAttribute("aria-disabled", "true")
+  })
+
   it("con CUDS: lo muestra para copiar y pide la nota de ajuste antes de anular", () => {
     render(<Seccion documento={{ ...EMITIDO, cuds: CUDS }} />)
     expect(screen.getByText(CUDS)).toBeInTheDocument()
@@ -524,7 +583,7 @@ describe("SeccionDocumentoSoporte · sin permiso, pagada e historial", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("pagada: no se anula ni se corrige desde aquí", () => {
+  it("pagada: no se anula; con CUDS solo ofrece la nota de ajuste (D77)", () => {
     render(
       <Seccion
         estadoLiquidacion="PAGADA"
@@ -534,15 +593,54 @@ describe("SeccionDocumentoSoporte · sin permiso, pagada e historial", () => {
     expect(
       within(estado()).getByRole("heading", { name: "Transmitido a la DIAN" })
     ).toBeInTheDocument()
-    for (const nombre of [
-      "Anular documento",
-      "Registrar nota de ajuste",
-      "Registrar CUDS",
-    ]) {
+    expect(
+      screen.getByRole("button", { name: "Registrar nota de ajuste" })
+    ).toBeInTheDocument()
+    for (const nombre of ["Anular documento", "Registrar CUDS"]) {
       expect(
         screen.queryByRole("button", { name: nombre })
       ).not.toBeInTheDocument()
     }
+  })
+
+  it("sin «Ver datos sensibles» no ofrece descargas y dice por qué", () => {
+    render(
+      <Seccion
+        estadoLiquidacion="PAGADA"
+        puedeGestionar={false}
+        documento={{
+          ...EMITIDO,
+          cuds: CUDS,
+          notaAjuste: {
+            numero: "NA1",
+            cude: null,
+            archivoPath: `documento_soporte/${DOCUMENTO}/n.pdf`,
+            registradaAt: "2026-10-18T15:00:00Z",
+          },
+          archivosReservados: true,
+          anteriores: [
+            {
+              id: ANTERIOR,
+              numero: "DS9",
+              anuladoAt: "2026-10-16T15:00:00Z",
+              notaAjusteNumero: "NA7",
+            },
+          ],
+        }}
+      />
+    )
+    expect(
+      screen.queryByRole("group", { name: "Descargas del documento soporte" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/descargarlos requiere el permiso «Ver datos sensibles»/)
+    ).toBeInTheDocument()
+    const historial = screen.getByRole("region", {
+      name: "Documentos anteriores",
+    })
+    expect(historial).toHaveTextContent("DS9")
+    expect(within(historial).queryAllByRole("button")).toEqual([])
+    expect(acciones.firmarArchivoDocumentoSoporte).not.toHaveBeenCalled()
   })
 
   it("los documentos anulados quedan en el historial con sus descargas", () => {

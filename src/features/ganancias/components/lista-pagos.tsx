@@ -10,7 +10,7 @@ import {
   Wallet,
 } from "lucide-react"
 import Link from "next/link"
-import { useId, useState, useTransition } from "react"
+import { useEffect, useId, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils"
 import { cargarPagos } from "../actions"
 import {
   archivosDescargables,
+  avisoSegSocial,
   contarPublicaciones,
   documentoParaMedio,
   estadoParaMedio,
@@ -162,6 +163,7 @@ function TarjetaPago({
 }) {
   const idTitulo = useId()
   const estado = estadoParaMedio(liquidacion)
+  const aviso = avisoSegSocial(liquidacion)
   const periodo = textoPeriodo(
     liquidacion.periodoInicio,
     liquidacion.periodoFin
@@ -179,6 +181,7 @@ function TarjetaPago({
             <h3 id={idTitulo} className="text-base leading-snug font-semibold">
               <Link
                 data-titulo
+                data-pago={liquidacion.id}
                 href={rutaLiquidacionMedio(liquidacion.id)}
                 className="outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:underline hover:underline-offset-4"
               >
@@ -217,10 +220,10 @@ function TarjetaPago({
 
         <FechaDelPago liquidacion={liquidacion} hoy={hoy} />
 
-        {liquidacion.alertaSegSocial ? (
-          <p className="flex items-start gap-1.5 text-xs text-warning">
+        {aviso ? (
+          <p className="flex items-start gap-1.5 text-xs text-pretty text-warning">
             <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-            Seguridad social pendiente: cárgala para que podamos pagarte.
+            {aviso.texto}
           </p>
         ) : null}
 
@@ -264,11 +267,13 @@ function TablaPagos({
         <TableBody>
           {liquidaciones.map((liquidacion) => {
             const estado = estadoParaMedio(liquidacion)
+            const aviso = avisoSegSocial(liquidacion)
             return (
               <TableRow key={liquidacion.id} className="align-top">
                 <TableCell className="py-3 whitespace-normal">
                   <div className="flex flex-col gap-0.5">
                     <Link
+                      data-pago={liquidacion.id}
                       href={rutaLiquidacionMedio(liquidacion.id)}
                       className="font-medium underline-offset-4 hover:underline focus-visible:underline"
                     >
@@ -290,9 +295,9 @@ function TablaPagos({
                       titulo={estado.descripcion}
                     />
                     <FechaDelPago liquidacion={liquidacion} hoy={hoy} />
-                    {liquidacion.alertaSegSocial ? (
-                      <span className="text-xs text-warning">
-                        Seguridad social pendiente
+                    {aviso ? (
+                      <span className="max-w-52 text-xs text-pretty text-warning">
+                        {aviso.texto}
                       </span>
                     ) : null}
                   </div>
@@ -320,11 +325,32 @@ function TablaPagos({
 
 // ── Lista con «Ver pagos anteriores» ─────────────────────────────────────────
 
+/** Destino del foco cuando ya no quedan pagos por agregar: el aviso final. */
+const FIN = "fin"
+
+/**
+ * Enfoca el enlace del pago en la vista visible: cada pago está en la tarjeta
+ * y en la fila de la tabla, y el de la vista oculta (`display: none`) no toma
+ * el foco, así que se prueba en orden hasta que uno lo tome.
+ */
+function enfocarPago(raiz: HTMLElement | null, id: string): boolean {
+  if (!raiz) return false
+  const enlaces = raiz.querySelectorAll<HTMLElement>("[data-pago]")
+  for (const enlace of enlaces) {
+    if (enlace.dataset.pago !== id) continue
+    enlace.focus()
+    if (document.activeElement === enlace) return true
+  }
+  return false
+}
+
 /**
  * Tus pagos (MED-015): una tarjeta por liquidación en el celular y una tabla
  * cuando hay ancho (se mide el contenedor: la barra lateral abierta le quita
  * espacio). «Ver pagos anteriores» pide la página que sigue a la última
- * mostrada (cursor por `id`) y la agrega sin mover el foco.
+ * mostrada (cursor por `id`) y la agrega encima del botón: mientras carga, el
+ * botón sigue enfocable, y al terminar el foco pasa al primer pago agregado
+ * (con Tab se sigue por los demás) o, si no llegó ninguno, al aviso final.
  */
 export function ListaPagos({
   inicial,
@@ -336,8 +362,23 @@ export function ListaPagos({
 }) {
   const [liquidaciones, setLiquidaciones] = useState(inicial.liquidaciones)
   const [siguiente, setSiguiente] = useState(inicial.siguiente)
+  const [paginado, setPaginado] = useState(false)
   const [cargando, iniciar] = useTransition()
   const [anuncio, setAnuncio] = useState("")
+  const contenedor = useRef<HTMLDivElement>(null)
+  const avisoFinal = useRef<HTMLParagraphElement>(null)
+  /** Tras una carga: el `id` del primer pago agregado o `FIN`. */
+  const focoPendiente = useRef<string | null>(null)
+
+  // El foco se mueve cuando termina la carga: ya están pintados los pagos
+  // nuevos (o el aviso final, si el botón desapareció).
+  useEffect(() => {
+    const destino = focoPendiente.current
+    if (cargando || destino === null) return
+    focoPendiente.current = null
+    if (destino !== FIN && enfocarPago(contenedor.current, destino)) return
+    avisoFinal.current?.focus()
+  }, [cargando])
 
   if (liquidaciones.length === 0) {
     return (
@@ -351,7 +392,7 @@ export function ListaPagos({
   }
 
   function verMas() {
-    if (siguiente === null) return
+    if (siguiente === null || cargando) return
     iniciar(async () => {
       const resultado = await cargarPagos({ antesId: siguiente })
       if (!resultado.ok) {
@@ -361,8 +402,16 @@ export function ListaPagos({
         return
       }
       const nuevas = resultado.datos.liquidaciones
+      const primera = nuevas.at(0)
+      // Sin pagos nuevos y con más páginas, el foco sigue en el botón.
+      focoPendiente.current = primera
+        ? primera.id
+        : resultado.datos.siguiente === null
+          ? FIN
+          : null
       setLiquidaciones((actuales) => [...actuales, ...nuevas])
       setSiguiente(resultado.datos.siguiente)
+      setPaginado(true)
       setAnuncio(
         nuevas.length === 1
           ? "Se agregó 1 pago anterior."
@@ -372,7 +421,7 @@ export function ListaPagos({
   }
 
   return (
-    <div className="@container/pagos flex flex-col gap-4">
+    <div ref={contenedor} className="@container/pagos flex flex-col gap-4">
       <ol
         aria-label="Tus pagos"
         className="flex flex-col gap-3 @2xl/pagos:hidden"
@@ -391,9 +440,11 @@ export function ListaPagos({
         <Button
           type="button"
           variant="outline"
-          className="self-center"
+          className="self-center data-disabled:cursor-not-allowed data-disabled:opacity-50"
           onClick={verMas}
           disabled={cargando}
+          // Deshabilitado de forma nativa, el navegador le quitaría el foco.
+          focusableWhenDisabled
           aria-busy={cargando || undefined}
         >
           {cargando ? (
@@ -403,8 +454,12 @@ export function ListaPagos({
           )}
           {cargando ? "Cargando…" : "Ver pagos anteriores"}
         </Button>
-      ) : liquidaciones.length > 3 ? (
-        <p className="text-center text-xs text-muted-foreground">
+      ) : paginado || liquidaciones.length > 3 ? (
+        <p
+          ref={avisoFinal}
+          tabIndex={-1}
+          className="self-center rounded-md px-1 text-center text-xs text-muted-foreground outline-none focus-visible:anillo-foco"
+        >
           Estos son todos tus pagos.
         </p>
       ) : null}

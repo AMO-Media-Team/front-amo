@@ -33,6 +33,7 @@ import { rutaFactura } from "../rutas"
 import { esquemaGenerarFactura, hoyEnBogota } from "../schemas"
 import type { GrupoPorFacturar } from "../tipos"
 import { DialogoFormulario } from "./dialogo-formulario"
+import { useFocoDiferido } from "./use-foco-diferido"
 
 /** Valor del grupo de alcance para la factura consolidada. */
 const CONSOLIDADA = "consolidada"
@@ -82,6 +83,7 @@ export function NuevaFactura() {
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const [consultando, iniciarConsulta] = useTransition()
   const [pendiente, iniciar] = useTransition()
+  const diferirFoco = useFocoDiferido(pendiente)
   const consulta = useRef(0)
   const id = useId()
   const idFormulario = `${id}-formulario`
@@ -200,7 +202,8 @@ export function NuevaFactura() {
         const porCampo = erroresDe(resultado.erroresCampo)
         if (Object.keys(porCampo).length > 0) {
           setErrores(porCampo)
-          enfocarError(porCampo)
+          // Los campos siguen deshabilitados hasta que termine la transición.
+          diferirFoco(() => enfocarError(porCampo))
         } else {
           setErrorGeneral(resultado.error)
         }

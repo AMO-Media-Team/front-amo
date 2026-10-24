@@ -6,8 +6,11 @@ import type { RetencionAgrupada } from "../tipos"
 
 vi.mock("../actions", () => ({ firmarArchivoLiquidacion: vi.fn() }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
+vi.mock("next/navigation", () => ({ usePathname: () => "/ganancias/x" }))
 
 import {
+  AvisoLiquidacionAnulada,
+  CabeceraLiquidacionMedio,
   DesgloseLiquidacion,
   DocumentoSoporteLiquidacion,
   PagoLiquidacion,
@@ -47,6 +50,37 @@ function filas() {
     .getAllByRole("term")
     .map((termino) => plano(termino.parentElement?.textContent ?? ""))
 }
+
+describe("liquidación anulada", () => {
+  it("la cabecera dice que se anuló y que su neto no se paga", () => {
+    render(
+      <CabeceraLiquidacionMedio
+        liquidacion={liquidacion({ estado: "ANULADA" })}
+        hoy={HOY}
+      />
+    )
+    expect(
+      screen.getByRole("heading", { level: 1, name: "1 – 15 oct 2026" })
+    ).toBeVisible()
+    expect(screen.getByText("Anulada")).toBeVisible()
+    expect(screen.getByText("Neto (anulado: no se paga)")).toBeVisible()
+    expect(screen.queryByText(/Recib/)).not.toBeInTheDocument()
+  })
+
+  it("el aviso explica adónde volvieron sus publicaciones y lleva a «Por liquidar»", () => {
+    render(<AvisoLiquidacionAnulada />)
+    const aviso = screen.getByRole("region", {
+      name: "Esta liquidación se anuló",
+    })
+    expect(aviso).toHaveTextContent(
+      "Sus publicaciones volvieron a Por liquidar y entrarán en el próximo corte."
+    )
+    expect(
+      within(aviso).getByRole("link", { name: "Ver lo que tengo por liquidar" })
+    ).toHaveAttribute("href", "/ganancias#por-liquidar")
+    expect(within(aviso).queryByRole("button")).not.toBeInTheDocument()
+  })
+})
 
 describe("DesgloseLiquidacion", () => {
   it("del valor de la pauta al neto, con cada retención, su tarifa, base y municipio", () => {

@@ -5,6 +5,7 @@ import {
   accionesDocumentoSoporte,
   type ContextoDocumento,
   descargasDocumento,
+  descargasReservadas,
   type FilaDocumentoSoporte,
   fichaDocumentoSoporte,
   leerNumeracion,
@@ -220,7 +221,7 @@ describe("accionesDocumentoSoporte", () => {
     })
   })
 
-  it("pagada: CUDS y archivos sí; nota de ajuste y anular no", () => {
+  it("pagada: CUDS y archivos sí; no se anula, pero con CUDS se corrige con nota de ajuste (D77)", () => {
     expect(
       accionesDocumentoSoporte(contexto({ estadoLiquidacion: "PAGADA" }))
     ).toMatchObject({
@@ -236,7 +237,7 @@ describe("accionesDocumentoSoporte", () => {
           documento: { ...EMITIDO, cuds: CUDS },
         })
       )
-    ).toMatchObject({ registrarNotaAjuste: false, anular: false })
+    ).toMatchObject({ registrarNotaAjuste: true, anular: false })
   })
 
   it("con numeración del proveedor no se generan archivos (su PDF es el que vale)", () => {
@@ -320,5 +321,51 @@ describe("textos", () => {
     expect(abreviarCodigo(CUDS)).toBe("abababab…ababab")
     expect(abreviarCodigo("corto")).toBe("corto")
     expect(descargasDocumento(null)).toEqual([])
+  })
+})
+
+describe("descargas sin «Ver datos sensibles»", () => {
+  const ANTERIOR = {
+    id: "0192f3a4-5b6c-7d8e-9f01-0000000000d0",
+    numero: "DS9",
+    anuladoAt: "2026-10-16T15:00:00Z",
+    notaAjusteNumero: null,
+  }
+
+  it("con el permiso se ofrecen los archivos que existen", () => {
+    expect(descargasDocumento(EMITIDO)).toEqual(["pdf", "proveedor"])
+    expect(
+      descargasDocumento({ ...EMITIDO, archivosReservados: false })
+    ).toEqual(["pdf", "proveedor"])
+    expect(descargasReservadas(EMITIDO)).toBe(false)
+  })
+
+  it("sin el permiso no se ofrece ninguno y la sección lo explica", () => {
+    const reservado = { ...EMITIDO, notaAjuste: NOTA, archivosReservados: true }
+    expect(descargasDocumento(reservado)).toEqual([])
+    expect(descargasReservadas(reservado)).toBe(true)
+    expect(
+      accionesDocumentoSoporte(contexto({ documento: reservado })).descargas
+    ).toEqual([])
+  })
+
+  it("solo se explica si hay algo que descargar (también de un documento anterior)", () => {
+    const sinArchivos = {
+      ...EMITIDO,
+      archivoPath: null,
+      archivoProveedorPath: null,
+      archivosReservados: true,
+    }
+    expect(descargasReservadas(sinArchivos)).toBe(false)
+    expect(
+      descargasReservadas({ ...sinArchivos, anteriores: [ANTERIOR] })
+    ).toBe(true)
+    expect(
+      descargasReservadas({
+        ...sinArchivos,
+        anteriores: [{ ...ANTERIOR, numero: null }],
+      })
+    ).toBe(false)
+    expect(descargasReservadas(null)).toBe(false)
   })
 })

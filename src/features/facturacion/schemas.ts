@@ -406,7 +406,7 @@ export const camposNotaCredito = z.object({
       LONGITUD_MAXIMA_MOTIVO_NOTA,
       `Máximo ${LONGITUD_MAXIMA_MOTIVO_NOTA.toLocaleString("es-CO")} caracteres.`
     ),
-  /** Asignaciones que la nota saca de la factura (quedan libres para facturar). */
+  /** Asignaciones canceladas que la nota saca de la factura (la BD rechaza las demás). */
   asignacionIds: z.array(id).max(1000).default([]),
 })
 

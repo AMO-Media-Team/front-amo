@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils"
 import {
   ESTADOS_PREPARACION,
   type EstadoPreparacion,
+  nombreTarjetaPreparacion,
   PREPARACION,
+  ROTULOS_PREPARACION,
 } from "../preparacion"
 import { plural } from "../textos"
 import type { ResumenPorPagar as Resumen } from "../tipos"
@@ -21,14 +23,6 @@ import { BotonArchivoPagos } from "./boton-archivo-pagos"
 const parsers = {
   preparacion: estadoTablaPorPagar.parsers.preparacion,
   pagina: parseAsPagina,
-}
-
-/** Rótulos cortos de las tarjetas (el completo va de ayuda). */
-const ROTULO: Readonly<Record<EstadoPreparacion, string>> = {
-  lista: "Listas",
-  sin_documento: "Sin documento",
-  sin_datos_pago: "Datos incompletos",
-  en_archivo: "En un archivo",
 }
 
 function cantidadDe(resumen: Resumen, estado: EstadoPreparacion): number {
@@ -92,7 +86,7 @@ export function ResumenPorPagar({
               key={estado}
               type="button"
               aria-pressed={activa}
-              aria-label={`${PREPARACION[estado].etiqueta}: ${formatearNumero(cantidad)}`}
+              aria-label={nombreTarjetaPreparacion(estado, cantidad)}
               title={PREPARACION[estado].descripcion}
               onClick={() => elegir(estado)}
               style={{ animationDelay: `${indice * 40}ms` }}
@@ -111,7 +105,7 @@ export function ResumenPorPagar({
                     CLASES_TONO[PREPARACION[estado].tono].punto
                   )}
                 />
-                <span className="truncate">{ROTULO[estado]}</span>
+                <span className="truncate">{ROTULOS_PREPARACION[estado]}</span>
               </span>
               <span className="font-heading text-xl font-semibold cifras">
                 {formatearNumero(cantidad)}

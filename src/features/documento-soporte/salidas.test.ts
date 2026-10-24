@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { formatearFecha } from "@/lib/format"
+
 import {
   componerModelo,
   esquemaDatosDocumentoSoporte,
@@ -8,8 +10,10 @@ import {
 import { RESPUESTA_BD } from "./datos.fixture"
 import {
   archivoProveedorDocumentoSoporte,
+  datosPdfDesdeArchivoProveedor,
   datosPdfDocumentoSoporte,
   documentoIdentidad,
+  esquemaArchivoProveedor,
   FORMATO_ARCHIVO_PROVEEDOR,
   formatearTarifa,
   nombreRetencion,
@@ -252,5 +256,105 @@ describe("archivoProveedorDocumentoSoporte", () => {
     expect(texto.endsWith("}\n")).toBe(true)
     expect(texto).toContain('\n  "formato": "AMO-DS-1",')
     expect(JSON.parse(texto)).toEqual(archivo)
+  })
+})
+
+describe("esquemaArchivoProveedor", () => {
+  it("lee el archivo que se guardó, con y sin resolución", () => {
+    const archivo = archivoProveedorDocumentoSoporte(modelo(), GENERADO)
+    const guardado = JSON.parse(serializarArchivoProveedor(archivo)) as unknown
+    expect(esquemaArchivoProveedor.parse(guardado)).toEqual(archivo)
+
+    const sinResolucion = { ...archivo, resolucion: null }
+    expect(esquemaArchivoProveedor.parse(sinResolucion)).toEqual(sinResolucion)
+  })
+
+  it("rechaza otro formato o un archivo incompleto", () => {
+    const archivo = archivoProveedorDocumentoSoporte(modelo(), GENERADO)
+    expect(
+      esquemaArchivoProveedor.safeParse({ ...archivo, formato: "AMO-FV-1" })
+        .success
+    ).toBe(false)
+    const { vendedor: _, ...sinVendedor } = archivo
+    expect(esquemaArchivoProveedor.safeParse(sinVendedor).success).toBe(false)
+    expect(esquemaArchivoProveedor.safeParse(null).success).toBe(false)
+  })
+})
+
+describe("datosPdfDesdeArchivoProveedor", () => {
+  const CUDS = "ab12".repeat(24)
+
+  it("da el mismo PDF que se emitió, ahora con el CUDS registrado", () => {
+    const base = modelo()
+    const emitido = datosPdfDocumentoSoporte(base, GENERADO)
+    const archivo = archivoProveedorDocumentoSoporte(base, GENERADO)
+    const regenerado = datosPdfDesdeArchivoProveedor(archivo, CUDS, GENERADO)
+
+    const { lineas: lineasEmitidas, ...restoEmitido } = emitido
+    const { lineas: lineasRegeneradas, ...restoRegenerado } = regenerado
+    expect(restoRegenerado).toEqual({ ...restoEmitido, cuds: CUDS })
+    expect(lineasRegeneradas).toHaveLength(lineasEmitidas.length)
+    lineasRegeneradas.forEach((linea, i) => {
+      const { fecha, ...resto } = linea
+      const { fecha: fechaEmitida, ...restoEmitida } = lineasEmitidas[i]
+      expect(resto).toEqual(restoEmitida)
+      // El archivo guarda el día de Bogotá: el PDF muestra el mismo día.
+      expect(formatearFecha(fecha, "corto")).toBe(
+        formatearFecha(fechaEmitida, "corto")
+      )
+    })
+  })
+
+  it("el día de una publicación de la noche (UTC del día siguiente) sigue siendo el de Bogotá", () => {
+    const base = modelo()
+    const archivo = archivoProveedorDocumentoSoporte(
+      {
+        ...base,
+        lineas: [{ ...base.lineas[0], publicadaAt: "2026-10-07T03:30:00Z" }],
+      },
+      GENERADO
+    )
+    const datos = datosPdfDesdeArchivoProveedor(archivo, null, GENERADO)
+    expect(formatearFecha(datos.lineas[0].fecha, "corto")).toBe("06/10/2026")
+  })
+
+  it("el vendedor es el del archivo, aunque el medio haya cambiado sus datos después", () => {
+    const archivo = archivoProveedorDocumentoSoporte(modelo(), GENERADO)
+    const datos = datosPdfDesdeArchivoProveedor(archivo, CUDS, GENERADO)
+    expect(datos.vendedor).toEqual({
+      nombre: "Tatiana Martínez Ríos",
+      documento: "CC 1.023.456.789",
+      direccion: "Cll 34 # 66-34",
+      municipio: "Santa Marta, Magdalena",
+    })
+  })
+
+  it("sin CUDS en la fila conserva el del archivo (o ninguno)", () => {
+    const archivo = archivoProveedorDocumentoSoporte(modelo(), GENERADO)
+    expect(datosPdfDesdeArchivoProveedor(archivo, null, GENERADO).cuds).toBe(
+      null
+    )
+    expect(
+      datosPdfDesdeArchivoProveedor(
+        { ...archivo, documento: { ...archivo.documento, cuds: CUDS } },
+        "  ",
+        GENERADO
+      ).cuds
+    ).toBe(CUDS)
+  })
+
+  it("el NIT de AMO y la ReteICA salen del archivo con su formato", () => {
+    const archivo = archivoProveedorDocumentoSoporte(
+      modelo({
+        adquiriente: { razon_social: "AMO S.A.S.", nit: "901234567", dv: "8" },
+      }),
+      GENERADO
+    )
+    const datos = datosPdfDesdeArchivoProveedor(archivo, null, GENERADO)
+    expect(datos.adquiriente.documento).toBe("901.234.567-8")
+    expect(datos.retenciones.map((retencion) => retencion.nombre)).toEqual([
+      "Retención en la fuente · Servicios",
+      "ReteICA · Santa Marta, Magdalena",
+    ])
   })
 })

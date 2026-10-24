@@ -18,6 +18,8 @@ import {
 export const HINT_SIN_ASIGNACIONES = "sin_asignaciones"
 export const HINT_BORRADOR_DESACTUALIZADO = "borrador_desactualizado"
 export const HINT_REQUIERE_NOTA_CREDITO = "requiere_nota_credito"
+export const HINT_SOLO_CANCELADAS = "solo_canceladas"
+export const HINT_FACTURA_PAGADA = "factura_pagada"
 
 export const MENSAJES_FACTURACION = {
   sinAsignaciones:
@@ -26,6 +28,10 @@ export const MENSAJES_FACTURACION = {
     "Alguna asignación de este borrador ya no está verificada (entró en disputa o se canceló). Anula el borrador y genera otro con lo que sí se puede facturar.",
   requiereNotaCredito:
     "Una factura expedida no se anula: registra la nota crédito emitida en el software de facturación.",
+  soloCanceladas:
+    "Solo salen de la factura las asignaciones canceladas: las demás siguen facturadas en ella.",
+  facturaPagada:
+    "La factura ya está pagada y no admite notas crédito. Por ahora la devolución o el saldo a favor se gestionan fuera de la plataforma.",
   noEncontrada:
     "No encontramos esa factura o ya no tienes acceso a ella. Actualiza la página.",
   soloBorrador:
@@ -56,6 +62,7 @@ const CAMPO_POR_HINT: Readonly<Record<string, string>> = {
   fecha_pago: "fecha",
   monto_invalido: "monto",
   sin_asignaciones: "hasta",
+  [HINT_SOLO_CANCELADAS]: "asignacionIds",
 }
 
 /** Texto propio de los `hint` que no se arreglan en un campo. */
@@ -63,6 +70,8 @@ const MENSAJE_POR_HINT: Readonly<Record<string, string>> = {
   [HINT_SIN_ASIGNACIONES]: MENSAJES_FACTURACION.sinAsignaciones,
   [HINT_BORRADOR_DESACTUALIZADO]: MENSAJES_FACTURACION.borradorDesactualizado,
   [HINT_REQUIERE_NOTA_CREDITO]: MENSAJES_FACTURACION.requiereNotaCredito,
+  [HINT_SOLO_CANCELADAS]: MENSAJES_FACTURACION.soloCanceladas,
+  [HINT_FACTURA_PAGADA]: MENSAJES_FACTURACION.facturaPagada,
 }
 
 const RESTRICCIONES: Restricciones = {
@@ -126,7 +135,8 @@ export function interpretarErrorFacturacion(error: ErrorBd): ErrorFacturacion {
   const accion: AccionSugerida | null =
     hint === HINT_BORRADOR_DESACTUALIZADO
       ? "anular_borrador"
-      : codigo === "AMO_TRANSICION_INVALIDA" && !hint
+      : codigo === "AMO_TRANSICION_INVALIDA" &&
+          (!hint || hint === HINT_FACTURA_PAGADA)
         ? "actualizar"
         : null
   return {

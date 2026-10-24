@@ -1,7 +1,7 @@
 "use client"
 
 import { Fingerprint } from "lucide-react"
-import { useId, useRef, useState, useTransition } from "react"
+import { useEffect, useId, useRef, useState, useTransition } from "react"
 
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -24,7 +24,8 @@ export interface DialogoRegistrarCudsProps {
 /**
  * «Registrar CUDS»: el código que devolvió el proveedor tecnológico al transmitir el documento a la DIAN.
  * Se pega tal cual (los espacios y saltos de línea se quitan solos) y el contador dice cuántos caracteres
- * van de los 96. El error queda junto al campo.
+ * van de los 96. El error queda junto al campo y el foco va a él (el del servidor, cuando el campo deja de
+ * estar deshabilitado).
  */
 export function DialogoRegistrarCuds({
   abierto,
@@ -40,6 +41,9 @@ export function DialogoRegistrarCuds({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const [pendiente, iniciar] = useTransition()
   const campo = useRef<HTMLTextAreaElement>(null)
+  // El campo está deshabilitado mientras se registra y `focus()` no tiene efecto sobre él: el error del
+  // servidor lo enfoca cuando termina `pendiente`.
+  const enfocarAlTerminar = useRef(false)
   const id = useId()
   const ids = {
     campo: `${id}-cuds`,
@@ -48,8 +52,15 @@ export function DialogoRegistrarCuds({
   }
   const largo = normalizarCuds(cuds).length
 
+  useEffect(() => {
+    if (pendiente || !enfocarAlTerminar.current) return
+    enfocarAlTerminar.current = false
+    campo.current?.focus()
+  }, [pendiente])
+
   function cambiarAbierto(valor: boolean) {
     if (!valor) {
+      enfocarAlTerminar.current = false
       setCuds("")
       setError(null)
       setErrorGeneral(null)
@@ -74,7 +85,7 @@ export function DialogoRegistrarCuds({
         const delCampo = resultado.erroresCampo?.cuds?.[0]
         if (delCampo) {
           setError(delCampo)
-          campo.current?.focus()
+          enfocarAlTerminar.current = true
         } else {
           setErrorGeneral(resultado.error)
         }

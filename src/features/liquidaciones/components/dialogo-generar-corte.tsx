@@ -124,10 +124,14 @@ export function DialogoGenerarCorte({
 
   return (
     <>
+      {/* Deshabilitado pero enfocable: tras un corte que liquida a todos, el
+          foco vuelve aquí al cerrar el resultado y no cae a <body>. */}
       <Button
         type="button"
         disabled={sinMedios}
+        focusableWhenDisabled
         aria-describedby={sinMedios ? `${id}-sin-medios` : undefined}
+        className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
         onClick={() => setAbierto(true)}
       >
         <Scissors data-icon="inline-start" aria-hidden />

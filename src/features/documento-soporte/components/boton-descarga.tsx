@@ -23,7 +23,8 @@ export interface BotonDescargaProps {
 
 /**
  * Descarga un archivo del documento soporte: firma al pulsar (como servicio, queda en la bitácora) y el
- * navegador lo guarda sin salir de la página. Si falla, lo dice en un aviso.
+ * navegador lo guarda sin salir de la página. Si falla, lo dice en un aviso. Mientras firma sigue
+ * enfocable (`focusableWhenDisabled`): el foco no se pierde y, si falla, Enter vuelve a intentarlo.
  */
 export function BotonDescarga({
   documentoId,
@@ -39,6 +40,9 @@ export function BotonDescarga({
       variant="outline"
       size="sm"
       disabled={descargando}
+      focusableWhenDisabled
+      aria-busy={descargando || undefined}
+      className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
       // El nombre empieza por lo que se ve (WCAG 2.5.3) y dice de qué documento es.
       aria-label={complemento ? `${etiqueta} ${complemento}` : undefined}
       onClick={() =>

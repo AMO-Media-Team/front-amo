@@ -299,6 +299,37 @@ describe("ConceptosFactura", () => {
     ).toHaveTextContent("En disputa")
   })
 
+  it("una cancelada pide nota crédito; con la factura pagada, la devolución va por fuera", () => {
+    const cancelada: ConceptoFactura = { ...base, estado: "CANCELADA" }
+    const { rerender } = render(
+      <ConceptosFactura
+        grupos={agruparConceptos([cancelada])}
+        mandato={false}
+        anulada={false}
+        verSeguimiento
+        verCampanas
+      />
+    )
+    expect(screen.getByText(/la corrige con una nota crédito/)).toBeVisible()
+
+    rerender(
+      <ConceptosFactura
+        grupos={agruparConceptos([cancelada])}
+        mandato={false}
+        anulada={false}
+        pagada
+        verSeguimiento
+        verCampanas
+      />
+    )
+    expect(screen.queryByText(/la corrige con una nota crédito/)).toBeNull()
+    expect(
+      screen.getByText(
+        /con la factura ya pagada: por ahora la devolución o el saldo a favor se gestionan fuera de la plataforma/
+      )
+    ).toBeVisible()
+  })
+
   it("anulada sin conceptos: explica que la pauta quedó libre", () => {
     render(
       <ConceptosFactura

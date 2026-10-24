@@ -269,7 +269,7 @@ test.describe("liquidaciones · decisiones de Finanzas", () => {
         name: "¿Anular la liquidación?",
       })
       await anular
-        .getByLabel("Motivo")
+        .getByRole("textbox", { name: "Motivo" })
         .fill("Prueba E2E: el corte se generó con un periodo equivocado.")
       await anular.getByRole("button", { name: "Anular" }).click()
       await expect.poll(() => estado(liquidacionId)).toBe("ANULADA")
@@ -369,7 +369,9 @@ test.describe("liquidaciones · decisiones de Finanzas", () => {
         .getByText("Lista para el archivo de pagos y el registro del pago.")
     ).toBeVisible()
     await expect(
-      page.getByRole("button", { name: "Descargar la factura del medio" })
+      page.getByRole("button", {
+        name: "Descargar PDF de la factura del medio",
+      })
     ).toBeVisible()
   })
 })

@@ -1,9 +1,6 @@
 import "server-only"
 
-import { CalendarClock, FilePen, HandCoins, Wallet } from "lucide-react"
-
 import { RejillaKpi } from "@/components/kpi/rejilla-kpi"
-import { TarjetaKpi } from "@/components/kpi/tarjeta-kpi"
 import { formatearNumero } from "@/lib/format"
 
 import {
@@ -18,6 +15,7 @@ import {
   resumenFacturas,
 } from "../queries"
 import { TablaFacturas } from "./tabla-facturas"
+import { TarjetaKpiFacturas } from "./tarjeta-kpi-facturas"
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>
 
@@ -35,11 +33,11 @@ export async function SeccionResumenFacturas() {
       : `${formatearNumero(resumen.anunciantesPorFacturar)} anunciantes`
   return (
     <RejillaKpi etiqueta="Resumen de la facturación" columnas={4}>
-      <TarjetaKpi
+      <TarjetaKpiFacturas
         titulo="Por facturar"
         valor={resumen.porFacturar}
         unidad="COP"
-        icono={HandCoins}
+        icono="porFacturar"
         sinComparativo={
           resumen.asignacionesPorFacturar > 0
             ? `${contarAsignaciones(resumen.asignacionesPorFacturar)} de ${anunciantes}, antes de IVA`
@@ -47,31 +45,31 @@ export async function SeccionResumenFacturas() {
         }
         indice={0}
       />
-      <TarjetaKpi
+      <TarjetaKpiFacturas
         titulo="Borradores por expedir"
         valor={resumen.borradores}
         unidad="conteo"
-        icono={FilePen}
+        icono="borrador"
         href={rutaFacturasFiltradas({ estado: ["BORRADOR"] })}
         sinComparativo="Falta registrarlos como expedidos"
         indice={1}
       />
-      <TarjetaKpi
+      <TarjetaKpiFacturas
         titulo="Saldo por cobrar"
         valor={resumen.saldoPorCobrar}
         unidad="COP"
-        icono={Wallet}
+        icono="saldo"
         href={rutaFacturasFiltradas({
           estado: ["EMITIDA", "PAGADA_PARCIAL", "VENCIDA"],
         })}
         sinComparativo="Facturas expedidas con saldo, hoy"
         indice={2}
       />
-      <TarjetaKpi
+      <TarjetaKpiFacturas
         titulo="Vencido"
         valor={resumen.saldoVencido}
         unidad="COP"
-        icono={CalendarClock}
+        icono="vencido"
         href={rutaFacturasFiltradas({ estado: ["VENCIDA"] })}
         sinComparativo={
           resumen.facturasVencidas === 0

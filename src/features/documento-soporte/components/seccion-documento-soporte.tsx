@@ -12,7 +12,8 @@
  * - Corrección (D38 del RF): sin CUDS, «Anular documento»; con CUDS, primero «Registrar nota de ajuste».
  *
  * Tras cada cambio el foco va al estado del documento (el botón usado suele desaparecer) y un aviso
- * confirma lo hecho.
+ * confirma lo hecho. Sin «Ver datos sensibles» (`documento.archivosReservados`) no se ofrecen las
+ * descargas: los archivos llevan el nombre, el documento de identidad y la dirección del medio.
  */
 import {
   Ban,
@@ -24,6 +25,7 @@ import {
   Fingerprint,
   History,
   Info,
+  LockKeyhole,
   ReceiptText,
   RefreshCw,
   Stamp,
@@ -55,6 +57,7 @@ import {
 } from "../actions"
 import {
   accionesDocumentoSoporte,
+  descargasReservadas,
   ESTADOS_DOCUMENTO_SOPORTE,
   NOMBRES_ARCHIVO,
   type SituacionDocumento,
@@ -217,10 +220,25 @@ function DatosDocumento({ documento }: { documento: DocumentoSoporteFicha }) {
   )
 }
 
+/** En lugar de las descargas, cuando la sesión no puede ver los datos del medio. */
+function DescargasReservadas() {
+  return (
+    <p className="flex gap-2 rounded-lg border border-dashed p-3 text-sm text-pretty text-muted-foreground">
+      <LockKeyhole aria-hidden className="mt-0.5 size-4 shrink-0" />
+      Los archivos de este documento llevan el nombre, el documento de identidad
+      y la dirección del medio: descargarlos requiere el permiso «Ver datos
+      sensibles».
+    </p>
+  )
+}
+
 function Historial({
   anteriores,
+  reservados,
 }: {
   anteriores: DocumentoSoporteFicha["anteriores"]
+  /** Sin «Ver datos sensibles»: sin descargas. */
+  reservados: boolean
 }) {
   return (
     <section
@@ -255,8 +273,8 @@ function Historial({
                     : ""}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {anterior.numero ? (
+              <div className="flex flex-wrap gap-2 empty:hidden">
+                {anterior.numero && !reservados ? (
                   <BotonDescarga
                     documentoId={anterior.id}
                     archivo="pdf"
@@ -264,7 +282,7 @@ function Historial({
                     complemento={`del documento ${nombre}`}
                   />
                 ) : null}
-                {anterior.notaAjusteNumero ? (
+                {anterior.notaAjusteNumero && !reservados ? (
                   <BotonDescarga
                     documentoId={anterior.id}
                     archivo="nota_ajuste"
@@ -295,8 +313,11 @@ function BotonGenerar({
     <Button
       type="button"
       variant={modo === "faltan" ? "default" : "outline"}
-      className="w-full sm:w-auto"
+      className="w-full sm:w-auto data-disabled:cursor-not-allowed data-disabled:opacity-50"
+      // Enfocable mientras genera: el foco no salta al documento y Enter sirve para reintentar.
       disabled={generando}
+      focusableWhenDisabled
+      aria-busy={generando || undefined}
       onClick={() =>
         iniciar(async () => {
           const resultado = await generarArchivosDocumentoSoporte({
@@ -328,7 +349,7 @@ function BotonGenerar({
 }
 
 export function SeccionDocumentoSoporte(props: SeccionDocumentoSoporteProps) {
-  const { liquidacionId, documento, numeracion } = props
+  const { liquidacionId, documento, numeracion, estadoLiquidacion } = props
   const acciones = accionesDocumentoSoporte(props)
   const situacion = situacionDocumento(props)
   const [dialogo, setDialogo] = useState<Dialogo | null>(null)
@@ -409,6 +430,10 @@ export function SeccionDocumentoSoporte(props: SeccionDocumentoSoporteProps) {
               onGenerado={enfocarEstado}
             />
           </div>
+        ) : null}
+
+        {documento && descargasReservadas(documento) ? (
+          <DescargasReservadas />
         ) : null}
 
         {documento && acciones.descargas.length > 0 ? (
@@ -495,7 +520,10 @@ export function SeccionDocumentoSoporte(props: SeccionDocumentoSoporteProps) {
         ) : null}
 
         {documento && documento.anteriores.length > 0 ? (
-          <Historial anteriores={documento.anteriores} />
+          <Historial
+            anteriores={documento.anteriores}
+            reservados={documento.archivosReservados === true}
+          />
         ) : null}
       </div>
 
@@ -564,7 +592,9 @@ export function SeccionDocumentoSoporte(props: SeccionDocumentoSoporteProps) {
               hecho()
               toast.success(`Nota de ajuste ${nota} registrada`, {
                 description:
-                  "Ya puedes anular el documento y emitir uno nuevo.",
+                  estadoLiquidacion === "APROBADA"
+                    ? "Ya puedes anular el documento y emitir uno nuevo."
+                    : "Queda como corrección del documento que soporta el pago.",
               })
             }}
           />

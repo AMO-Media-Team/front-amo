@@ -1,20 +1,12 @@
 import "server-only"
 
-import {
-  CalendarClock,
-  CircleCheck,
-  Hourglass,
-  Receipt,
-  UsersRound,
-  Wallet,
-} from "lucide-react"
+import { CircleCheck, Hourglass, Receipt, UsersRound } from "lucide-react"
 import type { Route } from "next"
 import Link from "next/link"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { RejillaKpi } from "@/components/kpi/rejilla-kpi"
-import { TarjetaKpi } from "@/components/kpi/tarjeta-kpi"
 import {
   ETIQUETAS_TRAMO,
   TRAMOS_CARTERA,
@@ -38,6 +30,7 @@ import { formatearDia, tituloFactura } from "../presentacion"
 import { carteraAlCorte, facturasVencidasAlCorte } from "../queries"
 import { rutaFactura } from "../rutas"
 import type { FilaCartera } from "../tipos"
+import { TarjetaKpiFacturas } from "./tarjeta-kpi-facturas"
 
 /** De lo más reciente (tinte suave) a lo más vencido (intenso), como en la ficha del anunciante. */
 const CLASES_TRAMO: Readonly<Record<TramoCartera, string>> = {
@@ -189,35 +182,35 @@ export async function SeccionCartera({
   return (
     <div className="flex flex-col gap-4">
       <RejillaKpi etiqueta="Totales de la cartera" columnas={4}>
-        <TarjetaKpi
+        <TarjetaKpiFacturas
           titulo="Saldo por cobrar"
           valor={totales.saldo}
           unidad="COP"
-          icono={Wallet}
+          icono="saldo"
           sinComparativo={alCorte}
           indice={0}
         />
-        <TarjetaKpi
+        <TarjetaKpiFacturas
           titulo="Más de 30 días"
           valor={totales.masDe30}
           unidad="COP"
-          icono={Hourglass}
+          icono="antiguedad"
           sinComparativo="Desde el vencimiento"
           indice={1}
         />
-        <TarjetaKpi
+        <TarjetaKpiFacturas
           titulo="Facturas vencidas"
           valor={totales.facturasVencidas}
           unidad="conteo"
-          icono={CalendarClock}
+          icono="vencido"
           sinComparativo={alCorte}
           indice={2}
         />
-        <TarjetaKpi
+        <TarjetaKpiFacturas
           titulo="Anunciantes con saldo"
           valor={totales.anunciantes}
           unidad="conteo"
-          icono={UsersRound}
+          icono="anunciantes"
           sinComparativo={alCorte}
           indice={3}
         />

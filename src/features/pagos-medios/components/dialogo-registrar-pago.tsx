@@ -59,8 +59,7 @@ export interface DatosPago {
 
 /**
  * `aviso` nulo: todo quedó registrado y el diálogo se cierra. Con `aviso`
- * (p. ej. algunas de un archivo no se pudieron registrar), sigue abierto y lo
- * muestra; un fallo lleva cada error a su campo.
+ * sigue abierto y lo muestra; un fallo lleva cada error a su campo.
  */
 export type ResultadoRegistroPago = ResultadoAccion<{ aviso: string | null }>
 
@@ -86,8 +85,9 @@ interface SoporteSubido {
  * banco y soporte (PDF o imagen, subida directa a `liquidacion/{id}/pago/`).
  * Valida como la acción antes de subir; un error queda junto a su campo y el
  * foco va al primero. Si la BD rechaza después de subir, el soporte se
- * conserva para reintentar sin volver a subirlo. Lo usan el pago de una
- * liquidación y el de todo un archivo de pagos (un comprobante para todas).
+ * conserva para reintentar sin volver a subirlo. Un soporte por liquidación:
+ * el medio lo descarga desde Ganancias, así que no debe traer los datos de
+ * otros medios (no hay pago en lote con un solo comprobante).
  */
 export function DialogoRegistrarPago({
   abierto,
@@ -457,7 +457,7 @@ export function DialogoRegistrarPago({
                   reglas={REGLAS_SOPORTE_PAGO}
                   compacta
                   titulo="Comprobante de la transferencia"
-                  descripcion="PDF, JPG o PNG de hasta 10 MB."
+                  descripcion="PDF, JPG o PNG de hasta 10 MB. El medio lo puede descargar: que muestre solo su pago, no la planilla del lote."
                   onArchivos={([elegido]) => {
                     if (elegido) elegirArchivo(elegido)
                   }}

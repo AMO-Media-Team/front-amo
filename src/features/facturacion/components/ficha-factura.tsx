@@ -40,14 +40,17 @@ import {
   abreviarCodigo,
   admiteCobro,
   alcanceFactura,
+  avisosConceptos,
   contarAsignaciones,
   describirPeriodo,
+  distintivoLinea,
   ESQUEMAS,
   etiquetaMedioPago,
   formatearDia,
   type NumeracionSugerida,
   sigueFacturable,
   situacionVencimiento,
+  TEXTO_SALDO_A_FAVOR,
 } from "../presentacion"
 import { RUTA_FACTURAS } from "../rutas"
 import type {
@@ -207,8 +210,10 @@ function TarjetaConceptos({
   lineas: readonly LineaFactura[]
   verAsignaciones: boolean
 }) {
-  const expedida = factura.numero !== null
-  const caidas = lineas.filter((linea) => !sigueFacturable(linea.estado))
+  const avisos = avisosConceptos(
+    factura.estado,
+    lineas.map((linea) => linea.estado)
+  )
   return (
     <TarjetaFicha
       titulo="Conceptos"
@@ -232,76 +237,76 @@ function TarjetaConceptos({
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {expedida && caidas.length > 0 ? (
-            <p className="flex gap-2 rounded-lg border border-warning/45 bg-warning/8 px-3 py-2.5 text-sm text-pretty">
+          {avisos.map((aviso) => (
+            <p
+              key={aviso}
+              className="flex gap-2 rounded-lg border border-warning/45 bg-warning/8 px-3 py-2.5 text-sm text-pretty"
+            >
               <TriangleAlert
                 aria-hidden
                 className="mt-0.5 size-4 shrink-0 text-warning"
               />
-              {caidas.length === 1
-                ? "Una asignación ya no está verificada (disputa o cancelación): requiere nota crédito."
-                : `${caidas.length} asignaciones ya no están verificadas (disputa o cancelación): requieren nota crédito.`}
+              {aviso}
             </p>
-          ) : null}
+          ))}
           <ul
             aria-label="Asignaciones facturadas"
             className="-mx-5 divide-y border-y"
           >
-            {lineas.map((linea) => (
-              <li
-                key={linea.asignacionId}
-                className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5 px-5 py-3"
-              >
-                <div className="flex min-w-0 flex-1 basis-60 flex-col gap-0.5">
-                  <EnlaceFicha
-                    href={rutaAsignacion(linea.asignacionId)}
-                    permitido={verAsignaciones}
-                    className="truncate text-sm font-medium"
-                  >
-                    {linea.oferta ?? "Asignación"}
-                  </EnlaceFicha>
-                  <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                    <MarcaPlataforma plataforma={linea.plataforma} />
-                    <span className="truncate">{linea.medio ?? "Medio"}</span>
-                    <span aria-hidden>·</span>
-                    <span className="truncate">
-                      {linea.campana ?? "Campaña"}
+            {lineas.map((linea) => {
+              const distintivo = distintivoLinea(factura.estado, linea.estado)
+              return (
+                <li
+                  key={linea.asignacionId}
+                  className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5 px-5 py-3"
+                >
+                  <div className="flex min-w-0 flex-1 basis-60 flex-col gap-0.5">
+                    <EnlaceFicha
+                      href={rutaAsignacion(linea.asignacionId)}
+                      permitido={verAsignaciones}
+                      className="truncate text-sm font-medium"
+                    >
+                      {linea.oferta ?? "Asignación"}
+                    </EnlaceFicha>
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                      <MarcaPlataforma plataforma={linea.plataforma} />
+                      <span className="truncate">{linea.medio ?? "Medio"}</span>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">
+                        {linea.campana ?? "Campaña"}
+                      </span>
+                      {linea.verificadaAt ? (
+                        <>
+                          <span aria-hidden>·</span>
+                          <span>
+                            Verificada el {formatearFecha(linea.verificadaAt)}
+                          </span>
+                        </>
+                      ) : null}
                     </span>
-                    {linea.verificadaAt ? (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>
-                          Verificada el {formatearFecha(linea.verificadaAt)}
-                        </span>
-                      </>
-                    ) : null}
-                  </span>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="text-sm font-medium cifras">
-                    {formatearCOP(linea.montoBruto)}
-                  </span>
-                  <span className="flex flex-wrap justify-end gap-1.5">
-                    <InsigniaEstado
-                      catalogo={ESTADOS_ASIGNACION}
-                      estado={linea.estado}
-                      className="h-5 px-2 text-[0.6875rem]"
-                    />
-                    {sigueFacturable(linea.estado) ? null : (
-                      <InsigniaTono
-                        tono="peligro"
-                        etiqueta={
-                          expedida
-                            ? "Requiere nota crédito"
-                            : "Ya no es facturable"
-                        }
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-sm font-medium cifras">
+                      {formatearCOP(linea.montoBruto)}
+                    </span>
+                    <span className="flex flex-wrap justify-end gap-1.5">
+                      <InsigniaEstado
+                        catalogo={ESTADOS_ASIGNACION}
+                        estado={linea.estado}
                         className="h-5 px-2 text-[0.6875rem]"
                       />
-                    )}
-                  </span>
-                </div>
-              </li>
-            ))}
+                      {distintivo ? (
+                        <InsigniaTono
+                          tono={distintivo.tono}
+                          etiqueta={distintivo.etiqueta}
+                          className="h-5 px-2 text-[0.6875rem]"
+                        />
+                      ) : null}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -636,6 +641,7 @@ function TarjetaPagos({
             numero={factura.numero}
             anunciante={factura.anunciante?.nombreComercial ?? "el anunciante"}
             saldo={factura.saldo}
+            estado={factura.estado}
             fechaEmision={factura.fechaEmision}
           />
         ) : null
@@ -705,11 +711,16 @@ function TarjetaNotas({
   puedeRegistrar: boolean
 }) {
   const conCobro = admiteCobro(factura.estado)
+  const pagada = factura.estado === "PAGADA"
   return (
     <TarjetaFicha
       titulo="Notas crédito"
       icono={FileMinus}
-      descripcion="Una factura expedida no se anula: se corrige con la nota crédito emitida en el software de facturación."
+      descripcion={
+        pagada
+          ? `La factura está pagada y ya no admite notas crédito. ${TEXTO_SALDO_A_FAVOR}`
+          : "Una factura expedida no se anula: se corrige con la nota crédito emitida en el software de facturación."
+      }
       acciones={
         conCobro && puedeRegistrar && factura.numero && factura.fechaEmision ? (
           <RegistrarNotaCredito

@@ -8,7 +8,12 @@ import { diasHasta } from "@/features/operacion/calculos"
 import type { Tono } from "@/features/operacion/estados"
 import { formatearVigencia, instanteDeDia } from "@/features/operacion/formato"
 import { serializarFecha } from "@/lib/fechas"
-import { type EstiloFecha, formatearFecha, formatearNumero } from "@/lib/format"
+import {
+  type EstiloFecha,
+  formatearCOP,
+  formatearFecha,
+  formatearNumero,
+} from "@/lib/format"
 
 import type {
   EsquemaFacturacion,
@@ -64,7 +69,7 @@ export const ESTADOS_FACTURABLES: readonly EstadoAsignacion[] = [
   "PAGADA",
 ]
 
-/** ¿La asignación sigue siendo facturable? Si no (disputa, cancelación), pide nota crédito. */
+/** ¿La asignación sigue siendo facturable? Si no, está en disputa o se canceló. */
 export function sigueFacturable(estado: EstadoAsignacion): boolean {
   return ESTADOS_FACTURABLES.includes(estado)
 }
@@ -80,6 +85,92 @@ export function admiteCobro(estado: EstadoFactura): boolean {
   return ESTADOS_CON_SALDO.includes(estado)
 }
 
+/**
+ * ¿Una nota crédito puede sacar la asignación de la factura? Solo si se
+ * canceló (D88): no se vuelve a facturar. Liberar una que sigue facturable
+ * con una nota parcial la cobraría dos veces, y una en disputa espera a que
+ * se resuelva (`registrar_nota_credito_srv`, hint `solo_canceladas`).
+ */
+export function liberableConNota(estado: EstadoAsignacion): boolean {
+  return estado === "CANCELADA"
+}
+
+/** Texto de una factura pagada que ya no admite notas crédito. */
+export const TEXTO_SALDO_A_FAVOR =
+  "Por ahora la devolución o el saldo a favor se gestionan fuera de la plataforma."
+
+/**
+ * Distintivo de una línea que ya no es facturable, según la factura: en un
+ * borrador ya no se factura; en una expedida con saldo, la cancelada pide
+ * nota crédito; en una pagada, lo cancelado se devuelve por fuera; la que
+ * está en disputa espera su resolución. `null` si sigue facturable.
+ */
+export function distintivoLinea(
+  estadoFactura: EstadoFactura,
+  estadoLinea: EstadoAsignacion
+): { etiqueta: string; tono: Tono } | null {
+  if (sigueFacturable(estadoLinea)) return null
+  if (estadoFactura === "BORRADOR") {
+    return { etiqueta: "Ya no es facturable", tono: "peligro" }
+  }
+  if (estadoLinea === "EN_DISPUTA") {
+    return { etiqueta: "Pendiente de la disputa", tono: "aviso" }
+  }
+  if (!liberableConNota(estadoLinea)) {
+    return { etiqueta: "Ya no está verificada", tono: "aviso" }
+  }
+  return admiteCobro(estadoFactura)
+    ? { etiqueta: "Requiere nota crédito", tono: "peligro" }
+    : { etiqueta: "Devolución por fuera", tono: "aviso" }
+}
+
+function contar(cantidad: number, una: string, varias: string): string {
+  return cantidad === 1 ? una : varias.replace("{n}", formatearNumero(cantidad))
+}
+
+/**
+ * Avisos de los conceptos de una factura expedida con líneas que ya no son
+ * facturables: qué hacer con las canceladas (nota crédito, o devolución por
+ * fuera si ya está pagada) y con las que están en disputa.
+ */
+export function avisosConceptos(
+  estadoFactura: EstadoFactura,
+  estadosLineas: readonly EstadoAsignacion[]
+): string[] {
+  if (estadoFactura === "BORRADOR") return []
+  const canceladas = estadosLineas.filter(liberableConNota).length
+  const enDisputa = estadosLineas.filter(
+    (estado) => estado === "EN_DISPUTA"
+  ).length
+  const conSaldo = admiteCobro(estadoFactura)
+  const avisos: string[] = []
+  if (canceladas > 0) {
+    avisos.push(
+      conSaldo
+        ? contar(
+            canceladas,
+            "Una asignación se canceló: registra la nota crédito que la saca de la factura.",
+            "{n} asignaciones se cancelaron: registra la nota crédito que las saca de la factura."
+          )
+        : `${contar(
+            canceladas,
+            "Una asignación se canceló con la factura ya pagada.",
+            "{n} asignaciones se cancelaron con la factura ya pagada."
+          )} ${TEXTO_SALDO_A_FAVOR}`
+    )
+  }
+  if (enDisputa > 0) {
+    avisos.push(
+      contar(
+        enDisputa,
+        `Una asignación está en disputa: si termina cancelada, ${conSaldo ? "requiere nota crédito" : "la devolución se gestiona fuera de la plataforma"}.`,
+        `{n} asignaciones están en disputa: si terminan canceladas, ${conSaldo ? "requieren nota crédito" : "la devolución se gestiona fuera de la plataforma"}.`
+      )
+    )
+  }
+  return avisos
+}
+
 /** «Consolidada» cuando cubre todas las campañas del anunciante. */
 export function alcanceFactura(campana: string | null): string {
   return campana ?? "Consolidada"
@@ -91,6 +182,15 @@ export function tituloFactura(numero: string | null): string {
 }
 
 // ── Fechas de calendario (`date`) ───────────────────────────────────────────
+
+/**
+ * Una columna `date` como valor de una tabla exportable: el instante del
+ * mediodía en Bogotá. El `date` crudo (`'YYYY-MM-DD'`) se lee como medianoche
+ * UTC y en CSV/XLSX saldría con un día menos. `""` si no hay fecha.
+ */
+export function diaExportable(dia: string | null): string {
+  return dia ? instanteDeDia(dia) : ""
+}
 
 /** Una columna `date` con el estilo pedido, sin correrse al día anterior. */
 export function formatearDia(
@@ -264,6 +364,36 @@ export function efectoPago({
   return {
     efecto: restante === 0 ? "total" : "parcial",
     saldoRestante: restante,
+  }
+}
+
+/**
+ * Lo que se anuncia antes de registrar un pago (`null` si no hay nada que
+ * decir). Un abono solo pasa a pago parcial una factura EMITIDA: una vencida
+ * sigue vencida con el saldo rebajado (`registrar_pago_anunciante_srv`).
+ */
+export function textoEfectoPago({
+  monto,
+  retenciones,
+  saldo,
+  estado,
+}: {
+  monto: number
+  retenciones: number
+  saldo: number
+  estado: EstadoFactura
+}): string | null {
+  const { efecto, saldoRestante } = efectoPago({ monto, retenciones, saldo })
+  if (efecto === "total") return "Con este pago la factura queda pagada."
+  if (efecto !== "parcial") return null
+  const queda = `Queda un saldo de ${formatearCOP(saldoRestante)}`
+  switch (estado) {
+    case "EMITIDA":
+      return `${queda}: la factura pasa a pago parcial.`
+    case "VENCIDA":
+      return `${queda}: la factura sigue vencida hasta que se pague el resto.`
+    default:
+      return `${queda}.`
   }
 }
 

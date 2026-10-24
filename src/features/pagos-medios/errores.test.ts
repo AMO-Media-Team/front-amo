@@ -6,6 +6,7 @@ import {
   interpretarErrorPagos,
   mensajeDatosIlegibles,
   MENSAJES_PAGOS,
+  respondioLaBd,
 } from "./errores"
 
 describe("interpretarErrorPagos", () => {
@@ -103,6 +104,26 @@ describe("cambioDeEstado", () => {
     expect(cambioDeEstado({ hint: "ya_dispersada" })).toBe(true)
     expect(cambioDeEstado({ message: "AMO_TRANSICION_INVALIDA" })).toBe(true)
     expect(cambioDeEstado({ message: "AMO_NO_AUTORIZADO" })).toBe(false)
+  })
+})
+
+describe("respondioLaBd", () => {
+  it("un SQLSTATE o un AMO_* son respuesta de la BD: no se registró", () => {
+    expect(respondioLaBd({ code: "P0001", message: "AMO_NO_AUTORIZADO" })).toBe(
+      true
+    )
+    expect(respondioLaBd({ code: "23505", message: "duplicate key" })).toBe(
+      true
+    )
+    expect(respondioLaBd({ message: "AMO_TRANSICION_INVALIDA" })).toBe(true)
+  })
+
+  it("sin código es un fallo de transporte: pudo quedar registrado", () => {
+    expect(
+      respondioLaBd({ code: "", message: "FetchError: socket hang up" })
+    ).toBe(false)
+    expect(respondioLaBd({ message: "TypeError: fetch failed" })).toBe(false)
+    expect(respondioLaBd({ code: "  ", message: null })).toBe(false)
   })
 })
 

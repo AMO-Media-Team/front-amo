@@ -6,6 +6,7 @@ import { useMemo } from "react"
 import { crearColumnas } from "@/components/data-table/columnas"
 import type { FiltroFacetado } from "@/components/data-table/filtro-facetado"
 import { TablaDatos } from "@/components/data-table/tabla-datos"
+import { instanteDeDia } from "@/features/operacion/formato"
 
 import {
   ETIQUETAS_SOPORTE,
@@ -132,17 +133,23 @@ export function TablaLiquidaciones({
               ),
             })
           : vista === "pagadas"
-            ? columna.accessor("fechaPago", {
-                id: "pago",
-                header: "Pagada",
-                meta: {
-                  titulo: "Pagada",
-                  campoOrden: "pago",
-                  tipoDato: "fecha",
-                  formatoExportacion: "fecha",
-                },
-                cell: ({ getValue }) => <Dia dia={getValue()} />,
-              })
+            ? // Mediodía en Bogotá: `new Date("AAAA-MM-DD")` es medianoche UTC y
+              // se exportaría con un día menos.
+              columna.accessor(
+                (fila) =>
+                  fila.fechaPago ? instanteDeDia(fila.fechaPago) : null,
+                {
+                  id: "pago",
+                  header: "Pagada",
+                  meta: {
+                    titulo: "Pagada",
+                    campoOrden: "pago",
+                    tipoDato: "fecha",
+                    formatoExportacion: "fecha",
+                  },
+                  cell: ({ row }) => <Dia dia={row.original.fechaPago} />,
+                }
+              )
             : columna.accessor("anuladaAt", {
                 id: "anulada",
                 header: "Anulada",

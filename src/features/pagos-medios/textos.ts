@@ -6,7 +6,7 @@
 import { formatearFechaCompacta } from "@/features/operacion/formato"
 import { formatearCOP, formatearNumero } from "@/lib/format"
 
-import type { PagosArchivoRegistrados, PedidoArchivo } from "./tipos"
+import type { PedidoArchivo } from "./tipos"
 
 /** Sin `usuarios.ver`, la RLS no deja leer el nombre de otra persona del equipo. */
 export const SIN_NOMBRE_EQUIPO = "Otra persona del equipo"
@@ -54,27 +54,4 @@ export function avisoYaEnArchivo(
 /** Título de un archivo de pagos; también nombra la última miga («Archivo del 18 oct 2026»). */
 export function tituloDispersion(creadaAt: string): string {
   return `Archivo del ${formatearFechaCompacta(creadaAt)}`
-}
-
-/**
- * Lo que no se pudo registrar al pagar un archivo (`null` si todo quedó):
- * «Registramos 2 de 3 pagos. No pudimos registrar: Radio X (motivo).».
- */
-export function avisoPagosArchivo({
-  registradas,
-  fallidas,
-}: PagosArchivoRegistrados): string | null {
-  if (fallidas.length === 0) return null
-  const total = registradas.length + fallidas.length
-  const inicio =
-    registradas.length > 0
-      ? `Registramos ${formatearNumero(registradas.length)} de ${plural(total, "pago", "pagos")}.`
-      : "No registramos ningún pago."
-  const detalle = fallidas
-    .slice(0, 5)
-    .map((fila) => `${fila.medio} (${fila.mensaje.replace(/\.$/, "")})`)
-    .join("; ")
-  const resto =
-    fallidas.length > 5 ? ` y ${formatearNumero(fallidas.length - 5)} más` : ""
-  return `${inicio} No pudimos registrar: ${detalle}${resto}. Corrígelo y vuelve a intentarlo: el comprobante ya está cargado.`
 }

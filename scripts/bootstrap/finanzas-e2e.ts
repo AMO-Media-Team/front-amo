@@ -308,12 +308,15 @@ export function csvDispersionE2E(filas: readonly FilaDispersionE2E[]): string {
   return `${[encabezado.join(","), ...lineas].join("\n")}\n`
 }
 
-/** `LIQ-{AAAAMMDD}-{8 primeros del id}`, como la referencia del archivo de la app. */
+/**
+ * `LIQ-{AAAAMMDD}-{12 últimos hex del id}`, como la referencia del archivo de
+ * la app (la parte aleatoria del uuid v7: el inicio se repite en un corte).
+ */
 export function referenciaDispersionE2E(
   liquidacionId: string,
   hoy: string
 ): string {
-  return `LIQ-${hoy.replace(/-/g, "")}-${liquidacionId.slice(0, 8)}`
+  return `LIQ-${hoy.replace(/-/g, "")}-${liquidacionId.replace(/-/g, "").slice(-12)}`
 }
 
 // ── Base del restablecimiento ────────────────────────────────────────────────

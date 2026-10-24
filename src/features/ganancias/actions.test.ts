@@ -191,6 +191,24 @@ describe("firmarArchivoLiquidacion", () => {
     expect(estado.firmas).toEqual([])
   })
 
+  it("una anulada (la RPC la devuelve por id) ya no tiene archivos", async () => {
+    estado.respuestaSesion = {
+      data: [filaLiquidacion({ estado: "ANULADA" })],
+      error: null,
+    }
+    expect(
+      await firmarArchivoLiquidacion({
+        liquidacionId: ID_LIQUIDACION,
+        archivo: "soporte_pago",
+      })
+    ).toEqual({
+      ok: false,
+      error:
+        "Esta liquidación se anuló: ya no tiene archivos para descargar. Actualiza la página.",
+    })
+    expect(estado.firmas).toEqual([])
+  })
+
   it("un archivo que no es de la lista no se acepta", async () => {
     const resultado = await firmarArchivoLiquidacion({
       liquidacionId: ID_LIQUIDACION,

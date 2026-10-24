@@ -513,8 +513,10 @@ export interface FacturaTrasCambio {
 
 /**
  * Pago parcial o total con su soporte y las retenciones que practicó el
- * anunciante (cuentan para el saldo). La BD pasa la factura a PAGADA_PARCIAL
- * o PAGADA.
+ * anunciante (cuentan para el saldo). La BD deja la factura PAGADA si no
+ * queda saldo; un abono pasa una EMITIDA a PAGADA_PARCIAL y una VENCIDA sigue
+ * VENCIDA con el saldo rebajado. Es idempotente por soporte: reenviar el
+ * mismo (p. ej. tras perder la respuesta) devuelve el pago ya registrado.
  */
 export async function registrarPagoFactura(
   entrada: EntradaRegistrarPago
@@ -562,8 +564,10 @@ export async function registrarPagoFactura(
 
 /**
  * Nota crédito emitida en el software de AMO (D38 del RF): rebaja el saldo y
- * libera las asignaciones indicadas, o anula la factura si cubre todo su saldo
- * y no tiene pagos. La BD avisa al anunciante.
+ * saca de la factura las asignaciones canceladas indicadas (solo esas, D88:
+ * hint `solo_canceladas`), o anula la factura si cubre todo su saldo y no
+ * tiene pagos. Una factura PAGADA no la admite (hint `factura_pagada`: la
+ * devolución se gestiona fuera de la plataforma). La BD avisa al anunciante.
  */
 export async function registrarNotaCredito(
   entrada: EntradaRegistrarNotaCredito

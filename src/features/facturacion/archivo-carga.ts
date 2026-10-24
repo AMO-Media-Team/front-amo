@@ -69,21 +69,30 @@ export interface ItemCarga {
   valor: number
 }
 
+/** Un peso, en centavos: el paso para repartir un total en pesos enteros. */
+export const PESO_EN_CENTAVOS = 100
+
 /**
  * Reparte `total` (en pesos con centavos) en proporción a `pesos`, de modo
  * que las partes sumen exactamente el total: cada parte se redondea hacia
- * abajo en centavos y los centavos que sobran van a las de mayor residuo.
+ * abajo en pasos de `paso` centavos (1 por defecto; 100 para pesos enteros) y
+ * los pasos que sobran van a las de mayor residuo. Si el total no es múltiplo
+ * del paso, se reparte en centavos.
  */
 export function repartirEnCentavos(
   pesos: readonly number[],
-  total: number
+  total: number,
+  paso = 1
 ): number[] {
-  const objetivo = enCentavos(total)
+  const centavos = enCentavos(total)
+  const unidad =
+    Number.isInteger(paso) && paso > 1 && centavos % paso === 0 ? paso : 1
+  const objetivo = centavos / unidad
   const base = pesos.map((peso) => Math.max(0, enCentavos(peso)))
   const suma = base.reduce((acumulado, valor) => acumulado + valor, 0)
   if (pesos.length === 0) return []
   if (suma === 0) {
-    return pesos.map((_, indice) => (indice === 0 ? objetivo / 100 : 0))
+    return pesos.map((_, indice) => (indice === 0 ? centavos / 100 : 0))
   }
   const exactas = base.map((valor) => (valor * objetivo) / suma)
   const partes = exactas.map(Math.floor)
@@ -96,7 +105,7 @@ export function repartirEnCentavos(
     partes[indice] += 1
     sobrante -= 1
   }
-  return partes.map((centavos) => centavos / 100)
+  return partes.map((unidades) => (unidades * unidad) / 100)
 }
 
 function nombrePlataforma(plataforma: string): string {
@@ -116,8 +125,9 @@ function descripcionItem(linea: LineaFactura, esquema: EsquemaFacturacion) {
 
 /**
  * Ítems de la factura, uno por asignación, con el IVA repartido para que la
- * suma coincida con el del borrador. `cuadra` dice si las bases y el ingreso
- * para terceros suman lo del borrador (si no, conviene generarlo de nuevo).
+ * suma coincida con el del borrador; como el IVA del borrador va en pesos
+ * enteros, cada ítem también. `cuadra` dice si las bases y el ingreso para
+ * terceros suman lo del borrador (si no, conviene generarlo de nuevo).
  */
 export function itemsDeCarga(datos: DatosArchivoCarga): {
   items: ItemCarga[]
@@ -131,7 +141,7 @@ export function itemsDeCarga(datos: DatosArchivoCarga): {
   const terceros = lineas.map((linea) =>
     mandato ? (linea.montoMedio ?? 0) : 0
   )
-  const ivas = repartirEnCentavos(bases, factura.iva)
+  const ivas = repartirEnCentavos(bases, factura.iva, PESO_EN_CENTAVOS)
   const items = lineas.map((linea, indice) => ({
     numero: indice + 1,
     asignacionId: linea.asignacionId,
@@ -246,6 +256,14 @@ const COLUMNAS_CSV = [
   "Valor",
 ] as const
 
+/**
+ * «% IVA» del CSV como porcentaje (19, no la fracción 0,19), redondeado a dos
+ * decimales: `0.07 * 100` da 7.000000000000001 en coma flotante.
+ */
+export function porcentajeIvaCsv(fraccion: number | null): number | null {
+  return fraccion === null ? null : Math.round(fraccion * 10_000) / 100
+}
+
 /** El mismo contenido en CSV (`;`, UTF-8 con BOM): una fila por ítem. */
 export function archivoCargaCsv(datos: DatosArchivoCarga): string {
   const { factura, adquirente } = datos
@@ -269,7 +287,7 @@ export function archivoCargaCsv(datos: DatosArchivoCarga): string {
       item.plataforma,
       item.fechaVerificacion,
       item.baseIva,
-      factura.porcentajeIva,
+      porcentajeIvaCsv(factura.porcentajeIva),
       item.iva,
       item.ingresoTerceros,
       item.valor,

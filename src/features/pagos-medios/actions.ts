@@ -59,6 +59,7 @@ import {
   interpretarErrorPagos,
   mensajeDatosIlegibles,
   MENSAJES_PAGOS,
+  respondioLaBd,
 } from "./errores"
 import { sumarNeto } from "./preparacion"
 import { RUTA_PAGOS_MEDIOS } from "./rutas"
@@ -68,18 +69,14 @@ import {
   type EntradaGenerarArchivoPagos,
   type EntradaPrepararSoportePago,
   type EntradaRegistrarPago,
-  type EntradaRegistrarPagoArchivo,
   esquemaConfirmarSoportePago,
   esquemaDescargarArchivoPagos,
   esquemaGenerarArchivoPagos,
   esquemaPrepararSoportePago,
   esquemaRegistrarPago,
-  esquemaRegistrarPagoArchivo,
-  mimeDeSoporte,
 } from "./schemas"
 import type {
   PagoRegistrado,
-  PagosArchivoRegistrados,
   ResultadoArchivoPagos,
   SoporteCargado,
 } from "./tipos"
@@ -113,7 +110,11 @@ function revalidar(): void {
 
 // ── Archivo de pagos (LIQ-005) ───────────────────────────────────────────────
 
-/** Si no se pudo registrar, el CSV con datos bancarios no se deja huérfano. */
+/**
+ * Si la BD rechazó el registro, el CSV con datos bancarios no se deja
+ * huérfano. Solo entonces: ante un fallo de transporte la dispersión pudo
+ * quedar registrada y su archivo debe seguir en Storage.
+ */
 async function retirarArchivo(
   contexto: ContextoActor,
   destino: RutaStorage
@@ -156,7 +157,8 @@ export async function generarArchivoPagos(
 
   let contexto: ContextoActor | null = null
   let subido: RutaStorage | null = null
-  let registrado = false
+  // Solo se retira el CSV si la BD respondió que no lo registró.
+  let rechazado = false
   try {
     contexto = await contextoDelActor(actor)
     const datos = await contexto.admin.rpc(
@@ -209,12 +211,19 @@ export async function generarArchivoPagos(
       })
     )
     if (registro.error) {
+      if (!respondioLaBd(registro.error)) {
+        // Se perdió la respuesta: pudo quedar registrada (y su archivo, en
+        // Storage). Se refresca para que «Archivos de pagos» lo muestre.
+        informar("registrar_dispersion_srv", registro.error)
+        revalidar()
+        return fallo(MENSAJES_PAGOS.respuestaPerdida)
+      }
+      rechazado = true
       if (cambioDeEstado(registro.error)) revalidar()
       return registro.error.hint === HINTS_PAGOS.yaDispersada
         ? yaDispersada(registro.error)
         : falloBd("registrar_dispersion_srv", registro.error)
     }
-    registrado = true
     revalidar()
 
     const nombreArchivo = nombreArchivoPagos(fecha)
@@ -243,8 +252,7 @@ export async function generarArchivoPagos(
     informar("generarArchivoPagos", error)
     return fallo(MENSAJE_INESPERADO)
   } finally {
-    if (contexto && subido && !registrado)
-      await retirarArchivo(contexto, subido)
+    if (contexto && subido && rechazado) await retirarArchivo(contexto, subido)
   }
 }
 
@@ -400,136 +408,6 @@ export async function registrarPagoLiquidacion(
     return exito({ liquidacionId })
   } catch (error) {
     informar("registrarPagoLiquidacion", error)
-    return fallo(MENSAJE_INESPERADO)
-  }
-}
-
-// ── Pago de todo un archivo (un comprobante para todas) ──────────────────────
-
-interface LiquidacionDelArchivo {
-  id: string
-  estado: string
-  medio: { nombre: string } | null
-}
-
-/** Copia el comprobante a la carpeta de pago de otra liquidación (como servicio). */
-async function copiarSoporte(
-  contexto: ContextoActor,
-  origen: string,
-  liquidacionId: string,
-  mime: string
-): Promise<string | null> {
-  const destino = nuevaRuta(
-    carpetaSoporte("liquidacion", liquidacionId, "pago"),
-    mime
-  )
-  const { error } = await contexto.admin.storage
-    .from(destino.bucket)
-    .copy(origen, destino.ruta)
-  if (error) {
-    informarStorage("copiarSoportePago", error)
-    return null
-  }
-  return destino.ruta
-}
-
-/**
- * Registra con un solo comprobante el pago de las liquidaciones de un archivo
- * de pagos que siguen aprobadas: el soporte ya está en la carpeta de pago de
- * una de las liquidaciones del archivo; el servidor lo copia como servicio a
- * las demás y registra cada una por separado (`registrar_pago_liquidacion_srv`,
- * con sus propias reglas). Devuelve cuáles quedaron y cuáles no, con su porqué.
- */
-export async function registrarPagoArchivo(
-  entrada: EntradaRegistrarPagoArchivo
-): Promise<ResultadoAccion<PagosArchivoRegistrados>> {
-  const actor = await requerirPermiso(PERMISO)
-  const validacion = esquemaRegistrarPagoArchivo.safeParse(entrada)
-  if (!validacion.success) return desdeErrorZod(validacion.error)
-  const { dispersionId, liquidacionIds, fecha, referencia, soportePath } =
-    validacion.data
-
-  try {
-    // Con la sesión (RLS): solo las liquidaciones que la persona puede ver.
-    const supabase = await crearClienteServidor()
-    const { data, error } = await supabase
-      .from("liquidaciones")
-      .select("id, estado, medio:medios(nombre)")
-      .eq("dispersion_id", dispersionId)
-      .overrideTypes<LiquidacionDelArchivo[], { merge: false }>()
-    if (error) return falloBd("registrarPagoArchivo", error)
-    const delArchivo = new Map((data ?? []).map((fila) => [fila.id, fila]))
-    if (
-      liquidacionIds.some((liquidacionId) => !delArchivo.has(liquidacionId))
-    ) {
-      revalidar()
-      return fallo(MENSAJES_PAGOS.fueraDelArchivo)
-    }
-    const origen = [...delArchivo.keys()].find((liquidacionId) =>
-      perteneceA(
-        soportePath,
-        carpetaSoporte("liquidacion", liquidacionId, "pago")
-      )
-    )
-    const mime = mimeDeSoporte(soportePath)
-    if (!origen || !mime) {
-      return fallo(MENSAJES_PAGOS.soporteAjeno, {
-        soporte: [MENSAJES_PAGOS.soporteAjeno],
-      })
-    }
-
-    const contexto = await contextoDelActor(actor)
-    const resultado: PagosArchivoRegistrados = { registradas: [], fallidas: [] }
-    for (const liquidacionId of liquidacionIds) {
-      const fila = delArchivo.get(liquidacionId)
-      const medio = fila?.medio?.nombre ?? "Medio no visible"
-      if (fila?.estado !== "APROBADA") {
-        resultado.fallidas.push({
-          id: liquidacionId,
-          medio,
-          mensaje: MENSAJES_PAGOS.noAprobadaUna,
-        })
-        continue
-      }
-      const ruta =
-        liquidacionId === origen
-          ? soportePath
-          : await copiarSoporte(contexto, soportePath, liquidacionId, mime)
-      if (!ruta) {
-        resultado.fallidas.push({
-          id: liquidacionId,
-          medio,
-          mensaje: MENSAJES_PAGOS.soporteNoCopiado,
-        })
-        continue
-      }
-      const registro = await contexto.admin.rpc(
-        "registrar_pago_liquidacion_srv",
-        argumentosRpc<"registrar_pago_liquidacion_srv">({
-          p_liquidacion_id: liquidacionId,
-          p_fecha: fecha,
-          p_referencia: referencia,
-          p_soporte_path: ruta,
-          p_actor_id: contexto.actorId,
-          p_session_id: contexto.sessionId,
-        })
-      )
-      if (registro.error) {
-        const { mensaje, esperado } = interpretarErrorPagos(registro.error)
-        if (!esperado) informar("registrarPagoArchivo", registro.error)
-        if (ruta !== soportePath) {
-          await retirarArchivo(contexto, { bucket: "soportes", ruta })
-        }
-        resultado.fallidas.push({ id: liquidacionId, medio, mensaje })
-        continue
-      }
-      resultado.registradas.push({ id: liquidacionId, medio })
-    }
-    revalidar()
-    return exito(resultado)
-  } catch (error) {
-    informar("registrarPagoArchivo", error)
-    revalidar()
     return fallo(MENSAJE_INESPERADO)
   }
 }

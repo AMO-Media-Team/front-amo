@@ -20,6 +20,8 @@ export const MENSAJES_GANANCIAS = {
     "No encontramos esa liquidación o ya no tienes acceso a ella. Actualiza la página.",
   sinArchivo:
     "Este archivo aún no está disponible. Te avisaremos cuando lo esté.",
+  anulada:
+    "Esta liquidación se anuló: ya no tiene archivos para descargar. Actualiza la página.",
   archivoNoCargado:
     "El PDF de la factura no terminó de subir. Elígelo de nuevo y vuelve a enviarla.",
   archivoAjeno:

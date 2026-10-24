@@ -7,7 +7,13 @@
  *   resolución, vendedor, adquiriente, ítems, retenciones y totales, con los valores sin formato. Es el
  *   contrato mientras no haya integración con el proveedor: cada campo tiene nombre estable y las fechas
  *   van en `AAAA-MM-DD` (día de Bogotá).
+ *
+ * Una vez guardado, ese archivo es el documento que se transmite: el PDF que se vuelve a generar (al
+ * registrar el CUDS o con «Volver a generar») sale de él (`esquemaArchivoProveedor` y
+ * `datosPdfDesdeArchivoProveedor`), no de los datos vigentes del medio, que pueden haber cambiado.
  */
+import { z } from "zod"
+
 import {
   NOMBRES_CONCEPTO,
   NOMBRES_RETENCION,
@@ -19,13 +25,16 @@ import {
 import { PLATAFORMAS } from "@/features/operacion/estados"
 import { formatearNit } from "@/features/operacion/formato"
 import type { DatosDocumentoSoportePdf } from "@/lib/export/documento-soporte-pdf"
-import { serializarFecha } from "@/lib/fechas"
+import { parsearFecha, serializarFecha } from "@/lib/fechas"
 import { formatearNumero } from "@/lib/format"
 
-import type {
-  ModeloDocumentoSoporte,
-  RetencionModelo,
-  TipoRetencion,
+import {
+  type ModeloDocumentoSoporte,
+  type RetencionModelo,
+  TIPOS_DOCUMENTO,
+  TIPOS_RETENCION,
+  type TipoRetencion,
+  ubicacion,
 } from "./datos"
 
 // ── Textos ───────────────────────────────────────────────────────────────────
@@ -280,4 +289,159 @@ export function serializarArchivoProveedor(
   archivo: ArchivoProveedorDs
 ): string {
   return `${JSON.stringify(archivo, null, 2)}\n`
+}
+
+// ── PDF a partir del archivo ya guardado ─────────────────────────────────────
+
+const textoONulo = z.string().nullable()
+const diaArchivo = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const ubicacionArchivo = {
+  municipio_codigo: textoONulo,
+  municipio: textoONulo,
+  pais: z.literal("CO"),
+}
+
+/** Lectura del archivo `AMO-DS-1` que ya está en Storage (lo escribió `serializarArchivoProveedor`). */
+export const esquemaArchivoProveedor = z.object({
+  formato: z.literal(FORMATO_ARCHIVO_PROVEEDOR),
+  generado_at: z.string(),
+  documento: z.object({
+    tipo: z.literal("DOCUMENTO_SOPORTE"),
+    id: z.uuid(),
+    prefijo: z.string(),
+    consecutivo: z.number().int(),
+    numero: z.string(),
+    fecha_emision: diaArchivo,
+    moneda: z.literal("COP"),
+    cuds: textoONulo,
+  }),
+  resolucion: z
+    .object({
+      numero: z.string(),
+      fecha: diaArchivo,
+      prefijo: z.string(),
+      rango_desde: z.number().int(),
+      rango_hasta: z.number().int(),
+      vigente_desde: diaArchivo,
+      vigente_hasta: diaArchivo.nullable(),
+    })
+    .nullable(),
+  vendedor: z.object({
+    nombre: textoONulo,
+    tipo_documento: z.enum(TIPOS_DOCUMENTO).nullable(),
+    numero_documento: textoONulo,
+    direccion: textoONulo,
+    ...ubicacionArchivo,
+  }),
+  adquiriente: z.object({
+    razon_social: textoONulo,
+    nit: textoONulo,
+    dv: textoONulo,
+    direccion: textoONulo,
+    ...ubicacionArchivo,
+  }),
+  periodo: z.object({ inicio: diaArchivo, fin: diaArchivo }),
+  items: z.array(
+    z.object({
+      linea: z.number().int(),
+      asignacion_id: z.uuid(),
+      descripcion: z.string(),
+      marca: textoONulo,
+      plataforma: z.string(),
+      formato: z.string(),
+      fecha: diaArchivo.nullable(),
+      cantidad: z.literal(1),
+      valor_unitario: z.number(),
+      valor_total: z.number(),
+    })
+  ),
+  retenciones: z.array(
+    z.object({
+      tipo: z.enum(TIPOS_RETENCION),
+      concepto: textoONulo,
+      tarifa: z.number(),
+      base: z.number(),
+      valor: z.number(),
+      municipio_codigo: textoONulo,
+    })
+  ),
+  totales: z.object({
+    valor_bruto: z.number(),
+    total_retenciones: z.number(),
+    neto_a_pagar: z.number(),
+  }),
+}) satisfies z.ZodType<ArchivoProveedorDs>
+
+/** El día `AAAA-MM-DD` (Bogotá) como instante: el PDF lo vuelve a mostrar como ese mismo día. */
+function instanteDelDia(dia: string | null): string | null {
+  return parsearFecha(dia)?.toISOString() ?? null
+}
+
+/**
+ * Los datos del PDF desde el archivo para el proveedor ya guardado, con el CUDS registrado después: el
+ * vendedor, el adquiriente, las líneas y los valores son los del documento que se transmitió, aunque el
+ * medio o la configuración tributaria hayan cambiado desde entonces.
+ */
+export function datosPdfDesdeArchivoProveedor(
+  archivo: ArchivoProveedorDs,
+  cuds: string | null,
+  generadoAt: Date
+): DatosDocumentoSoportePdf {
+  const { documento, resolucion, vendedor, adquiriente, totales } = archivo
+  return {
+    numero: documento.numero,
+    fechaEmision: documento.fecha_emision,
+    periodo: { inicio: archivo.periodo.inicio, fin: archivo.periodo.fin },
+    resolucion: resolucion
+      ? {
+          numero: resolucion.numero,
+          fecha: resolucion.fecha,
+          prefijo: resolucion.prefijo,
+          rangoDesde: resolucion.rango_desde,
+          rangoHasta: resolucion.rango_hasta,
+          vigenteDesde: resolucion.vigente_desde,
+          vigenteHasta: resolucion.vigente_hasta,
+        }
+      : null,
+    vendedor: {
+      nombre: vendedor.nombre,
+      documento: documentoIdentidad(
+        vendedor.tipo_documento,
+        vendedor.numero_documento
+      ),
+      direccion: vendedor.direccion,
+      municipio: vendedor.municipio,
+    },
+    adquiriente: {
+      nombre: adquiriente.razon_social,
+      documento: formatearNit(adquiriente.nit, adquiriente.dv),
+      direccion: adquiriente.direccion,
+      municipio: adquiriente.municipio,
+    },
+    lineas: archivo.items.map((item) => ({
+      publicacion: item.descripcion,
+      marca: item.marca ?? "—",
+      plataformaFormato: `${item.plataforma} · ${item.formato}`,
+      fecha: instanteDelDia(item.fecha),
+      valor: item.valor_total,
+    })),
+    valorTotal: totales.valor_bruto,
+    retenciones: archivo.retenciones.map((retencion) => ({
+      nombre: nombreRetencion({
+        tipo: retencion.tipo,
+        concepto: retencion.concepto,
+        tarifa: retencion.tarifa,
+        base: retencion.base,
+        valor: retencion.valor,
+        municipio: ubicacion(retencion.municipio_codigo),
+      }),
+      tarifa: formatearTarifa(retencion.tipo, retencion.tarifa),
+      base: retencion.base,
+      valor: retencion.valor,
+    })),
+    totalRetenciones: totales.total_retenciones,
+    netoAPagar: totales.neto_a_pagar,
+    cuds: cuds?.trim() || documento.cuds,
+    generadoAt,
+  }
 }

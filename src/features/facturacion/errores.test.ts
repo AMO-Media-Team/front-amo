@@ -69,6 +69,38 @@ describe("interpretarErrorFacturacion", () => {
     })
   })
 
+  it("nota crédito que libera algo no cancelado: a la lista de asignaciones", () => {
+    expect(
+      interpretarErrorFacturacion({
+        code: "P0001",
+        message: "AMO_CONFIG_INVALIDA",
+        details: "Solo se liberan las publicaciones canceladas.",
+        hint: "solo_canceladas",
+      })
+    ).toMatchObject({
+      campo: "asignacionIds",
+      mensaje: MENSAJES_FACTURACION.soloCanceladas,
+      esperado: true,
+      accion: null,
+    })
+  })
+
+  it("nota crédito sobre una factura pagada: la devolución va por fuera", () => {
+    const error = interpretarErrorFacturacion({
+      code: "P0001",
+      message: "AMO_TRANSICION_INVALIDA",
+      details: "La factura ya está pagada.",
+      hint: "factura_pagada",
+    })
+    expect(error).toMatchObject({
+      mensaje: MENSAJES_FACTURACION.facturaPagada,
+      esperado: true,
+      accion: "actualizar",
+    })
+    expect(error.campo).toBeUndefined()
+    expect(error.mensaje).toMatch(/fuera de la plataforma/)
+  })
+
   it("resolución agotada: con su rótulo, en el número", () => {
     expect(
       interpretarErrorFacturacion({

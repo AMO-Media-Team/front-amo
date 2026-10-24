@@ -6,6 +6,7 @@ import {
   nombreArchivoPagos,
   type PagoDescifrado,
   referenciaPago,
+  sufijoLiquidacion,
   valorEnPesos,
 } from "./archivo-pagos"
 
@@ -35,15 +36,39 @@ const BILLETERA: PagoDescifrado = {
 }
 
 describe("referenciaPago", () => {
-  it("es LIQ-{fecha del archivo}-{8 primeros del id}", () => {
+  it("es LIQ-{fecha del archivo}-{12 últimos hex del id}", () => {
     expect(referenciaPago(BANCARIO.liquidacionId, "2026-10-23")).toBe(
-      "LIQ-20261023-01a16b3e"
+      "LIQ-20261023-611fb53e04e4"
     )
   })
 
-  it("rechaza una fecha que no es AAAA-MM-DD o un id corto", () => {
+  it("distingue liquidaciones de un mismo corte (uuid v7 con el mismo instante)", () => {
+    // Las liquidaciones de un corte nacen en el mismo milisegundo: comparten
+    // los primeros hex (el instante) y solo difieren en la parte aleatoria.
+    const mismoCorte = [
+      "01a16b3e-402f-7646-a2fd-611fb53e04e4",
+      "01a16b3e-402f-7646-b1c0-0a9d2e7f3301",
+      "01a16b3e-402f-7646-8e57-c4f1a0b2d9e8",
+    ]
+    const referencias = mismoCorte.map((id) => referenciaPago(id, "2026-10-23"))
+    expect(new Set(referencias).size).toBe(mismoCorte.length)
+  })
+
+  it("rechaza una fecha que no es AAAA-MM-DD o un id que no es uuid", () => {
     expect(() => referenciaPago(BANCARIO.liquidacionId, "23/10/2026")).toThrow()
     expect(() => referenciaPago("abc", "2026-10-23")).toThrow()
+    expect(() =>
+      referenciaPago("01a16b3e-402f-7646-a2fd-611fb53e04", "2026-10-23")
+    ).toThrow()
+  })
+})
+
+describe("sufijoLiquidacion", () => {
+  it("toma la parte aleatoria del uuid, en minúsculas", () => {
+    expect(sufijoLiquidacion(BANCARIO.liquidacionId)).toBe("611fb53e04e4")
+    expect(sufijoLiquidacion("01A16B3E-402F-7646-A2FD-611FB53E04E4")).toBe(
+      "611fb53e04e4"
+    )
   })
 })
 
@@ -74,13 +99,13 @@ describe("construirArchivoPagos", () => {
 
   it("escribe la cuenta bancaria con códigos estables y el valor sin decimales", () => {
     expect(lineas[1]).toBe(
-      "CC;1085123456;Ana Gómez;BANCARIO;Bancolombia;AHORROS;03012345678;911003;LIQ-20261023-01a16b3e;Radio Pasto"
+      "CC;1085123456;Ana Gómez;BANCARIO;Bancolombia;AHORROS;03012345678;911003;LIQ-20261023-611fb53e04e4;Radio Pasto"
     )
   })
 
   it("en una billetera deja vacío el tipo de cuenta y protege fórmulas y separadores", () => {
     expect(lineas[2]).toBe(
-      'PPT;X1234567;\'=Juan Pérez;BILLETERA;Nequi;;3001234567;150000;LIQ-20261023-0199f3a0;"La Voz; del Sur"'
+      'PPT;X1234567;\'=Juan Pérez;BILLETERA;Nequi;;3001234567;150000;LIQ-20261023-00000000a501;"La Voz; del Sur"'
     )
   })
 

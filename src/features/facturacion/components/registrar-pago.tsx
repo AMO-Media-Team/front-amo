@@ -34,17 +34,22 @@ import {
 } from "../actions"
 import { describir, repartirErrores } from "../errores-formulario"
 import { avisoEstadoFactura } from "../foco"
-import { efectoPago, ETIQUETAS_MEDIO_PAGO } from "../presentacion"
+import {
+  efectoPago,
+  ETIQUETAS_MEDIO_PAGO,
+  textoEfectoPago,
+} from "../presentacion"
 import {
   esquemaFormularioPago,
   hoyEnBogota,
   LIMITES_ARCHIVO,
   type ValoresFormularioPago,
 } from "../schemas"
-import { MEDIOS_PAGO } from "../tipos"
-import { CampoArchivo } from "./campo-archivo"
+import { type EstadoFactura, MEDIOS_PAGO } from "../tipos"
+import { CampoArchivo, enfocarCampoArchivo } from "./campo-archivo"
 import { DialogoFormulario } from "./dialogo-formulario"
 import { useArchivoSoporte } from "./use-archivo-soporte"
+import { useFocoDiferido } from "./use-foco-diferido"
 
 type Campo = Exclude<keyof ValoresFormularioPago, "facturaId">
 
@@ -61,6 +66,8 @@ export interface RegistrarPagoProps {
   numero: string
   anunciante: string
   saldo: number
+  /** Estado actual: un abono a una VENCIDA no la pasa a pago parcial. */
+  estado: EstadoFactura
   /** `YYYY-MM-DD`: un pago no puede ser anterior a la emisión. */
   fechaEmision: string
 }
@@ -86,24 +93,25 @@ function EfectoDelPago({
   monto,
   retenciones,
   saldo,
+  estado,
 }: {
   monto: number
   retenciones: number
   saldo: number
+  estado: EstadoFactura
 }) {
-  const { efecto, saldoRestante } = efectoPago({ monto, retenciones, saldo })
-  if (efecto === "vacio" || efecto === "excede") return null
+  const texto = textoEfectoPago({ monto, retenciones, saldo, estado })
+  if (!texto) return null
+  const total = efectoPago({ monto, retenciones, saldo }).efecto === "total"
   return (
     <p
       aria-live="polite"
       className={cn(
         "rounded-lg px-3 py-2.5 text-sm text-pretty",
-        efecto === "total" ? "bg-success/10" : "bg-muted/60"
+        total ? "bg-success/10" : "bg-muted/60"
       )}
     >
-      {efecto === "total"
-        ? "Con este pago la factura queda pagada."
-        : `Queda un saldo de ${formatearCOP(saldoRestante)}: la factura pasa a pago parcial.`}
+      {texto}
     </p>
   )
 }
@@ -119,6 +127,7 @@ export function RegistrarPago({
   numero,
   anunciante,
   saldo,
+  estado,
   fechaEmision,
 }: RegistrarPagoProps) {
   const [abierto, setAbierto] = useState(false)
@@ -127,6 +136,8 @@ export function RegistrarPago({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const id = useId()
   const idFormulario = `${id}-formulario`
+  const idArchivo = `${id}-archivo`
+  const diferirFoco = useFocoDiferido(pendiente)
   const esquema = useMemo(
     () => esquemaFormularioPago({ saldo, fechaEmision }),
     [saldo, fechaEmision]
@@ -134,7 +145,10 @@ export function RegistrarPago({
   const formulario = useForm({
     resolver: zodResolver(esquema),
     defaultValues: valoresIniciales(facturaId),
-    mode: "onTouched",
+    // Al enviar y después en vivo: un error que aparece al salir de un campo
+    // movería la zona del archivo justo cuando se presiona «Elegir archivo».
+    mode: "onSubmit",
+    reValidateMode: "onChange",
   })
   const { register, formState, setError, control } = formulario
   const [monto, retenciones] = useWatch({
@@ -164,11 +178,13 @@ export function RegistrarPago({
       setErrorGeneral(null)
       if (!archivo.elegido) {
         setErrorArchivo("Carga el soporte del pago.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const listo = await archivo.obtener()
       if (!listo?.ok) {
         setErrorArchivo(listo?.error ?? "Carga el soporte del pago.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const resultado = await registrarPagoFactura({
@@ -178,22 +194,26 @@ export function RegistrarPago({
       })
       if (!resultado.ok) {
         const errores = repartirErrores(resultado, CAMPOS)
-        errores.campos.forEach(([campo, mensaje], indice) =>
-          setError(
-            campo,
-            { type: "server", message: mensaje },
-            { shouldFocus: indice === 0 }
-          )
+        // Sin `shouldFocus`: el campo sigue deshabilitado hasta que termine la
+        // transición; el foco llega cuando vuelve a habilitarse.
+        errores.campos.forEach(([campo, mensaje]) =>
+          setError(campo, { type: "server", message: mensaje })
         )
         setErrorArchivo(errores.archivo)
         setErrorGeneral(errores.general)
+        const primero = errores.campos[0]?.[0]
+        if (primero) diferirFoco(() => formulario.setFocus(primero))
+        else if (errores.archivo) {
+          diferirFoco(() => enfocarCampoArchivo(idArchivo))
+        }
         return
       }
-      const pagada = resultado.datos.estado === "PAGADA"
+      const { estado: estadoNuevo, saldo: saldoNuevo } = resultado.datos
       toast.success("Pago registrado", {
-        description: pagada
-          ? `La factura ${numero} quedó pagada.`
-          : `Saldo de la factura ${numero}: ${formatearCOP(resultado.datos.saldo)}.`,
+        description:
+          estadoNuevo === "PAGADA"
+            ? `La factura ${numero} quedó pagada.`
+            : `Saldo de la factura ${numero}: ${formatearCOP(saldoNuevo)}.${estadoNuevo === "VENCIDA" ? " Sigue vencida." : ""}`,
       })
       cambiarAbierto(false)
     })
@@ -297,6 +317,7 @@ export function RegistrarPago({
               monto={pesos(monto)}
               retenciones={pesos(retenciones)}
               saldo={saldo}
+              estado={estado}
             />
 
             <Controller
@@ -384,6 +405,7 @@ export function RegistrarPago({
             </div>
 
             <CampoArchivo
+              id={idArchivo}
               titulo="Soporte del pago"
               descripcion="El comprobante del banco o de PSE: PDF, JPG o PNG de hasta 10 MB."
               reglas={LIMITES_ARCHIVO.pago}

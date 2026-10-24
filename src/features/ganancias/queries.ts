@@ -62,7 +62,10 @@ export async function misLiquidaciones(
   return paginaLiquidaciones(data, TAMANO_PAGINA_PAGOS)
 }
 
-/** Una liquidación propia (`null` si no existe, es de otro medio o se anuló). */
+/**
+ * Una liquidación propia, también la anulada (para mostrar que se anuló);
+ * `null` si no existe o es de otro medio.
+ */
 export const miLiquidacion = cache(
   async (liquidacionId: string): Promise<LiquidacionMedio | null> => {
     const supabase = await clienteSolicitud()

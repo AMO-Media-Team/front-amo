@@ -26,9 +26,10 @@ import { expect, type Locator, type Page, test } from "./utilidades/prueba"
  *   «Registrar pago» deshabilitado con «Documento soporte requerido: …».
  * - Finanzas genera el archivo de pagos con la liquidación del «Medio Finanzas
  *   E2E» (documento emitido): se descarga un CSV con la referencia
- *   `LIQ-{AAAAMMDD}-{id}` y el neto en pesos, la fila queda «Archivo del …» y
- *   la bitácora lleva un REVELAR_DATO por medio y un EXPORTAR (N + 1, LIQ-005
- *   c1). Incluirla otra vez exige confirmarlo («Incluirlas otra vez»).
+ *   `LIQ-{AAAAMMDD}-{12 últimos hex del id}` y el neto en pesos, la fila queda
+ *   «Archivo del …» y la bitácora lleva un REVELAR_DATO por medio y un
+ *   EXPORTAR (N + 1, LIQ-005 c1). Incluirla otra vez exige confirmarlo
+ *   («Incluirlas otra vez»).
  * - Registra el pago con fecha, referencia y soporte: la liquidación queda
  *   PAGADA, sale de la lista y el foco vuelve al título de la vista (LIQ-006).
  * - El historial muestra el archivo, su ficha lista la liquidación pagada y
@@ -191,7 +192,7 @@ test.describe("pagos a medios", () => {
     const celdas = filas[0].split(";")
     expect(celdas[7]).toBe(String(Math.round(lista.montoNeto)))
     expect(celdas[8]).toBe(
-      `LIQ-${hoyBogota().replaceAll("-", "")}-${lista.liquidacionId.slice(0, 8)}`
+      `LIQ-${hoyBogota().replaceAll("-", "")}-${lista.liquidacionId.replaceAll("-", "").slice(-12)}`
     )
     expect(celdas[9]).toBe(MEDIO.nombre)
     expect(celdas[6]).toMatch(/^\d{5,20}$/)
@@ -293,7 +294,9 @@ test.describe("pagos a medios", () => {
         nombre: "comprobante-e2e.pdf",
       })
     )
-    await expect(dialogo.getByText("comprobante-e2e.pdf")).toBeVisible()
+    await expect(
+      dialogo.getByText("comprobante-e2e.pdf", { exact: true })
+    ).toBeVisible()
     await dialogo.getByRole("button", { name: "Registrar pago" }).click()
     await expect(dialogo).toBeHidden({ timeout: 30_000 })
 

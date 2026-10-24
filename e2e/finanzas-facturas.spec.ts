@@ -378,10 +378,17 @@ test.describe("facturas · Finanzas", () => {
         estado: "PAGADA",
         saldo: 0,
       })
-      // Sin saldo ya no se ofrecen pagos ni notas crédito.
+      // Sin saldo ya no se ofrecen pagos ni notas crédito, y la ficha dice
+      // que la devolución o el saldo a favor van por fuera (factura_pagada).
       await expect(
         page.getByRole("button", { name: "Registrar pago" })
       ).toHaveCount(0)
+      await expect(
+        page.getByRole("button", { name: "Registrar nota crédito" })
+      ).toHaveCount(0)
+      await expect(
+        page.getByText(/ya no admite notas crédito\. Por ahora la devolución/)
+      ).toBeVisible()
     })
   })
 
@@ -404,7 +411,7 @@ test.describe("facturas · Finanzas", () => {
     await dialogo.getByRole("button", { name: "Todo el saldo" }).click()
     await expect(dialogo).toContainText(/quedará ANULADA, sale de la cartera/)
     await dialogo
-      .getByLabel("Motivo")
+      .getByRole("textbox", { name: "Motivo" })
       .fill("La campaña se canceló por completo a pedido del anunciante (E2E).")
     await cargarArchivo(
       dialogo,

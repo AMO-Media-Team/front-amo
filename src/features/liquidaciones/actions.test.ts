@@ -28,6 +28,8 @@ const estado = vi.hoisted(() => ({
   confirmacion: { ok: true, datos: {} } as unknown,
   firmas: [] as unknown[],
   ruta: { ruta: null as string | null, existe: true },
+  /** RPC y transiciones en el orden en que llegan a la BD. */
+  llamadas: [] as string[],
 }))
 
 vi.mock("server-only", () => ({}))
@@ -51,6 +53,9 @@ vi.mock("@/lib/auth/contexto-actor", () => ({
       admin: {
         rpc: async (nombre: string, argumentos: Record<string, unknown>) => {
           estado.rpc.push({ nombre, argumentos })
+          estado.llamadas.push(
+            `rpc:${nombre}:${String(argumentos.p_liquidacion_id)}`
+          )
           return estado.respuesta
         },
       },
@@ -58,10 +63,13 @@ vi.mock("@/lib/auth/contexto-actor", () => ({
   }),
 }))
 vi.mock("@/lib/negocio/transicionar", () => ({
-  transicionar: vi.fn(async (_contexto: unknown, solicitud: unknown) => {
-    estado.transiciones.push(solicitud)
-    return { data: null, error: estado.erroresTransicion.shift() ?? null }
-  }),
+  transicionar: vi.fn(
+    async (_contexto: unknown, solicitud: { id: string; hacia: string }) => {
+      estado.transiciones.push(solicitud)
+      estado.llamadas.push(`transicion:${solicitud.hacia}:${solicitud.id}`)
+      return { data: null, error: estado.erroresTransicion.shift() ?? null }
+    }
+  ),
 }))
 vi.mock("@/lib/supabase/server", () => ({
   crearClienteServidor: vi.fn(async () => ({ sesion: true })),
@@ -110,6 +118,7 @@ beforeEach(() => {
   estado.confirmacion = { ok: true, datos: {} }
   estado.firmas = []
   estado.ruta = { ruta: null, existe: true }
+  estado.llamadas = []
 })
 
 describe("generarCorte (LIQ-001)", () => {
@@ -294,6 +303,63 @@ describe("aprobarLiquidaciones (LIQ-003, D17)", () => {
     ])
   })
 
+  it("guarda la alerta de seguridad social vigente antes de aprobar cada una (D78)", async () => {
+    // Con BLOQUEAR, el RAISE de la aprobación deshace lo que cambie en su
+    // transacción: la alerta se guarda antes, en la suya.
+    estado.erroresTransicion = [
+      {
+        code: "P0001",
+        message: "AMO_SEG_SOCIAL_PENDIENTE",
+        details: "El medio tiene la seguridad social pendiente.",
+      },
+      null,
+    ]
+    const resultado = await aprobarLiquidaciones({
+      liquidacionIds: [LIQ, LIQ_2],
+    })
+    expect(estado.llamadas).toEqual([
+      `rpc:reevaluar_alerta_seg_social_srv:${LIQ}`,
+      `transicion:APROBADA:${LIQ}`,
+      `rpc:reevaluar_alerta_seg_social_srv:${LIQ_2}`,
+      `transicion:APROBADA:${LIQ_2}`,
+    ])
+    expect(estado.rpc[0]).toEqual({
+      nombre: "reevaluar_alerta_seg_social_srv",
+      argumentos: {
+        p_liquidacion_id: LIQ,
+        p_actor_id: "u1",
+        p_session_id: "s1",
+      },
+    })
+    expect(resultado).toMatchObject({
+      ok: true,
+      datos: [
+        { liquidacionId: LIQ, ok: false },
+        { liquidacionId: LIQ_2, ok: true, error: null },
+      ],
+    })
+    // La ficha y la lista muestran la alerta guardada.
+    expect(estado.revalidadas).toContain(`/finanzas/liquidaciones/${LIQ}`)
+  })
+
+  it("si la reevaluación falla, igual intenta aprobar (la BD vuelve a evaluar)", async () => {
+    const consola = vi.spyOn(console, "error").mockImplementation(() => {})
+    estado.respuesta = {
+      data: null,
+      error: { code: "XX000", message: "boom" },
+    }
+    const resultado = await aprobarLiquidaciones({ liquidacionIds: [LIQ] })
+    expect(estado.transiciones).toHaveLength(1)
+    expect(resultado).toEqual({
+      ok: true,
+      datos: [{ liquidacionId: LIQ, ok: true, error: null }],
+    })
+    expect(consola).toHaveBeenCalledWith(
+      "[liquidaciones] reevaluar_alerta_seg_social_srv falló (XX000)"
+    )
+    consola.mockRestore()
+  })
+
   it("sin selección no llega a la BD", async () => {
     expect(await aprobarLiquidaciones({ liquidacionIds: [] })).toMatchObject({
       ok: false,
@@ -464,7 +530,7 @@ describe("descargarArchivoLiquidacion", () => {
           entidad: "liquidaciones",
           entidadId: LIQ,
         },
-        descarga: "Soporte de pago LIQ-0192f3a4.pdf",
+        descarga: "Soporte de pago LIQ-0000000000a1.pdf",
       },
     ])
     expect(resultado).toEqual({

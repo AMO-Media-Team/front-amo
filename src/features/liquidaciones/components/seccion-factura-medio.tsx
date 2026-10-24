@@ -96,6 +96,7 @@ export function SeccionFacturaMedio({
               liquidacionId={liquidacionId}
               archivo="factura_medio"
               texto="Descargar PDF"
+              complemento="de la factura del medio"
             />
           ) : null}
         </div>
@@ -137,6 +138,20 @@ function DialogoFacturaMedio({
   const [errores, setErrores] = useState<{ numero?: string; archivo?: string }>(
     {}
   )
+
+  // El diálogo sigue montado tras registrar (la ficha se revalida, no se
+  // vuelve a montar): cada apertura toma el número vigente, sin archivo ni
+  // errores de la vez anterior. No se usa `key`: el RSC revalidado puede
+  // llegar con el diálogo abierto y lo volvería a montar.
+  const [abiertoAntes, setAbiertoAntes] = useState(abierto)
+  if (abierto !== abiertoAntes) {
+    setAbiertoAntes(abierto)
+    if (abierto) {
+      setNumero(numeroActual ?? "")
+      setArchivo(null)
+      setErrores({})
+    }
+  }
   const subida = useSubida<void>({
     preparar: (descripcion) =>
       prepararFacturaMedioInterna({ liquidacionId, archivo: descripcion }),

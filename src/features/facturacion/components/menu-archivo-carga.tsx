@@ -81,7 +81,18 @@ export function MenuArchivoCarga({ facturaId }: { facturaId: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button type="button" variant="outline" disabled={pendiente} />}
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pendiente}
+            // Enfocable mientras genera: el foco vuelve aquí al cerrar el menú
+            // y no salta al <body> (no hay `:disabled` que lo atenúe).
+            focusableWhenDisabled
+            aria-busy={pendiente || undefined}
+            className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
+          />
+        }
       >
         {pendiente ? (
           <Spinner aria-hidden role={undefined} data-icon="inline-start" />

@@ -8,6 +8,7 @@ import "server-only"
 import { cache } from "react"
 
 import { clienteSolicitud, fallar } from "@/features/operacion/queries/comun"
+import { requerirUsuario, tieneAlgunPermiso } from "@/lib/auth/dal"
 
 import {
   COLUMNAS_DOCUMENTO,
@@ -53,12 +54,21 @@ const leerNumeracionVigente = cache(
 
 /**
  * Documento soporte de una liquidación (`null` si no lleva o aún no existe): el vigente o el último, con
- * los anulados anteriores. Una lectura por solicitud.
+ * los anulados anteriores. Una lectura por solicitud. Sin `datos_sensibles.ver`, marca sus archivos como
+ * reservados (`archivosReservados`): la sección no ofrece descargarlos.
  */
 export async function documentoSoporteDeLiquidacion(
   liquidacionId: string
 ): Promise<DocumentoSoporteFicha | null> {
-  return leerDocumentos(liquidacionId)
+  const [ficha, usuario] = await Promise.all([
+    leerDocumentos(liquidacionId),
+    requerirUsuario(),
+  ])
+  if (!ficha) return null
+  return {
+    ...ficha,
+    archivosReservados: !tieneAlgunPermiso(usuario, ["datos_sensibles.ver"]),
+  }
 }
 
 /** Valor vigente de `tributario.numeracion_documento_soporte`. */

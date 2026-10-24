@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  avisoPagosArchivo,
   avisoYaEnArchivo,
   descripcionPedido,
   plural,
@@ -56,45 +55,6 @@ describe("tituloDispersion", () => {
     // 8:00 p. m. del 18 en Bogotá es ya 19 en UTC.
     expect(tituloDispersion("2026-10-19T01:00:00Z")).toBe(
       "Archivo del 18 oct 2026"
-    )
-  })
-})
-
-describe("avisoPagosArchivo", () => {
-  it("sin fallos no hay aviso", () => {
-    expect(
-      avisoPagosArchivo({
-        registradas: [{ id: "a", medio: "A" }],
-        fallidas: [],
-      })
-    ).toBeNull()
-  })
-
-  it("dice cuántas quedaron y cuáles no, con su porqué", () => {
-    expect(
-      avisoPagosArchivo({
-        registradas: [
-          { id: "a", medio: "A" },
-          { id: "b", medio: "B" },
-        ],
-        fallidas: [
-          {
-            id: "c",
-            medio: "Radio Pasto",
-            mensaje: "Documento soporte requerido: falta la factura.",
-          },
-        ],
-      })
-    ).toBe(
-      "Registramos 2 de 3 pagos. No pudimos registrar: Radio Pasto (Documento soporte requerido: falta la factura). Corrígelo y vuelve a intentarlo: el comprobante ya está cargado."
-    )
-    expect(
-      avisoPagosArchivo({
-        registradas: [],
-        fallidas: [{ id: "c", medio: "C", mensaje: "Ya no está aprobada." }],
-      })
-    ).toMatch(
-      /^No registramos ningún pago\. No pudimos registrar: C \(Ya no está aprobada\)\./
     )
   })
 })

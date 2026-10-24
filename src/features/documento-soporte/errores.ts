@@ -2,8 +2,8 @@
  * Errores del documento soporte en voz de Finanzas (módulo puro). La BD explica casi todo en el `detail`
  * de sus `AMO_*`; aquí se da texto o destino propio a los `hint` de la fase (`numeracion_proveedor`,
  * `numeracion_plataforma`, `cuds_formato`, `cuds_registrado`, `documento_no_emitido`,
- * `archivo_no_cargado`, `requiere_nota_ajuste`) y se decide junto a qué campo mostrar cada uno. El
- * rótulo «Resolución agotada: …» lo pone `interpretarErrorBd`.
+ * `archivo_no_cargado`, `requiere_nota_ajuste`, `liquidacion_pagada`) y se decide junto a qué campo
+ * mostrar cada uno. El rótulo «Resolución agotada: …» lo pone `interpretarErrorBd`.
  */
 import {
   codigoNegocio,
@@ -25,6 +25,8 @@ export const MENSAJES_DOCUMENTO = {
     "El PDF no terminó de cargarse. Elígelo de nuevo y vuelve a intentarlo.",
   requiereNotaAjuste:
     "El documento ya se transmitió a la DIAN (tiene CUDS): registra primero su nota de ajuste y después anúlalo.",
+  liquidacionPagada:
+    "La liquidación ya se pagó: su documento soporte ya no se anula porque es el soporte de ese pago. Si tiene un error, corrígelo con una nota de ajuste en el software del proveedor tecnológico.",
   sinDatosSensibles:
     "Necesitas también el permiso «Ver datos sensibles»: el documento lleva el nombre, el documento de identidad y la dirección del medio.",
   archivosConProveedor:
@@ -38,6 +40,8 @@ export const MENSAJES_DOCUMENTO = {
     "La nota de ajuste aplica a un documento ya transmitido a la DIAN (con CUDS).",
   datosIlegibles:
     "No pudimos leer los datos del documento soporte. Intenta de nuevo en unos minutos.",
+  archivoProveedorIlegible:
+    "No pudimos leer el archivo para el proveedor que ya tiene este documento: el PDF nuevo sale de él. Intenta de nuevo en unos minutos; si sigue igual, avísale al equipo técnico.",
   documentoIlegible:
     "No pudimos leer el número de documento del medio con la llave de cifrado de este entorno. Avísale al equipo técnico.",
 } as const
@@ -75,6 +79,7 @@ const HINTS: Readonly<
     campo: "archivo",
   },
   requiere_nota_ajuste: { mensaje: MENSAJES_DOCUMENTO.requiereNotaAjuste },
+  liquidacion_pagada: { mensaje: MENSAJES_DOCUMENTO.liquidacionPagada },
   // El detalle de la BD ya lo dice bien («El CUDS son 96 caracteres…»).
   cuds_formato: { mensaje: null, campo: "cuds" },
 }

@@ -121,44 +121,6 @@ export const esquemaRegistrarPago = z.object({
 })
 export type EntradaRegistrarPago = z.input<typeof esquemaRegistrarPago>
 
-/**
- * El pago de todo un archivo con un solo comprobante: el soporte se sube una
- * vez (a la carpeta de pago de una de sus liquidaciones) y el servidor lo
- * copia a las demás antes de registrar cada una.
- */
-export const esquemaRegistrarPagoArchivo = z.object({
-  dispersionId: id,
-  liquidacionIds: z
-    .array(id)
-    .min(1, "No hay liquidaciones por registrar en este archivo.")
-    .max(MAXIMO_POR_ARCHIVO)
-    .refine((ids) => new Set(ids).size === ids.length, {
-      message: "Hay liquidaciones repetidas.",
-    }),
-  fecha: fechaPago,
-  referencia: referenciaPago,
-  soportePath: z
-    .string({ error: MENSAJES_FORMULARIO_PAGO.soporte })
-    .min(1, MENSAJES_FORMULARIO_PAGO.soporte)
-    .max(LARGO_MAXIMO_RUTA),
-})
-export type EntradaRegistrarPagoArchivo = z.input<
-  typeof esquemaRegistrarPagoArchivo
->
-
-const MIME_POR_EXTENSION: Readonly<Record<string, string>> = {
-  pdf: "application/pdf",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-}
-
-/** MIME de un soporte según la extensión de su ruta (`null` si no es uno admitido). */
-export function mimeDeSoporte(ruta: string): string | null {
-  const extension = ruta.slice(ruta.lastIndexOf(".") + 1).toLowerCase()
-  return MIME_POR_EXTENSION[extension] ?? null
-}
-
 export interface ValoresFormularioPago {
   fecha: string
   referencia: string

@@ -28,11 +28,13 @@ async function SeccionConceptos({
   facturaId,
   mandato,
   anulada,
+  pagada,
   verCampanas,
 }: {
   facturaId: string
   mandato: boolean
   anulada: boolean
+  pagada: boolean
   verCampanas: boolean
 }) {
   const conceptos = await conceptosDeFactura(facturaId)
@@ -41,6 +43,7 @@ async function SeccionConceptos({
       grupos={agruparConceptos(conceptos)}
       mandato={mandato}
       anulada={anulada}
+      pagada={pagada}
       verSeguimiento
       verCampanas={verCampanas}
     />
@@ -108,6 +111,7 @@ export async function FichaFactura({
             facturaId={factura.id}
             mandato={factura.esquema === "MANDATO"}
             anulada={factura.estado === "ANULADA"}
+            pagada={factura.estado === "PAGADA"}
             verCampanas={verCampanas}
           />
         </Diferida>

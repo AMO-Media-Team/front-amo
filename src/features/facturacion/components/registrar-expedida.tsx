@@ -43,9 +43,10 @@ import {
   LIMITES_ARCHIVO,
   type ValoresFormularioExpedida,
 } from "../schemas"
-import { CampoArchivo } from "./campo-archivo"
+import { CampoArchivo, enfocarCampoArchivo } from "./campo-archivo"
 import { DialogoFormulario } from "./dialogo-formulario"
 import { useArchivoSoporte } from "./use-archivo-soporte"
+import { useFocoDiferido } from "./use-foco-diferido"
 
 type Campo = Exclude<keyof ValoresFormularioExpedida, "facturaId">
 
@@ -103,6 +104,8 @@ export function RegistrarExpedida({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const id = useId()
   const idFormulario = `${id}-formulario`
+  const idArchivo = `${id}-archivo`
+  const diferirFoco = useFocoDiferido(pendiente)
   const esquema = useMemo(
     () => esquemaFormularioExpedida(totalBorrador),
     [totalBorrador]
@@ -110,7 +113,10 @@ export function RegistrarExpedida({
   const formulario = useForm({
     resolver: zodResolver(esquema),
     defaultValues: valoresIniciales(facturaId, sugerencia),
-    mode: "onTouched",
+    // Al enviar y después en vivo: un error que aparece al salir de un campo
+    // movería la zona del archivo justo cuando se presiona «Elegir archivo».
+    mode: "onSubmit",
+    reValidateMode: "onChange",
   })
   const { register, formState, setError, control } = formulario
   const [fechaEmision, cufe] = useWatch({
@@ -146,11 +152,13 @@ export function RegistrarExpedida({
       setErrorGeneral(null)
       if (!archivo.elegido) {
         setErrorArchivo("Carga el PDF de la factura expedida.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const listo = await archivo.obtener()
       if (!listo?.ok) {
         setErrorArchivo(listo?.error ?? "Carga el PDF de la factura expedida.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const resultado = await registrarFacturaExpedida({
@@ -160,15 +168,18 @@ export function RegistrarExpedida({
       })
       if (!resultado.ok) {
         const errores = repartirErrores(resultado, CAMPOS)
-        errores.campos.forEach(([campo, mensaje], indice) =>
-          setError(
-            campo,
-            { type: "server", message: mensaje },
-            { shouldFocus: indice === 0 }
-          )
+        // Sin `shouldFocus`: el campo sigue deshabilitado hasta que termine la
+        // transición; el foco llega cuando vuelve a habilitarse.
+        errores.campos.forEach(([campo, mensaje]) =>
+          setError(campo, { type: "server", message: mensaje })
         )
         setErrorArchivo(errores.archivo)
         setErrorGeneral(errores.general)
+        const primero = errores.campos[0]?.[0]
+        if (primero) diferirFoco(() => formulario.setFocus(primero))
+        else if (errores.archivo) {
+          diferirFoco(() => enfocarCampoArchivo(idArchivo))
+        }
         return
       }
       toast.success(`Factura ${resultado.datos.numero} registrada`, {
@@ -394,6 +405,7 @@ export function RegistrarExpedida({
             </Field>
 
             <CampoArchivo
+              id={idArchivo}
               titulo="PDF de la factura expedida"
               descripcion="El PDF que generó el software de facturación (hasta 10 MB). Lo verá el anunciante."
               reglas={LIMITES_ARCHIVO.factura}

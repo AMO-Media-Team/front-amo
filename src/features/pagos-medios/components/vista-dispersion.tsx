@@ -17,7 +17,6 @@ import { rutaVistaPagosMedios } from "../rutas"
 import { plural, SIN_NOMBRE_EQUIPO, tituloDispersion } from "../textos"
 import type { DetalleDispersion } from "../tipos"
 import { BotonDescargarArchivo } from "./boton-descargar-archivo"
-import { RegistrarPagoArchivo } from "./registrar-pago-archivo"
 import { SeccionLiquidacionesDispersion } from "./secciones"
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>
@@ -60,7 +59,8 @@ function Cifra({
 /**
  * Ficha de un archivo de pagos: cuándo y quién lo generó, su descarga, el
  * avance de los pagos (pagadas y por pagar) y sus liquidaciones, donde se
- * registra el pago de cada una cuando el banco lo confirma.
+ * registra el pago de cada una, con su propio soporte, cuando el banco lo
+ * confirma (no hay pago en lote: cada medio descarga el soporte de su pago).
  */
 export function VistaDispersion({
   detalle,
@@ -145,27 +145,21 @@ export function VistaDispersion({
         aria-labelledby={ID_DESTINO_FOCO_PAGOS}
         className="flex flex-col gap-4"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h2
-              id={ID_DESTINO_FOCO_PAGOS}
-              tabIndex={-1}
-              className="text-lg font-semibold outline-none"
-            >
-              Liquidaciones del archivo
-            </h2>
-            <p className="max-w-2xl text-sm text-pretty text-muted-foreground">
-              Cuando el banco confirme los pagos, regístralos con su fecha,
-              referencia y soporte, uno por uno o todos con un solo comprobante:
-              cada liquidación queda pagada y le avisamos a su medio.
-            </p>
-          </div>
-          <RegistrarPagoArchivo
-            dispersionId={dispersion.id}
-            pendientes={detalle.liquidaciones.filter(
-              (fila) => fila.estado === "APROBADA"
-            )}
-          />
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2
+            id={ID_DESTINO_FOCO_PAGOS}
+            tabIndex={-1}
+            className="text-lg font-semibold outline-none"
+          >
+            Liquidaciones del archivo
+          </h2>
+          <p className="max-w-2xl text-sm text-pretty text-muted-foreground">
+            Cuando el banco confirme cada transferencia, registra su pago con la
+            fecha, la referencia y su propio soporte: el medio puede
+            descargarlo, así que no uses la planilla del lote, que trae los
+            datos de los demás. La liquidación queda pagada y le avisamos a su
+            medio.
+          </p>
         </div>
         <LimiteErrorTabla recurso="las liquidaciones del archivo">
           <Suspense fallback={<EsqueletoTablaDatos columnas={5} filtros={1} />}>

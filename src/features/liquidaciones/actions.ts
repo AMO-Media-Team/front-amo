@@ -19,6 +19,7 @@ import "server-only"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
+import { sufijoLiquidacion } from "@/features/pagos-medios/archivo-pagos"
 import { RUTA_PAGOS_MEDIOS } from "@/features/pagos-medios/rutas"
 import type { SubidaPreparada, UrlFirmada } from "@/lib/archivos/tipos"
 import { contextoDelActor } from "@/lib/auth/contexto-actor"
@@ -198,6 +199,11 @@ export async function generarLiquidacion(
  * las que generó quien aprueba (salvo SUPERADMIN) y, con la política
  * BLOQUEAR, las de un medio con la seguridad social pendiente. El resultado
  * va por liquidación.
+ *
+ * Antes de cada aprobación se guarda la alerta de seguridad social vigente
+ * (`reevaluar_alerta_seg_social_srv`, en su propia transacción): si la
+ * aprobación falla por esa alerta, el RAISE no deshace la actualización y la
+ * ficha, la insignia de borradores y Ganancias muestran la alerta real (D78).
  */
 export async function aprobarLiquidaciones(
   entrada: EntradaAprobar
@@ -211,6 +217,18 @@ export async function aprobarLiquidaciones(
     const resultados: ResultadoAprobacion[] = []
     // En serie: cada aprobación bloquea su liquidación y reevalúa la seguridad social.
     for (const liquidacionId of validacion.data.liquidacionIds) {
+      const reevaluada = await contexto.admin.rpc(
+        "reevaluar_alerta_seg_social_srv",
+        argumentosRpc<"reevaluar_alerta_seg_social_srv">({
+          p_liquidacion_id: liquidacionId,
+          p_actor_id: contexto.actorId,
+          p_session_id: contexto.sessionId,
+        })
+      )
+      // No bloquea: la transición vuelve a evaluar la seguridad social.
+      if (reevaluada.error) {
+        informar("reevaluar_alerta_seg_social_srv", reevaluada.error)
+      }
       const { error } = await transicionar(contexto, {
         entidad: "liquidaciones",
         id: liquidacionId,
@@ -384,7 +402,9 @@ export async function descargarArchivoLiquidacion(
         entidad: "liquidaciones",
         entidadId: liquidacionId,
       },
-      descarga: `${NOMBRES_ARCHIVO[archivo]} LIQ-${liquidacionId.slice(0, 8)}.${extension}`,
+      // La parte aleatoria del uuid v7: el inicio (el instante) se repite en
+      // todas las liquidaciones de un mismo corte.
+      descarga: `${NOMBRES_ARCHIVO[archivo]} LIQ-${sufijoLiquidacion(liquidacionId)}.${extension}`,
     })
   } catch (error) {
     return falloInesperado("descargarArchivoLiquidacion", error)

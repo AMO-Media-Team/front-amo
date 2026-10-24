@@ -23,6 +23,7 @@ import { registrarExportacionFacturas } from "../actions"
 import { estadoTablaFacturas, ORDEN_ESTADOS_FACTURA } from "../listado"
 import {
   alcanceFactura,
+  diaExportable,
   situacionVencimiento,
   tituloFactura,
 } from "../presentacion"
@@ -164,7 +165,8 @@ export function TablaFacturas({
           },
           cell: ({ row }) => <CeldaAnunciante fila={row.original} />,
         }),
-        columna.accessor((fila) => fila.fechaEmision ?? "", {
+        // Exportadas como instante (mediodía en Bogotá), no como `date` crudo.
+        columna.accessor((fila) => diaExportable(fila.fechaEmision), {
           id: "emision",
           header: "Emisión",
           meta: {
@@ -175,7 +177,7 @@ export function TablaFacturas({
           },
           cell: ({ row }) => <Dia dia={row.original.fechaEmision} />,
         }),
-        columna.accessor((fila) => fila.fechaVencimiento ?? "", {
+        columna.accessor((fila) => diaExportable(fila.fechaVencimiento), {
           id: "vencimiento",
           header: "Vencimiento",
           meta: {

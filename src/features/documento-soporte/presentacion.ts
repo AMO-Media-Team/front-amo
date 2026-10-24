@@ -184,15 +184,37 @@ export function faltaEmitir({
   return estadoLiquidacion === "APROBADA" && documento?.estado !== "EMITIDO"
 }
 
-export function descargasDocumento(
-  documento: DocumentoSoporteFicha | null
-): ArchivoDocumento[] {
-  if (!documento) return []
+function archivosDe(documento: DocumentoSoporteFicha): ArchivoDocumento[] {
   return [
     ...(documento.archivoPath ? (["pdf"] as const) : []),
     ...(documento.archivoProveedorPath ? (["proveedor"] as const) : []),
     ...(documento.notaAjuste ? (["nota_ajuste"] as const) : []),
   ]
+}
+
+/** Lo que se puede descargar del documento; nada si sus archivos están reservados para la sesión. */
+export function descargasDocumento(
+  documento: DocumentoSoporteFicha | null
+): ArchivoDocumento[] {
+  if (!documento || documento.archivosReservados) return []
+  return archivosDe(documento)
+}
+
+/**
+ * El documento (o uno anterior) tiene archivos que la sesión no puede descargar por no tener
+ * `datos_sensibles.ver`: la sección lo explica en lugar de ofrecerlos.
+ */
+export function descargasReservadas(
+  documento: DocumentoSoporteFicha | null
+): boolean {
+  if (!documento?.archivosReservados) return false
+  return (
+    archivosDe(documento).length > 0 ||
+    documento.anteriores.some(
+      (anterior) =>
+        anterior.numero !== null || anterior.notaAjusteNumero !== null
+    )
+  )
 }
 
 export function accionesDocumentoSoporte(
@@ -231,9 +253,9 @@ export function accionesDocumentoSoporte(
           ? "regenerar"
           : "faltan",
     registrarCuds: !conCuds,
-    // D38 del RF: con CUDS se corrige con nota de ajuste antes de anular; una liquidación pagada ya no
-    // admite otro documento, así que desde aquí no se anula.
-    registrarNotaAjuste: aprobada && conCuds && documento.notaAjuste === null,
+    // D38 del RF: con CUDS se corrige con nota de ajuste antes de anular. Una liquidación pagada no anula su
+    // documento (D77: el pago necesita su soporte), pero sí registra la nota de ajuste que lo corrige.
+    registrarNotaAjuste: conCuds && documento.notaAjuste === null,
     anular: aprobada && (!conCuds || documento.notaAjuste !== null),
   }
 }
@@ -313,7 +335,7 @@ export function situacionDocumento(
       detalle:
         estadoLiquidacion === "APROBADA"
           ? "Si hay un error, se corrige con una nota de ajuste antes de anularlo."
-          : "El documento soporta el pago de esta liquidación.",
+          : "El documento soporta el pago de esta liquidación. Si hay un error, se corrige con una nota de ajuste.",
     }
   }
   return {

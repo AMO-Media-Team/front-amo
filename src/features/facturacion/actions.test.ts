@@ -392,6 +392,51 @@ describe("registrarNotaCredito (LIQ-008 c4)", () => {
       datos: { estado: "ANULADA", saldo: 0 },
     })
   })
+
+  const nota = {
+    facturaId: FACTURA,
+    numero: "NC126",
+    cude: CUFE,
+    fechaEmision: "2020-10-23",
+    valor: "100.000",
+    motivo: "Descuento comercial acordado con el anunciante.",
+    asignacionIds: ["0192f3a4-5b6c-7d8e-9f01-0000000000c1"],
+    archivoPath: PDF,
+  }
+
+  it("liberar una asignación que no está cancelada: el error va a la lista", async () => {
+    estado.respuestas.registrar_nota_credito_srv = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_CONFIG_INVALIDA",
+        details: "Solo se liberan las publicaciones canceladas.",
+        hint: "solo_canceladas",
+      },
+    }
+    expect(await registrarNotaCredito(nota)).toEqual({
+      ok: false,
+      error: MENSAJES_FACTURACION.soloCanceladas,
+      erroresCampo: { asignacionIds: [MENSAJES_FACTURACION.soloCanceladas] },
+    })
+  })
+
+  it("una factura pagada no admite nota crédito: lo dice y revalida la ficha", async () => {
+    estado.respuestas.registrar_nota_credito_srv = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        details: "La factura ya está pagada.",
+        hint: "factura_pagada",
+      },
+    }
+    expect(await registrarNotaCredito(nota)).toEqual({
+      ok: false,
+      error: MENSAJES_FACTURACION.facturaPagada,
+    })
+    expect(estado.revalidadas.length).toBeGreaterThan(0)
+  })
 })
 
 describe("anularBorradorFactura", () => {

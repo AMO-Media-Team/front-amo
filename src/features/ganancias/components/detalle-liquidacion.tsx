@@ -1,12 +1,14 @@
-import { Banknote, FileText, ListChecks, Receipt } from "lucide-react"
+import { Ban, Banknote, FileText, ListChecks, Receipt } from "lucide-react"
 import Link from "next/link"
 
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { rutaAsignacionMedio } from "@/features/mis-campanas/rutas"
 import {
   InsigniaTono,
   MarcaPlataforma,
 } from "@/features/operacion/components/distintivos"
 import {
+  AvisoEstadoFicha,
   CabeceraFicha,
   ListaDatos,
   SinDato,
@@ -24,9 +26,10 @@ import {
   fechaEstimada,
   nombreRetencion,
   PENDIENTE_DIAN,
+  TEXTO_ANULADA,
   textoPeriodo,
 } from "../presentacion"
-import { RUTA_GANANCIAS } from "../rutas"
+import { RUTA_GANANCIAS, RUTA_POR_LIQUIDAR } from "../rutas"
 import type {
   LineaLiquidacionMedio,
   LiquidacionMedio,
@@ -45,6 +48,7 @@ export function CabeceraLiquidacionMedio({
 }) {
   const estado = estadoParaMedio(liquidacion)
   const estimada = fechaEstimada(liquidacion, hoy)
+  const anulada = liquidacion.estado === "ANULADA"
   return (
     <CabeceraFicha
       volver={{ href: RUTA_GANANCIAS, titulo: "Ganancias" }}
@@ -61,9 +65,16 @@ export function CabeceraLiquidacionMedio({
       lateral={
         <>
           <span className="text-xs text-muted-foreground">
-            {liquidacion.estado === "PAGADA" ? "Recibiste" : "Recibes"} (neto)
+            {anulada
+              ? "Neto (anulado: no se paga)"
+              : `${liquidacion.estado === "PAGADA" ? "Recibiste" : "Recibes"} (neto)`}
           </span>
-          <span className="text-2xl font-bold cifras text-foreground">
+          <span
+            className={cn(
+              "text-2xl font-bold cifras",
+              anulada ? "text-muted-foreground line-through" : "text-foreground"
+            )}
+          >
             {formatearCOP(liquidacion.montoNeto)}
           </span>
           {estimada ? (
@@ -74,6 +85,33 @@ export function CabeceraLiquidacionMedio({
         </>
       }
     />
+  )
+}
+
+/**
+ * La liquidación anulada (se llega desde su aviso): no se paga, no tiene
+ * archivos ni admite factura, y sus publicaciones volvieron a «Por liquidar».
+ */
+export function AvisoLiquidacionAnulada() {
+  return (
+    <AvisoEstadoFicha
+      id="aviso-anulada"
+      tono="neutro"
+      icono={Ban}
+      titulo={TEXTO_ANULADA.titulo}
+      accion={
+        <EnlaceBoton
+          href={RUTA_POR_LIQUIDAR}
+          variant="outline"
+          size="sm"
+          className="w-full sm:w-fit"
+        >
+          Ver lo que tengo por liquidar
+        </EnlaceBoton>
+      }
+    >
+      {TEXTO_ANULADA.descripcion}
+    </AvisoEstadoFicha>
   )
 }
 

@@ -159,8 +159,9 @@ liquidación», «Estimado antes de retenciones».
   referencia y soporte (`ZonaArchivos`, subida firmada a `carpetaSoporte("liquidacion", id, "pago")`) →
   `registrar_pago_liquidacion_srv`. Si `documentoListo` es falso, el botón queda deshabilitado con «Documento soporte
   requerido: …». Lo usan la fila de «Por pagar» y la ficha de LQ.
-- Opcional si cabe: «Registrar el pago de la dispersión» (un comprobante para todas: se sube una vez a la carpeta de pago
-  de la primera y el servidor lo copia con el cliente de servicio a las demás antes de registrar cada una).
+- El pago se registra por liquidación, con el soporte propio de cada transferencia. «Registrar el pago de la dispersión»
+  (un comprobante copiado a todas) se construyó y se retiró en la revisión: cada medio podía descargar ese comprobante con
+  los datos de los demás (regla 7).
 
 ## Paquete FA — Facturas al anunciante y cartera (LIQ-008, ADM-004)
 

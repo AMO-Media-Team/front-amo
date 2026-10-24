@@ -3,11 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   esquemaGenerarArchivoPagos,
   esquemaRegistrarPago,
-  esquemaRegistrarPagoArchivo,
   LIMITES_SOPORTE_PAGO,
   mensajeFechaAnterior,
   MENSAJES_FORMULARIO_PAGO,
-  mimeDeSoporte,
   validarFormularioPago,
 } from "./schemas"
 
@@ -144,43 +142,5 @@ describe("LIMITES_SOPORTE_PAGO", () => {
       "image/png",
     ])
     expect(LIMITES_SOPORTE_PAGO.maxBytes).toBe(10 * 1024 * 1024)
-  })
-})
-
-describe("esquemaRegistrarPagoArchivo", () => {
-  const valido = {
-    dispersionId: OTRO,
-    liquidacionIds: [ID],
-    fecha: "2026-10-23",
-    referencia: "TRF-LOTE-1",
-    soportePath: `liquidacion/${ID}/pago/${OTRO}.png`,
-  }
-
-  it("las mismas reglas del pago, para al menos una liquidación sin repetir", () => {
-    expect(esquemaRegistrarPagoArchivo.safeParse(valido).success).toBe(true)
-    expect(
-      esquemaRegistrarPagoArchivo.safeParse({ ...valido, liquidacionIds: [] })
-        .success
-    ).toBe(false)
-    expect(
-      esquemaRegistrarPagoArchivo.safeParse({
-        ...valido,
-        liquidacionIds: [ID, ID],
-      }).success
-    ).toBe(false)
-    expect(
-      esquemaRegistrarPagoArchivo.safeParse({ ...valido, fecha: "2026-10-24" })
-        .success
-    ).toBe(false)
-  })
-})
-
-describe("mimeDeSoporte", () => {
-  it("reconoce solo los formatos del comprobante", () => {
-    expect(mimeDeSoporte("liquidacion/x/pago/a.pdf")).toBe("application/pdf")
-    expect(mimeDeSoporte("liquidacion/x/pago/a.JPG")).toBe("image/jpeg")
-    expect(mimeDeSoporte("liquidacion/x/pago/a.png")).toBe("image/png")
-    expect(mimeDeSoporte("liquidacion/x/pago/a.webp")).toBeNull()
-    expect(mimeDeSoporte("sin-extension")).toBeNull()
   })
 })

@@ -30,6 +30,7 @@ import {
   misLiquidaciones,
   resumenGanancias,
 } from "@/features/ganancias/queries"
+import { ID_POR_LIQUIDAR } from "@/features/ganancias/rutas"
 import { LimiteErrorMiMedio } from "@/features/mi-medio/components/limite-error-mi-medio"
 import { hoyBogota } from "@/features/mi-medio/queries"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
@@ -49,7 +50,10 @@ async function SeccionResumen({ enlaces }: { enlaces: Enlaces }) {
   return (
     <div className="flex flex-col gap-4">
       {resumen.segSocialPendiente ? (
-        <AvisoSeguridadSocial enlaceDocumentos={enlaces.miMedio} />
+        <AvisoSeguridadSocial
+          bloquea={resumen.segSocialBloquea}
+          enlaceDocumentos={enlaces.miMedio}
+        />
       ) : null}
       <ResumenGanancias resumen={resumen} />
     </div>
@@ -188,11 +192,18 @@ export default async function PaginaGanancias() {
             </div>
 
             <div className="flex min-w-0 flex-col gap-6">
-              <LimiteErrorMiMedio recurso="lo que tienes por liquidar">
-                <Suspense fallback={<EsqueletoBloque filas={3} />}>
-                  <SeccionPorLiquidar enlaces={enlaces} />
-                </Suspense>
-              </LimiteErrorMiMedio>
+              {/* Ancla fuera del Suspense: existe desde el primer pintado,
+                  para «Ver lo que tengo por liquidar» de una anulada. */}
+              <div
+                id={ID_POR_LIQUIDAR}
+                className="flex min-w-0 scroll-mt-20 flex-col"
+              >
+                <LimiteErrorMiMedio recurso="lo que tienes por liquidar">
+                  <Suspense fallback={<EsqueletoBloque filas={3} />}>
+                    <SeccionPorLiquidar enlaces={enlaces} />
+                  </Suspense>
+                </LimiteErrorMiMedio>
+              </div>
               <LimiteErrorMiMedio recurso="tu condición tributaria">
                 <Suspense fallback={<EsqueletoBloque filas={3} />}>
                   <SeccionCondicion

@@ -181,6 +181,56 @@ describe("TablaBorradores (LIQ-003, D17)", () => {
     )
   })
 
+  it("al cancelar, el foco vuelve al «Aprobar» de la barra (la selección sigue)", async () => {
+    const { usuario, tabla } = renderizar()
+    await usuario.click(
+      within(tabla).getByRole("checkbox", {
+        name: "Seleccionar la liquidación de Medio 1",
+      })
+    )
+    const aprobar = screen.getByRole("button", { name: "Aprobar" })
+    await usuario.click(aprobar)
+    const dialogo = await screen.findByRole("dialog", {
+      name: "¿Aprobar 1 liquidación?",
+    })
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Cancelar" })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    await waitFor(() => expect(aprobar).toHaveFocus())
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument()
+    expect(acciones.aprobarLiquidaciones).not.toHaveBeenCalled()
+  })
+
+  it("al cerrar el resultado, el foco va al título de la vista", async () => {
+    acciones.aprobarLiquidaciones.mockResolvedValue(
+      exito([{ liquidacionId: AJENA.id, ok: true, error: null }])
+    )
+    const { usuario, tabla } = renderizar()
+    await usuario.click(
+      within(tabla).getByRole("checkbox", {
+        name: "Seleccionar la liquidación de Medio 1",
+      })
+    )
+    await usuario.click(screen.getByRole("button", { name: "Aprobar" }))
+    const dialogo = await screen.findByRole("dialog", {
+      name: "¿Aprobar 1 liquidación?",
+    })
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Aprobar" })
+    )
+    const resultado = await screen.findByRole("dialog", {
+      name: "Resultado de la aprobación",
+    })
+    await usuario.click(
+      within(resultado).getByRole("button", { name: "Listo" })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Por aprobar" })).toHaveFocus()
+    )
+  })
+
   it("sin permiso de aprobar no hay casillas", () => {
     const { tabla } = renderizar({ puedeAprobar: false })
     expect(within(tabla).queryAllByRole("checkbox")).toHaveLength(0)

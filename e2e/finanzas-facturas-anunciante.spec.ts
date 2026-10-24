@@ -140,8 +140,12 @@ test.describe("facturas del anunciante · solo lectura", () => {
     )
     expect(nombres.sort()).toEqual(esperadas)
 
-    // Cada factura dice su estado y su saldo.
-    const primera = enlacesFacturas(page).first()
+    // Cada factura dice su estado y su saldo. El `has` se evalúa dentro de la
+    // fila: el enlace se busca por su nombre, no a partir del listado.
+    const primera = page.getByRole("link", {
+      name: nombres.sort()[0],
+      exact: true,
+    })
     const fila = listado(page)
       .getByRole("row")
       .filter({ has: primera })
@@ -300,7 +304,8 @@ test.describe("facturas del anunciante · factura expedida y borrador", () => {
       destino: `${RUTA}?campana=${campana.id}`,
     })
     await expect(enlacesFacturas(page)).toHaveCount(1)
-    const enlace = listado(page).getByRole("link", {
+    // El `has` se evalúa dentro de la fila: el enlace va sin el listado delante.
+    const enlace = page.getByRole("link", {
       name: `Factura ${emitida.numero}`,
       exact: true,
     })

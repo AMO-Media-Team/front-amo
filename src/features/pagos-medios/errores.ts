@@ -5,7 +5,11 @@
  * acción propia a los `hint` de la fase y se decide en qué campo del
  * formulario de pago va cada error.
  */
-import { type ErrorBd, interpretarErrorBd } from "@/lib/errores-bd"
+import {
+  codigoNegocio,
+  type ErrorBd,
+  interpretarErrorBd,
+} from "@/lib/errores-bd"
 import { formatearNumero } from "@/lib/format"
 
 export const HINTS_PAGOS = {
@@ -33,11 +37,8 @@ export const MENSAJES_PAGOS = {
   documentoRequerido:
     "Documento soporte requerido: falta el documento soporte o la factura del medio para registrar el pago.",
   sinArchivo: "Este archivo de pagos ya no existe o no tienes acceso a él.",
-  fueraDelArchivo:
-    "Alguna liquidación ya no está en este archivo de pagos (se incluyó en otro). La página ya muestra lo vigente.",
-  noAprobadaUna: "Ya no está aprobada (se pagó o se anuló mientras tanto).",
-  soporteNoCopiado:
-    "No pudimos copiar el comprobante a esta liquidación. Inténtalo de nuevo.",
+  respuestaPerdida:
+    "No supimos si el archivo de pagos quedó registrado: se perdió la respuesta. Revisa «Archivos de pagos» antes de generarlo otra vez.",
 } as const
 
 /** «No pudimos leer los datos de pago de Radio Pasto y La Voz…». */
@@ -91,6 +92,16 @@ export function interpretarErrorPagos(error: ErrorBd): ErrorPagos {
     default:
       return { mensaje: base.mensaje, hint, esperado: base.esperado }
   }
+}
+
+/**
+ * ¿Respondió la base de datos? Trae un SQLSTATE o un `AMO_*`: la escritura no
+ * se hizo. Sin código, el fallo fue del transporte (postgrest-js no lanza:
+ * devuelve `{ code: "" }`, y un POST no se reintenta) y la escritura pudo
+ * quedar hecha aunque la respuesta se perdiera.
+ */
+export function respondioLaBd(error: ErrorBd): boolean {
+  return Boolean(error.code?.trim()) || codigoNegocio(error) !== null
 }
 
 /** ¿El error dice que lo que se ve ya cambió (pagada, anulada, en otro archivo)? */

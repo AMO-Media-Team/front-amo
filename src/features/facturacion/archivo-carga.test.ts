@@ -7,6 +7,8 @@ import {
   FORMATO_ARCHIVO_CARGA,
   itemsDeCarga,
   nombreArchivoCarga,
+  PESO_EN_CENTAVOS,
+  porcentajeIvaCsv,
   repartirEnCentavos,
 } from "./archivo-carga"
 import type { LineaFactura } from "./tipos"
@@ -52,9 +54,10 @@ function datos(cambios: Partial<DatosArchivoCarga> = {}): DatosArchivoCarga {
       periodoHasta: "2026-10-22",
       campana: null,
       subtotal: 1_333_333,
-      iva: 253_333.27,
+      // `generar_factura_srv` redondea el IVA a pesos enteros.
+      iva: 253_333,
       valorTerceros: 0,
-      total: 1_586_666.27,
+      total: 1_586_666,
     },
     adquirente: {
       razonSocial: "Tiendas La Catorce S.A.S.",
@@ -93,6 +96,21 @@ describe("repartirEnCentavos", () => {
     expect(repartirEnCentavos([0, 0], 10)).toEqual([10, 0])
     expect(repartirEnCentavos([], 10)).toEqual([])
   })
+
+  it("en pesos enteros: partes sin centavos que suman el total", () => {
+    expect(
+      repartirEnCentavos([1_000_000, 333_333], 253_333, PESO_EN_CENTAVOS)
+    ).toEqual([190_000, 63_333])
+    expect(repartirEnCentavos([1, 1, 1], 10, PESO_EN_CENTAVOS)).toEqual([
+      4, 3, 3,
+    ])
+  })
+
+  it("un total con centavos se reparte en centavos aunque se pidan pesos", () => {
+    expect(repartirEnCentavos([1, 1, 1], 0.1, PESO_EN_CENTAVOS)).toEqual([
+      0.04, 0.03, 0.03,
+    ])
+  })
 })
 
 describe("itemsDeCarga", () => {
@@ -122,9 +140,9 @@ describe("itemsDeCarga", () => {
           ...datos().factura,
           esquema: "MANDATO",
           subtotal: 266_667,
-          iva: 50_666.73,
+          iva: 50_667,
           valorTerceros: 1_066_666,
-          total: 1_383_999.73,
+          total: 1_384_000,
         },
       })
     )
@@ -133,7 +151,24 @@ describe("itemsDeCarga", () => {
       baseIva: 200_000,
       ingresoTerceros: 800_000,
     })
-    expect(items[0].iva + items[1].iva).toBeCloseTo(50_666.73, 2)
+    expect(items.map((item) => item.iva)).toEqual([38_000, 12_667])
+    expect(cuadra).toBe(true)
+  })
+
+  it("el IVA de cada ítem va en pesos enteros y suma el del borrador", () => {
+    const { items } = itemsDeCarga(datos())
+    expect(items.map((item) => item.iva)).toEqual([190_000, 63_333])
+    expect(items.every((item) => Number.isInteger(item.iva))).toBe(true)
+    expect(items[1].valor).toBe(396_666)
+  })
+
+  it("un borrador antiguo con IVA en centavos sigue cuadrando", () => {
+    const { items, cuadra } = itemsDeCarga(
+      datos({
+        factura: { ...datos().factura, iva: 253_333.27, total: 1_586_666.27 },
+      })
+    )
+    expect(items.map((item) => item.iva)).toEqual([190_000, 63_333.27])
     expect(cuadra).toBe(true)
   })
 
@@ -166,10 +201,13 @@ describe("archivoCargaJson", () => {
     expect(json.items).toHaveLength(2)
     expect(json.totales).toEqual({
       subtotal: 1_333_333,
-      iva: 253_333.27,
+      iva: 253_333,
       ingreso_terceros: 0,
-      total: 1_586_666.27,
+      total: 1_586_666,
     })
+    // El JSON conserva la fracción en `porcentaje_iva`.
+    expect(json.factura.porcentaje_iva).toBe(0.19)
+    expect(json.items[0].porcentaje_iva).toBe(0.19)
     expect(json.cuadra).toBe(true)
   })
 
@@ -209,7 +247,19 @@ describe("archivoCargaCsv", () => {
     expect(lineas).toHaveLength(3)
     expect(lineas[0].split(";")[0]).toBe("Tipo de identificación")
     expect(lineas[1]).toContain("NIT;900123456;7;Tiendas La Catorce S.A.S.")
-    expect(lineas[1]).toContain(";1000000;0.19;190000;0;1190000")
+    // «% IVA» como porcentaje (19), no como fracción.
+    expect(lineas[1]).toContain(";1000000;19;190000;0;1190000")
+    expect(lineas[2]).toContain(";333333;19;63333;0;396666")
+  })
+})
+
+describe("porcentajeIvaCsv", () => {
+  it("convierte la fracción en porcentaje sin ruido de coma flotante", () => {
+    expect(porcentajeIvaCsv(0.19)).toBe(19)
+    expect(porcentajeIvaCsv(0.07)).toBe(7)
+    expect(porcentajeIvaCsv(0.055)).toBe(5.5)
+    expect(porcentajeIvaCsv(0)).toBe(0)
+    expect(porcentajeIvaCsv(null)).toBeNull()
   })
 })
 

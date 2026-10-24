@@ -64,6 +64,7 @@ export function aResumen(datos: unknown): ResumenGanancias {
     // Sin fila privada la BD supone que no factura: lleva documento soporte.
     requiereDocumentoSoporte: fila?.requiere_documento_soporte !== false,
     segSocialPendiente: booleano(fila?.seg_social_pendiente),
+    segSocialBloquea: booleano(fila?.seg_social_bloquea),
   }
 }
 

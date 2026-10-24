@@ -121,4 +121,5 @@ export const RESUMEN: ResumenGanancias = {
   comisionVisible: true,
   requiereDocumentoSoporte: true,
   segSocialPendiente: false,
+  segSocialBloquea: false,
 }

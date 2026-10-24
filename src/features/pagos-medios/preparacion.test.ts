@@ -5,10 +5,13 @@ import {
   estadosPreparacion,
   estaLista,
   filtrarPorPagar,
+  ESTADOS_PREPARACION,
   MAXIMO_POR_ARCHIVO,
+  nombreTarjetaPreparacion,
   ordenarPorPagar,
   paginar,
   pedidoDeSeleccion,
+  ROTULOS_PREPARACION,
   resumirPorPagar,
   sumarNeto,
 } from "./preparacion"
@@ -251,5 +254,26 @@ describe("paginar", () => {
       pagina: 3,
     })
     expect(paginar([], 3, 10)).toEqual({ filas: [], pagina: 1 })
+  })
+})
+
+describe("nombreTarjetaPreparacion", () => {
+  it("empieza por el rótulo visible y la cifra, y sigue con la etiqueta completa", () => {
+    expect(nombreTarjetaPreparacion("sin_documento", 2)).toBe(
+      "Sin documento: 2. Falta documento soporte o factura"
+    )
+    expect(nombreTarjetaPreparacion("sin_datos_pago", 1_234)).toBe(
+      "Datos incompletos: 1.234. Datos de pago incompletos"
+    )
+  })
+
+  it("cada tarjeta contiene su texto visible (WCAG 2.5.3)", () => {
+    for (const estado of ESTADOS_PREPARACION) {
+      expect(
+        nombreTarjetaPreparacion(estado, 3).startsWith(
+          `${ROTULOS_PREPARACION[estado]}: 3`
+        )
+      ).toBe(true)
+    }
   })
 })

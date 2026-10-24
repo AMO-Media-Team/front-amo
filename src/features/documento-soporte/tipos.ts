@@ -31,6 +31,13 @@ export interface DocumentoSoporteFicha {
   /** Archivo genérico para el proveedor tecnológico (JSON). */
   archivoProveedorPath: string | null
   notaAjuste: NotaAjusteDocumento | null
+  /**
+   * `true` si la sesión no tiene `datos_sensibles.ver`: el PDF, el archivo para el proveedor y la nota de
+   * ajuste (también los de los documentos anteriores) llevan el nombre, el documento de identidad y la
+   * dirección del medio, así que la sección no ofrece descargarlos (la acción también lo exige). Lo
+   * calcula el servidor; sin el campo, se ofrecen.
+   */
+  archivosReservados?: boolean
   /** Documentos anulados de la misma liquidación (correcciones con nota de ajuste), del más reciente al más antiguo. */
   anteriores: {
     id: string

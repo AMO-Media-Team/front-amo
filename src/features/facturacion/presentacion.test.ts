@@ -1,20 +1,27 @@
 import { describe, expect, it } from "vitest"
 
+import { fechaHoraBogota } from "@/components/data-table/exportar"
+import { formatearCOP } from "@/lib/format"
+
 import {
   abreviarCodigo,
   admiteCobro,
   agruparPendientes,
   alcanceFactura,
+  avisosConceptos,
   contarAsignaciones,
   describirPeriodo,
   diaDeInstante,
+  diaExportable,
   diasEntre,
+  distintivoLinea,
   efectoNotaCredito,
   efectoPago,
   enCentavos,
   esEsquema,
   etiquetaMedioPago,
   formatearDia,
+  liberableConNota,
   normalizarCodigoDian,
   PATRON_CODIGO_DIAN,
   seleccionPorFacturar,
@@ -22,6 +29,8 @@ import {
   situacionVencimiento,
   sugerenciaNumeracion,
   sumarDias,
+  TEXTO_SALDO_A_FAVOR,
+  textoEfectoPago,
   tituloFactura,
   vencimientoSugerido,
 } from "./presentacion"
@@ -54,6 +63,14 @@ describe("catálogos y estados", () => {
     expect(admiteCobro("ANULADA")).toBe(false)
   })
 
+  it("una nota crédito solo saca de la factura las canceladas (D88)", () => {
+    expect(liberableConNota("CANCELADA")).toBe(true)
+    expect(liberableConNota("EN_DISPUTA")).toBe(false)
+    expect(liberableConNota("VERIFICADA")).toBe(false)
+    expect(liberableConNota("LIQUIDADA")).toBe(false)
+    expect(liberableConNota("PAGADA")).toBe(false)
+  })
+
   it("nombra el alcance, el título y las cantidades", () => {
     expect(alcanceFactura(null)).toBe("Consolidada")
     expect(alcanceFactura("Navidad 2026")).toBe("Navidad 2026")
@@ -65,6 +82,15 @@ describe("catálogos y estados", () => {
 })
 
 describe("fechas de calendario", () => {
+  it("una fecha exportable no se corre al día anterior en el CSV", () => {
+    expect(diaExportable(null)).toBe("")
+    expect(fechaHoraBogota(new Date(diaExportable("2026-10-15")), false)).toBe(
+      "2026-10-15"
+    )
+    // El `date` crudo sí se correría: medianoche UTC es el día anterior en Bogotá.
+    expect(fechaHoraBogota(new Date("2026-10-15"), false)).toBe("2026-10-14")
+  })
+
   it("suma días y cuenta la distancia sin correrse por la zona horaria", () => {
     expect(sumarDias("2026-10-23", 30)).toBe("2026-11-22")
     expect(sumarDias("2026-12-31", 1)).toBe("2027-01-01")
@@ -223,6 +249,113 @@ describe("efecto de un pago (LIQ-008 c2)", () => {
     expect(efectoPago({ monto: 0, retenciones: 0, saldo: 100 }).efecto).toBe(
       "vacio"
     )
+  })
+})
+
+describe("texto del efecto de un pago", () => {
+  const parcial = { monto: 4_000_000, retenciones: 0, saldo: 10_000_000 }
+  const queda = `Queda un saldo de ${formatearCOP(6_000_000)}`
+
+  it("una emitida con abono pasa a pago parcial", () => {
+    expect(textoEfectoPago({ ...parcial, estado: "EMITIDA" })).toBe(
+      `${queda}: la factura pasa a pago parcial.`
+    )
+  })
+
+  it("una vencida con abono sigue vencida (no pasa a pago parcial)", () => {
+    const texto = textoEfectoPago({ ...parcial, estado: "VENCIDA" })
+    expect(texto).toBe(
+      `${queda}: la factura sigue vencida hasta que se pague el resto.`
+    )
+    expect(texto).not.toMatch(/pago parcial/)
+  })
+
+  it("una con pago parcial solo dice el saldo; el total la deja pagada", () => {
+    expect(textoEfectoPago({ ...parcial, estado: "PAGADA_PARCIAL" })).toBe(
+      `${queda}.`
+    )
+    expect(
+      textoEfectoPago({
+        monto: 10_000_000,
+        retenciones: 0,
+        saldo: 10_000_000,
+        estado: "VENCIDA",
+      })
+    ).toBe("Con este pago la factura queda pagada.")
+  })
+
+  it("sin monto o con más que el saldo no dice nada", () => {
+    expect(
+      textoEfectoPago({ monto: 0, retenciones: 0, saldo: 1, estado: "EMITIDA" })
+    ).toBeNull()
+    expect(
+      textoEfectoPago({ monto: 2, retenciones: 0, saldo: 1, estado: "EMITIDA" })
+    ).toBeNull()
+  })
+})
+
+describe("conceptos que ya no son facturables", () => {
+  it("las facturables no llevan distintivo", () => {
+    expect(distintivoLinea("EMITIDA", "VERIFICADA")).toBeNull()
+    expect(distintivoLinea("PAGADA", "PAGADA")).toBeNull()
+  })
+
+  it("en un borrador: ya no es facturable", () => {
+    expect(distintivoLinea("BORRADOR", "CANCELADA")).toEqual({
+      etiqueta: "Ya no es facturable",
+      tono: "peligro",
+    })
+  })
+
+  it("la cancelada pide nota crédito con saldo y se devuelve por fuera si está pagada", () => {
+    expect(distintivoLinea("VENCIDA", "CANCELADA")).toEqual({
+      etiqueta: "Requiere nota crédito",
+      tono: "peligro",
+    })
+    expect(distintivoLinea("PAGADA", "CANCELADA")).toEqual({
+      etiqueta: "Devolución por fuera",
+      tono: "aviso",
+    })
+  })
+
+  it("la que está en disputa espera su resolución", () => {
+    expect(distintivoLinea("EMITIDA", "EN_DISPUTA")).toEqual({
+      etiqueta: "Pendiente de la disputa",
+      tono: "aviso",
+    })
+  })
+
+  it("avisos de una expedida con saldo", () => {
+    expect(
+      avisosConceptos("EMITIDA", ["VERIFICADA", "CANCELADA", "EN_DISPUTA"])
+    ).toEqual([
+      "Una asignación se canceló: registra la nota crédito que la saca de la factura.",
+      "Una asignación está en disputa: si termina cancelada, requiere nota crédito.",
+    ])
+    expect(
+      avisosConceptos("PAGADA_PARCIAL", ["CANCELADA", "CANCELADA"])
+    ).toEqual([
+      "2 asignaciones se cancelaron: registra la nota crédito que las saca de la factura.",
+    ])
+  })
+
+  it("en una factura pagada lo cancelado se gestiona fuera de la plataforma", () => {
+    const [cancelada, disputa] = avisosConceptos("PAGADA", [
+      "CANCELADA",
+      "EN_DISPUTA",
+      "EN_DISPUTA",
+    ])
+    expect(cancelada).toBe(
+      `Una asignación se canceló con la factura ya pagada. ${TEXTO_SALDO_A_FAVOR}`
+    )
+    expect(disputa).toBe(
+      "2 asignaciones están en disputa: si terminan canceladas, la devolución se gestiona fuera de la plataforma."
+    )
+  })
+
+  it("sin avisos en un borrador o con todo facturable", () => {
+    expect(avisosConceptos("BORRADOR", ["CANCELADA"])).toEqual([])
+    expect(avisosConceptos("EMITIDA", ["VERIFICADA", "PAGADA"])).toEqual([])
   })
 })
 

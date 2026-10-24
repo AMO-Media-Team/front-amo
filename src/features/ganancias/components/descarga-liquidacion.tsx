@@ -16,7 +16,9 @@ import type { ArchivoLiquidacion } from "../tipos"
  * Descarga un archivo de la liquidación (soporte de pago, documento soporte o
  * la factura del medio): pide la URL firmada al tocar y la abre como adjunto,
  * sin salir de la página. Si el archivo no está (p. ej. aún no se genera), lo
- * dice en un aviso y el foco se queda en el botón.
+ * dice en un aviso y el foco se queda en el botón: mientras firma queda
+ * deshabilitado pero enfocable (`focusableWhenDisabled`), así el navegador no
+ * lo saca del foco y se puede reintentar con otro Enter.
  */
 export function BotonDescargaLiquidacion({
   liquidacionId,
@@ -57,8 +59,12 @@ export function BotonDescargaLiquidacion({
       size="sm"
       onClick={descargar}
       disabled={descargando}
+      focusableWhenDisabled
       aria-busy={descargando || undefined}
-      className={cn("relative z-10", className)}
+      className={cn(
+        "relative z-10 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        className
+      )}
     >
       {descargando ? (
         <Spinner data-icon="inline-start" role={undefined} aria-hidden />

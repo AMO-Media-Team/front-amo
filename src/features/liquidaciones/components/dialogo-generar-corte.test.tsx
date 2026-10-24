@@ -164,7 +164,7 @@ describe("DialogoGenerarCorte (LIQ-001)", () => {
     )
   })
 
-  it("sin medios por liquidar, el botón explica por qué no se puede", () => {
+  it("sin medios por liquidar, el botón explica por qué no se puede y sigue enfocable", async () => {
     render(
       <DialogoGenerarCorte
         sugerido={{
@@ -177,9 +177,14 @@ describe("DialogoGenerarCorte (LIQ-001)", () => {
       />
     )
     const boton = screen.getByRole("button", { name: "Generar corte" })
-    expect(boton).toBeDisabled()
+    expect(boton).toHaveAttribute("aria-disabled", "true")
     expect(boton).toHaveAccessibleDescription(
       "No hay medios con asignaciones verificadas por liquidar."
     )
+    // Tras un corte que liquida a todos, el foco vuelve aquí al cerrar.
+    boton.focus()
+    expect(boton).toHaveFocus()
+    await userEvent.setup().click(boton)
+    expect(screen.queryByRole("dialog")).toBeNull()
   })
 })

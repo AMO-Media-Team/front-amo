@@ -191,6 +191,39 @@ describe("construirDocumentoSoportePdf", () => {
     )
   })
 
+  it("un emoji, «★» o un texto NFD no dejan ilegible la línea (todo queda en WinAnsi)", async () => {
+    const doc = await construirDocumentoSoportePdf(
+      {
+        ...BASE,
+        vendedor: {
+          ...BASE.vendedor,
+          nombre: "Tatiana Martínez ★".normalize("NFD"),
+          direccion: "Cll 34 # 66-34 🏠",
+        },
+        lineas: [
+          {
+            ...BASE.lineas[0],
+            publicacion: "Promo 🔥 Navidad ★ en Pasto",
+            marca: "Café • Bar Ñandú".normalize("NFD"),
+          },
+        ],
+      },
+      null
+    )
+    const [primera] = textosPorPagina(doc)
+    // jsPDF codifica en UTF-16 (con nulos intercalados) la cadena que trae algo fuera de WinAnsi.
+    expect(primera.some((texto) => texto.includes("\u0000"))).toBe(false)
+    expect(primera).toEqual(
+      expect.arrayContaining([
+        "Promo Navidad en Pasto",
+        // «•» va como su byte de WinAnsi (0x95).
+        "Café \u0095 Bar Ñandú",
+        "Tatiana Martínez",
+        "Cll 34 # 66-34",
+      ])
+    )
+  })
+
   it("sin CUDS dice que falta transmitirlo; con CUDS lo imprime completo", async () => {
     const pendiente = await construirDocumentoSoportePdf(BASE, null)
     expect(textosPorPagina(pendiente)[0]).toContain(PENDIENTE_TRANSMISION)

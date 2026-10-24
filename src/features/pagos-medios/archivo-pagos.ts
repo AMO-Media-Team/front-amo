@@ -6,7 +6,7 @@
  *
  * Columnas: tipo y número de documento, titular, método, banco o billetera,
  * tipo y número de cuenta, valor en pesos sin decimales, referencia
- * `LIQ-{AAAAMMDD}-{8 primeros del id}` (la fecha es la del archivo, en
+ * `LIQ-{AAAAMMDD}-{12 últimos hex del id}` (la fecha es la del archivo, en
  * Bogotá: la misma liquidación incluida otra vez lleva otra fecha) y medio.
  * Los valores van en códigos estables (CC, BANCARIO, AHORROS) para que el
  * portal del banco o una plantilla los mapee sin ambigüedad.
@@ -55,12 +55,23 @@ function compactarFecha(fecha: string): string {
   return `${partes[1]}${partes[2]}${partes[3]}`
 }
 
-/** `LIQ-20261023-01a16b3e`: identifica la liquidación en el extracto del banco. */
-export function referenciaPago(liquidacionId: string, fecha: string): string {
-  const prefijo = liquidacionId.replaceAll("-", "").slice(0, 8)
-  if (prefijo.length < 8)
+const UUID =
+  /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+
+/**
+ * Parte aleatoria de un uuid v7 (sus 12 últimos hex, `rand_b`): los primeros
+ * son el instante en ms y se repiten en todas las liquidaciones de un mismo
+ * corte, así que no distinguen una de otra.
+ */
+export function sufijoLiquidacion(liquidacionId: string): string {
+  if (!UUID.test(liquidacionId))
     throw new Error("Identificador de liquidación inválido.")
-  return `LIQ-${compactarFecha(fecha)}-${prefijo}`
+  return liquidacionId.replaceAll("-", "").slice(-12).toLowerCase()
+}
+
+/** `LIQ-20261023-611fb53e04e4`: identifica la liquidación en el extracto del banco. */
+export function referenciaPago(liquidacionId: string, fecha: string): string {
+  return `LIQ-${compactarFecha(fecha)}-${sufijoLiquidacion(liquidacionId)}`
 }
 
 /** Pesos sin decimales (los bancos no dispersan centavos). */

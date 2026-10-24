@@ -53,8 +53,10 @@ export interface DialogoAprobarProps {
 /**
  * Aprobación en lote (LIQ-003): confirma lo elegido y muestra el resultado
  * por liquidación, porque la BD puede rechazar algunas (segregación D17,
- * seguridad social con la política BLOQUEAR, un cambio de estado). Al cerrar,
- * el foco vuelve al título de la vista: las filas aprobadas ya no están.
+ * seguridad social con la política BLOQUEAR, un cambio de estado). Al cerrar
+ * tras aprobar, el foco va al título de la vista: las filas aprobadas y la
+ * barra de selección ya no están. Si se cancela (o falla sin resultados), la
+ * selección sigue y el foco vuelve al botón «Aprobar» que abrió el diálogo.
  */
 export function DialogoAprobar({
   abierto,
@@ -117,7 +119,10 @@ export function DialogoAprobar({
     <Dialog open={abierto} onOpenChange={cambiarAbierto}>
       <DialogContent
         showCloseButton={false}
-        finalFocus={() => document.getElementById(ID_TITULO_VISTA)}
+        // `null`: el comportamiento por defecto (volver a quien lo abrió).
+        finalFocus={() =>
+          resultados ? document.getElementById(ID_TITULO_VISTA) : null
+        }
         className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
       >
         {resultados ? (

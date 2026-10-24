@@ -141,9 +141,3 @@ export interface SoporteCargado {
 export interface PagoRegistrado {
   liquidacionId: string
 }
-
-/** Resultado del pago de un archivo con un solo comprobante (cada liquidación por separado). */
-export interface PagosArchivoRegistrados {
-  registradas: { id: string; medio: string }[]
-  fallidas: { id: string; medio: string; mensaje: string }[]
-}

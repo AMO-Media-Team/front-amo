@@ -38,8 +38,8 @@ import { describir, repartirErrores } from "../errores-formulario"
 import { avisoEstadoFactura } from "../foco"
 import {
   efectoNotaCredito,
+  liberableConNota,
   normalizarCodigoDian,
-  sigueFacturable,
 } from "../presentacion"
 import {
   esquemaFormularioNota,
@@ -49,9 +49,10 @@ import {
   type ValoresFormularioNota,
 } from "../schemas"
 import type { LineaFactura } from "../tipos"
-import { CampoArchivo } from "./campo-archivo"
+import { CampoArchivo, enfocarCampoArchivo } from "./campo-archivo"
 import { DialogoFormulario } from "./dialogo-formulario"
 import { useArchivoSoporte } from "./use-archivo-soporte"
+import { useFocoDiferido } from "./use-foco-diferido"
 
 type Campo = Exclude<keyof ValoresFormularioNota, "facturaId">
 
@@ -72,12 +73,13 @@ export interface RegistrarNotaCreditoProps {
   pagado: number
   /** `YYYY-MM-DD` de la factura: la nota no puede ser anterior. */
   fechaEmision: string
+  /** Las asignaciones de la factura: solo las canceladas se ofrecen para sacarlas. */
   lineas: readonly LineaFactura[]
 }
 
 function valoresIniciales(
   facturaId: string,
-  lineas: readonly LineaFactura[]
+  canceladas: readonly LineaFactura[]
 ): ValoresFormularioNota {
   return {
     facturaId,
@@ -86,10 +88,8 @@ function valoresIniciales(
     fechaEmision: hoyEnBogota(),
     valor: "",
     motivo: "",
-    // Las que ya no son facturables (disputa, cancelación) son la razón habitual de la nota.
-    asignacionIds: lineas
-      .filter((linea) => !sigueFacturable(linea.estado))
-      .map((linea) => linea.asignacionId),
+    // Una cancelada es la razón habitual de la nota: llega marcada.
+    asignacionIds: canceladas.map((linea) => linea.asignacionId),
   }
 }
 
@@ -102,8 +102,10 @@ const TEXTOS_EFECTO = {
 /**
  * «Registrar nota crédito» (D38 del RF, LIQ-008 c4): la nota se emite en el
  * software de AMO y aquí se registran su número, CUDE, fecha, valor (hasta el
- * saldo), motivo, las asignaciones que libera y el PDF. Antes de enviar dice
- * si la factura queda anulada, pagada o con qué saldo.
+ * saldo), motivo, las asignaciones canceladas que saca de la factura y el
+ * PDF. Solo se ofrecen las canceladas (D88): liberar una que sigue facturable
+ * con una nota parcial la cobraría dos veces. Antes de enviar dice si la
+ * factura queda anulada, pagada o con qué saldo.
  */
 export function RegistrarNotaCredito({
   facturaId,
@@ -120,14 +122,23 @@ export function RegistrarNotaCredito({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const id = useId()
   const idFormulario = `${id}-formulario`
+  const idArchivo = `${id}-archivo`
+  const diferirFoco = useFocoDiferido(pendiente)
+  const canceladas = useMemo(
+    () => lineas.filter((linea) => liberableConNota(linea.estado)),
+    [lineas]
+  )
   const esquema = useMemo(
     () => esquemaFormularioNota({ saldo, fechaEmision }),
     [saldo, fechaEmision]
   )
   const formulario = useForm({
     resolver: zodResolver(esquema),
-    defaultValues: valoresIniciales(facturaId, lineas),
-    mode: "onTouched",
+    defaultValues: valoresIniciales(facturaId, canceladas),
+    // Al enviar y después en vivo: un error que aparece al salir de un campo
+    // movería la zona del archivo justo cuando se presiona «Elegir archivo».
+    mode: "onSubmit",
+    reValidateMode: "onChange",
   })
   const { register, formState, setError, control, setValue } = formulario
   const [valor, cude, motivo] = useWatch({
@@ -154,7 +165,7 @@ export function RegistrarNotaCredito({
 
   function cambiarAbierto(valorAbierto: boolean) {
     if (!valorAbierto) {
-      formulario.reset(valoresIniciales(facturaId, lineas))
+      formulario.reset(valoresIniciales(facturaId, canceladas))
       archivo.descartar()
       setErrorArchivo(null)
       setErrorGeneral(null)
@@ -167,11 +178,13 @@ export function RegistrarNotaCredito({
       setErrorGeneral(null)
       if (!archivo.elegido) {
         setErrorArchivo("Carga el PDF de la nota crédito.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const listo = await archivo.obtener()
       if (!listo?.ok) {
         setErrorArchivo(listo?.error ?? "Carga el PDF de la nota crédito.")
+        diferirFoco(() => enfocarCampoArchivo(idArchivo))
         return
       }
       const resultado = await registrarNotaCredito({
@@ -181,15 +194,18 @@ export function RegistrarNotaCredito({
       })
       if (!resultado.ok) {
         const errores = repartirErrores(resultado, CAMPOS)
-        errores.campos.forEach(([campo, mensaje], indice) =>
-          setError(
-            campo,
-            { type: "server", message: mensaje },
-            { shouldFocus: indice === 0 }
-          )
+        // Sin `shouldFocus`: el campo sigue deshabilitado hasta que termine la
+        // transición; el foco llega cuando vuelve a habilitarse.
+        errores.campos.forEach(([campo, mensaje]) =>
+          setError(campo, { type: "server", message: mensaje })
         )
         setErrorArchivo(errores.archivo)
         setErrorGeneral(errores.general)
+        const primero = errores.campos[0]?.[0]
+        if (primero) diferirFoco(() => formulario.setFocus(primero))
+        else if (errores.archivo) {
+          diferirFoco(() => enfocarCampoArchivo(idArchivo))
+        }
         return
       }
       const { estado } = resultado.datos
@@ -409,26 +425,33 @@ export function RegistrarNotaCredito({
               />
             </Field>
 
-            {lineas.length > 0 ? (
+            {canceladas.length > 0 ? (
               <Controller
                 control={control}
                 name="asignacionIds"
                 render={({ field, fieldState }) => {
                   const elegidas = new Set(field.value ?? [])
                   return (
-                    <FieldSet data-invalid={fieldState.invalid || undefined}>
+                    <FieldSet
+                      data-invalid={fieldState.invalid || undefined}
+                      aria-describedby={describir(
+                        `${id}-asignaciones-ayuda`,
+                        fieldState.error && `${id}-asignaciones-error`
+                      )}
+                    >
                       <FieldLegend variant="label">
-                        Asignaciones que salen de la factura{" "}
+                        Asignaciones canceladas que salen de la factura{" "}
                         <span className="font-normal text-muted-foreground">
                           (opcional)
                         </span>
                       </FieldLegend>
-                      <FieldDescription>
-                        Quedan libres para facturarse de nuevo. Marcadas: las
-                        que ya no están verificadas.
+                      <FieldDescription id={`${id}-asignaciones-ayuda`}>
+                        Dejan de contar en esta factura y no se vuelven a
+                        facturar. Solo se ofrecen las canceladas: las demás
+                        siguen facturadas aquí.
                       </FieldDescription>
                       <ul className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-lg border p-1.5">
-                        {lineas.map((linea) => {
+                        {canceladas.map((linea, indice) => {
                           const idCasilla = `${id}-asignacion-${linea.asignacionId}`
                           return (
                             <li key={linea.asignacionId}>
@@ -438,8 +461,12 @@ export function RegistrarNotaCredito({
                               >
                                 <Checkbox
                                   id={idCasilla}
+                                  // El primero recibe el foco si el servidor
+                                  // rechaza la lista (hint `solo_canceladas`).
+                                  ref={indice === 0 ? field.ref : undefined}
                                   checked={elegidas.has(linea.asignacionId)}
                                   disabled={pendiente}
+                                  aria-invalid={fieldState.invalid || undefined}
                                   onCheckedChange={(marcada) => {
                                     const siguiente = new Set(elegidas)
                                     if (marcada === true) {
@@ -461,12 +488,9 @@ export function RegistrarNotaCredito({
                                     </span>
                                   </span>
                                   <span className="truncate text-xs text-muted-foreground">
-                                    {[linea.oferta, linea.campana]
+                                    {[linea.oferta, linea.campana, "cancelada"]
                                       .filter(Boolean)
                                       .join(" · ")}
-                                    {sigueFacturable(linea.estado)
-                                      ? ""
-                                      : " · ya no está verificada"}
                                   </span>
                                 </span>
                                 <span className="shrink-0 text-sm cifras">
@@ -477,7 +501,10 @@ export function RegistrarNotaCredito({
                           )
                         })}
                       </ul>
-                      <FieldError errors={[fieldState.error]} />
+                      <FieldError
+                        id={`${id}-asignaciones-error`}
+                        errors={[fieldState.error]}
+                      />
                     </FieldSet>
                   )
                 }}
@@ -485,6 +512,7 @@ export function RegistrarNotaCredito({
             ) : null}
 
             <CampoArchivo
+              id={idArchivo}
               titulo="PDF de la nota crédito"
               descripcion="El PDF que generó el software de facturación (hasta 10 MB). Lo verá el anunciante."
               reglas={LIMITES_ARCHIVO.factura}

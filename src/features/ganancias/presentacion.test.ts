@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { liquidacion, liquidacionPorFacturar } from "./fixtures"
 import {
   archivosDescargables,
+  avisoSegSocial,
   contarPublicaciones,
   detalleRetencion,
   documentoParaMedio,
@@ -16,6 +17,7 @@ import {
   PENDIENTE_DIAN,
   puedeCargarFactura,
   rutaCargarFactura,
+  TEXTO_ANULADA,
   textoCuds,
   textoPeriodo,
   textoRegla,
@@ -63,9 +65,61 @@ describe("estadoParaMedio", () => {
     expect(estadoParaMedio(liquidacion({ fechaPago: null })).etiqueta).toBe(
       "Pagada"
     )
-    expect(estadoParaMedio(liquidacion({ estado: "ANULADA" })).tono).toBe(
-      "neutro"
-    )
+    expect(estadoParaMedio(liquidacion({ estado: "ANULADA" }))).toEqual({
+      etiqueta: "Anulada",
+      tono: "neutro",
+      descripcion:
+        "Se anuló: sus publicaciones volvieron a Por liquidar y entrarán en el próximo corte.",
+    })
+  })
+
+  it("la anulada explica adónde volvieron sus publicaciones", () => {
+    expect(TEXTO_ANULADA).toEqual({
+      titulo: "Esta liquidación se anuló",
+      descripcion:
+        "Sus publicaciones volvieron a Por liquidar y entrarán en el próximo corte.",
+    })
+  })
+})
+
+describe("avisoSegSocial", () => {
+  it("solo mientras espera aprobarse o pagarse", () => {
+    for (const estado of ["BORRADOR", "APROBADA"] as const) {
+      expect(
+        avisoSegSocial(liquidacion({ estado, alertaSegSocial: true }))
+      ).not.toBeNull()
+    }
+    // Ya pagada o anulada, la alerta con que se generó no pide nada.
+    for (const estado of ["PAGADA", "ANULADA"] as const) {
+      expect(
+        avisoSegSocial(
+          liquidacion({ estado, alertaSegSocial: true, bloqueaSegSocial: true })
+        )
+      ).toBeNull()
+    }
+    expect(avisoSegSocial(liquidacion({ estado: "BORRADOR" }))).toBeNull()
+  })
+
+  it("el texto depende de si la política bloquea", () => {
+    expect(
+      avisoSegSocial(
+        liquidacion({
+          estado: "BORRADOR",
+          alertaSegSocial: true,
+          bloqueaSegSocial: true,
+        })
+      )
+    ).toEqual({
+      bloquea: true,
+      texto:
+        "Seguridad social pendiente: cárgala para que podamos aprobar y pagar tu liquidación.",
+    })
+    expect(
+      avisoSegSocial(liquidacion({ estado: "APROBADA", alertaSegSocial: true }))
+    ).toEqual({
+      bloquea: false,
+      texto: "Seguridad social pendiente: cárgala para respaldar tus pagos.",
+    })
   })
 })
 
@@ -253,6 +307,18 @@ describe("archivos", () => {
       )
     ).toEqual(["factura"])
     expect(archivosDescargables(liquidacionPorFacturar())).toEqual([])
+  })
+
+  it("una anulada no deja descargar nada", () => {
+    expect(
+      archivosDescargables(
+        liquidacionPorFacturar({
+          estado: "ANULADA",
+          factura: { numero: "FE-1", conArchivo: true },
+        })
+      )
+    ).toEqual([])
+    expect(archivosDescargables(liquidacion({ estado: "ANULADA" }))).toEqual([])
   })
 })
 

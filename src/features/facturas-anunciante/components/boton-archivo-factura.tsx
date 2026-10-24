@@ -47,9 +47,15 @@ export function BotonArchivoFactura({
       variant={variante}
       size={tamano}
       disabled={descargando}
+      // Enfocable mientras firma: el foco no salta al <body> y, si falla, se
+      // reintenta desde el mismo botón (no hay `:disabled` que lo atenúe).
+      focusableWhenDisabled
       aria-label={nombre}
       aria-busy={descargando || undefined}
-      className={cn(className)}
+      className={cn(
+        "data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        className
+      )}
       onClick={() =>
         iniciar(async () => {
           const resultado = await firmarArchivoFactura({

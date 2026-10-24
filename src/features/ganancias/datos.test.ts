@@ -35,6 +35,7 @@ describe("aResumen", () => {
         comision_visible: false,
         requiere_documento_soporte: false,
         seg_social_pendiente: true,
+        seg_social_bloquea: true,
       })
     ).toEqual({
       ganadoMes: 2_631_520,
@@ -50,6 +51,7 @@ describe("aResumen", () => {
       comisionVisible: false,
       requiereDocumentoSoporte: false,
       segSocialPendiente: true,
+      segSocialBloquea: true,
     })
   })
 
@@ -61,6 +63,7 @@ describe("aResumen", () => {
     // Sin fila privada la BD supone documento soporte.
     expect(vacio.requiereDocumentoSoporte).toBe(true)
     expect(vacio.segSocialPendiente).toBe(false)
+    expect(vacio.segSocialBloquea).toBe(false)
   })
 })
 

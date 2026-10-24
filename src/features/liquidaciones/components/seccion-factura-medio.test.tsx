@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -52,9 +52,8 @@ beforeEach(() => {
   avisos.success.mockReset()
 })
 
-function renderizar(cambios: Partial<SeccionFacturaMedioProps> = {}) {
-  const usuario = userEvent.setup()
-  render(
+function seccion(cambios: Partial<SeccionFacturaMedioProps> = {}) {
+  return (
     <SeccionFacturaMedio
       liquidacionId={LIQ}
       medio="Radio Pasto"
@@ -65,7 +64,28 @@ function renderizar(cambios: Partial<SeccionFacturaMedioProps> = {}) {
       {...cambios}
     />
   )
-  return usuario
+}
+
+function renderizar(cambios: Partial<SeccionFacturaMedioProps> = {}) {
+  const usuario = userEvent.setup()
+  const { rerender } = render(seccion(cambios))
+  return Object.assign(usuario, {
+    revalidar: (nuevos: Partial<SeccionFacturaMedioProps>) =>
+      rerender(seccion({ ...cambios, ...nuevos })),
+  })
+}
+
+async function elegirPdf(
+  usuario: ReturnType<typeof userEvent.setup>,
+  dialogo: HTMLElement
+) {
+  const pdf = new File(["%PDF-1.4"], "factura.pdf", {
+    type: "application/pdf",
+  })
+  const entrada = dialogo.querySelector<HTMLInputElement>('input[type="file"]')
+  expect(entrada).not.toBeNull()
+  await usuario.upload(entrada!, pdf)
+  return pdf
 }
 
 describe("SeccionFacturaMedio (LIQ-004, D83)", () => {
@@ -73,7 +93,9 @@ describe("SeccionFacturaMedio (LIQ-004, D83)", () => {
     renderizar({ numero: "FE-1234", tieneArchivo: true })
     expect(screen.getByText("FE-1234")).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Descargar la factura del medio" })
+      screen.getByRole("button", {
+        name: "Descargar PDF de la factura del medio",
+      })
     ).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Corregir la factura" })
@@ -130,13 +152,7 @@ describe("SeccionFacturaMedio (LIQ-004, D83)", () => {
       within(dialogo).getByLabelText("Número de la factura"),
       "fe-77"
     )
-    const pdf = new File(["%PDF-1.4"], "factura.pdf", {
-      type: "application/pdf",
-    })
-    const entrada =
-      dialogo.querySelector<HTMLInputElement>('input[type="file"]')
-    expect(entrada).not.toBeNull()
-    await usuario.upload(entrada!, pdf)
+    const pdf = await elegirPdf(usuario, dialogo)
     expect(await within(dialogo).findByText("factura.pdf")).toBeInTheDocument()
 
     await usuario.click(
@@ -152,5 +168,64 @@ describe("SeccionFacturaMedio (LIQ-004, D83)", () => {
     expect(avisos.success).toHaveBeenCalledWith("Factura registrada", {
       description: "Radio Pasto: ya se puede registrar el pago.",
     })
+  })
+
+  it("al volver a abrir trae el número vigente, sin el archivo ni los errores de antes", async () => {
+    subida.subir.mockResolvedValue({ ok: true, datos: undefined, archivo: {} })
+    const usuario = renderizar({ numero: "FE-10", tieneArchivo: true })
+    await usuario.click(
+      screen.getByRole("button", { name: "Corregir la factura" })
+    )
+    let dialogo = await screen.findByRole("dialog")
+    const numero = within(dialogo).getByLabelText("Número de la factura")
+    expect(numero).toHaveValue("FE-10")
+    await usuario.clear(numero)
+    await usuario.type(numero, "FE-11")
+    await elegirPdf(usuario, dialogo)
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Registrar la factura" })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    // La ficha se revalida con el número nuevo; el diálogo sigue montado.
+    usuario.revalidar({ numero: "FE-11" })
+    await usuario.click(
+      screen.getByRole("button", { name: "Corregir la factura" })
+    )
+    dialogo = await screen.findByRole("dialog")
+    expect(within(dialogo).getByLabelText("Número de la factura")).toHaveValue(
+      "FE-11"
+    )
+    expect(within(dialogo).queryByText("factura.pdf")).toBeNull()
+  })
+
+  it("si se cerró con errores, al abrir de nuevo empieza limpio", async () => {
+    const usuario = renderizar({ numero: "FE-10", tieneArchivo: true })
+    await usuario.click(
+      screen.getByRole("button", { name: "Corregir la factura" })
+    )
+    let dialogo = await screen.findByRole("dialog")
+    await usuario.clear(within(dialogo).getByLabelText("Número de la factura"))
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Registrar la factura" })
+    )
+    expect(
+      within(dialogo).getByLabelText("Número de la factura")
+    ).toHaveAttribute("aria-invalid", "true")
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Cancelar" })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    await usuario.click(
+      screen.getByRole("button", { name: "Corregir la factura" })
+    )
+    dialogo = await screen.findByRole("dialog")
+    const numero = within(dialogo).getByLabelText("Número de la factura")
+    expect(numero).toHaveValue("FE-10")
+    expect(numero).not.toHaveAttribute("aria-invalid")
+    expect(
+      within(dialogo).queryByText("Elige el PDF de la factura.")
+    ).toBeNull()
   })
 })

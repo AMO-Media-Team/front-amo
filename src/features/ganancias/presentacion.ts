@@ -94,9 +94,54 @@ export function estadoParaMedio(
         etiqueta: "Anulada",
         tono: "neutro",
         descripcion:
-          "Se anuló: sus publicaciones vuelven a la próxima liquidación.",
+          "Se anuló: sus publicaciones volvieron a Por liquidar y entrarán en el próximo corte.",
       }
   }
+}
+
+/**
+ * La anulada, en voz del medio (se abre desde el aviso de anulación): no se
+ * paga y sus publicaciones vuelven a «Por liquidar».
+ */
+export const TEXTO_ANULADA = {
+  titulo: "Esta liquidación se anuló",
+  descripcion:
+    "Sus publicaciones volvieron a Por liquidar y entrarán en el próximo corte.",
+} as const
+
+// ── Seguridad social ─────────────────────────────────────────────────────────
+
+export interface AvisoSegSocial {
+  /** Con la política BLOQUEAR: sin la planilla no se aprueba ni se paga. */
+  bloquea: boolean
+  /** La línea del aviso en cada pago. */
+  texto: string
+}
+
+/**
+ * El aviso de seguridad social de una liquidación: solo mientras espera
+ * aprobarse o pagarse (en revisión o aprobada). Una pagada o anulada ya no
+ * depende de la planilla, aunque conserve la alerta con que se generó.
+ */
+export function avisoSegSocial(
+  liquidacion: Pick<
+    LiquidacionMedio,
+    "estado" | "alertaSegSocial" | "bloqueaSegSocial"
+  >
+): AvisoSegSocial | null {
+  if (!liquidacion.alertaSegSocial || !porPagar(liquidacion.estado)) {
+    return null
+  }
+  return liquidacion.bloqueaSegSocial
+    ? {
+        bloquea: true,
+        texto:
+          "Seguridad social pendiente: cárgala para que podamos aprobar y pagar tu liquidación.",
+      }
+    : {
+        bloquea: false,
+        texto: "Seguridad social pendiente: cárgala para respaldar tus pagos.",
+      }
 }
 
 export interface FechaEstimada {
@@ -297,6 +342,8 @@ export function archivosDescargables(
     | "factura"
   >
 ): ArchivoLiquidacion[] {
+  // Anulada: no se paga y su documento se anuló con ella.
+  if (liquidacion.estado === "ANULADA") return []
   const archivos: ArchivoLiquidacion[] = []
   if (liquidacion.estado === "PAGADA" && liquidacion.conSoportePago) {
     archivos.push("soporte_pago")

@@ -33,9 +33,11 @@ function contarPublicaciones(cantidad: number): string {
 function Concepto({
   concepto,
   verSeguimiento,
+  pagada,
 }: {
   concepto: ConceptoFactura
   verSeguimiento: boolean
+  pagada: boolean
 }) {
   const detalle = [concepto.formato, concepto.oferta]
     .filter(Boolean)
@@ -78,8 +80,9 @@ function Concepto({
         ) : null}
         {concepto.estado === "CANCELADA" ? (
           <p className="text-xs text-pretty text-destructive">
-            AMO la canceló después de facturarla: la corrige con una nota
-            crédito.
+            {pagada
+              ? "AMO la canceló con la factura ya pagada: por ahora la devolución o el saldo a favor se gestionan fuera de la plataforma."
+              : "AMO la canceló después de facturarla: la corrige con una nota crédito."}
           </p>
         ) : null}
       </div>
@@ -99,6 +102,7 @@ export function ConceptosFactura({
   grupos,
   mandato,
   anulada,
+  pagada = false,
   verSeguimiento,
   verCampanas,
 }: {
@@ -106,6 +110,11 @@ export function ConceptosFactura({
   /** En mandato la factura reparte cada valor entre comisión y terceros. */
   mandato: boolean
   anulada: boolean
+  /**
+   * Pagada: ya no admite notas crédito, así que una publicación cancelada se
+   * devuelve o queda como saldo a favor por fuera de la plataforma.
+   */
+  pagada?: boolean
   /** `asignaciones.ver_propias`: el medio enlaza a su tarjeta en el seguimiento. */
   verSeguimiento: boolean
   /** `campanas.gestionar_propias`: el nombre de la campaña enlaza a su ficha. */
@@ -184,6 +193,7 @@ export function ConceptosFactura({
                     key={concepto.id}
                     concepto={concepto}
                     verSeguimiento={verSeguimiento}
+                    pagada={pagada}
                   />
                 ))}
               </ul>

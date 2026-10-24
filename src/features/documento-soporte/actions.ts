@@ -4,8 +4,9 @@
  * Server Actions del documento soporte (LIQ-004). Patrón:
  *
  * 1. DAL (`requerirPermiso`) antes que nada: `liquidaciones.aprobar` para emitir, registrar y corregir;
- *    `liquidaciones.ver` para descargar. Generar los archivos exige además `datos_sensibles.ver`: el
- *    documento lleva el nombre, el documento de identidad y la dirección del medio.
+ *    `liquidaciones.ver` para descargar. Generar los archivos y descargarlos exige además
+ *    `datos_sensibles.ver`: el documento (y su nota de ajuste) lleva el nombre, el documento de identidad
+ *    y la dirección del medio.
  * 2. zod: el MISMO esquema que el diálogo.
  * 3. Las escrituras van por los `*_srv` con actor y sesión (`contextoDelActor`) o por `transicionar`
  *    (anular); la BD revalida permiso, estado, numeración, resolución, CUDS y archivos.
@@ -248,8 +249,9 @@ export async function emitirDocumentoSoporte(
 }
 
 /**
- * Genera (o vuelve a generar) el PDF y el archivo para el proveedor de un documento emitido por la
- * plataforma. Con la numeración del proveedor no: su PDF es el que vale.
+ * Genera los archivos de un documento emitido por la plataforma que no los tiene, o vuelve a generar su
+ * PDF: si ya tiene el archivo para el proveedor, el PDF sale de ese archivo (el que se transmitió) y él no
+ * se reemplaza. Con la numeración del proveedor no: su PDF es el que vale.
  */
 export async function generarArchivosDocumentoSoporte(
   entrada: EntradaDocumento
@@ -285,8 +287,9 @@ export async function generarArchivosDocumentoSoporte(
 
 /**
  * Registra el CUDS que devolvió el proveedor tras transmitir el documento (`registrar_cuds_srv`; repetir
- * el mismo es inocuo) y, con la numeración de la plataforma, vuelve a generar el PDF para que lo muestre.
- * Si eso falla, el CUDS queda registrado y la respuesta lo avisa.
+ * el mismo es inocuo) y, con la numeración de la plataforma, vuelve a generar el PDF para que lo muestre:
+ * sale del archivo para el proveedor ya guardado (el que se transmitió), no de los datos vigentes del
+ * medio. Si eso falla, el CUDS queda registrado y la respuesta lo avisa.
  */
 export async function registrarCuds(
   entrada: EntradaRegistrarCuds
@@ -528,9 +531,10 @@ export async function registrarNotaAjuste(
 }
 
 /**
- * Anula el documento emitido con un motivo (`transicionar` EMITIDO → ANULADO). Si ya se transmitió sin
- * nota de ajuste, la BD lo rechaza (hint `requiere_nota_ajuste`). La liquidación sigue aprobada y admite
- * otro documento.
+ * Anula el documento emitido con un motivo (`transicionar` EMITIDO → ANULADO). La BD lo rechaza si ya se
+ * transmitió sin nota de ajuste (hint `requiere_nota_ajuste`) o si la liquidación ya se pagó (hint
+ * `liquidacion_pagada`: es el soporte de ese pago; p. ej. alguien la pagó mientras la ficha seguía
+ * abierta). Anulado, la liquidación sigue aprobada y admite otro documento.
  */
 export async function anularDocumentoSoporte(
   entrada: EntradaAnularDocumento
@@ -567,8 +571,10 @@ export async function anularDocumentoSoporte(
 
 /**
  * URL firmada para descargar el PDF, el archivo para el proveedor o la nota de ajuste de un documento
- * (también de uno anulado). La ruta sale de la fila que la sesión puede leer y se firma como servicio:
- * queda `URL_FIRMADA` en la bitácora. Un archivo de los datos demo puede no existir en Storage.
+ * (también de uno anulado). Los tres llevan el nombre, el documento de identidad y la dirección del
+ * medio: exige `datos_sensibles.ver` además de `liquidaciones.ver` (regla 7). La ruta sale de la fila que
+ * la sesión puede leer y se firma como servicio: queda `URL_FIRMADA` en la bitácora. Un archivo de los
+ * datos demo puede no existir en Storage.
  */
 export async function firmarArchivoDocumentoSoporte(
   entrada: EntradaFirmarArchivo
@@ -576,6 +582,9 @@ export async function firmarArchivoDocumentoSoporte(
   const actor = await requerirPermiso("liquidaciones.ver")
   const validacion = esquemaFirmarArchivo.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
+  if (!puedeVerDatosSensibles(actor)) {
+    return fallo(MENSAJES_DOCUMENTO.sinDatosSensibles)
+  }
   const { documentoId, archivo } = validacion.data
 
   try {

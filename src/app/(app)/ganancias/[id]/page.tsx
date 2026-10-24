@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { Suspense } from "react"
 
 import {
+  AvisoLiquidacionAnulada,
   CabeceraLiquidacionMedio,
   DesgloseLiquidacion,
   DocumentoSoporteLiquidacion,
@@ -13,6 +14,7 @@ import { EsqueletoDesglose } from "@/features/ganancias/components/esqueletos"
 import { SeccionFacturaMedio } from "@/features/ganancias/components/factura-medio"
 import { AvisoSeguridadSocial } from "@/features/ganancias/components/secciones-ganancias"
 import {
+  avisoSegSocial,
   documentoParaMedio,
   puedeCargarFactura,
   textoPeriodo,
@@ -21,6 +23,7 @@ import {
   miLiquidacion,
   publicacionesDeLiquidacion,
 } from "@/features/ganancias/queries"
+import { RUTA_GANANCIAS } from "@/features/ganancias/rutas"
 import type { LiquidacionMedio } from "@/features/ganancias/tipos"
 import { LimiteErrorMiMedio } from "@/features/mi-medio/components/limite-error-mi-medio"
 import { hoyBogota } from "@/features/mi-medio/queries"
@@ -89,26 +92,42 @@ function Respaldo({ liquidacion }: { liquidacion: LiquidacionMedio }) {
  * CUDS o «Pendiente de transmisión a la DIAN») o, si factura, «Tu factura»
  * con el formulario para cargarla (D83); el desglose con cada retención y las
  * publicaciones liquidadas. Si falta la factura, ese bloque va primero.
+ *
+ * La anulada (se llega desde su aviso) solo dice que se anuló y adónde
+ * volvieron sus publicaciones: sin pago, archivos ni factura. Si la
+ * liquidación no existe o no es suya (un enlace viejo), vuelve a Ganancias.
  */
 export default async function PaginaLiquidacionMedio({
   params,
 }: PageProps<"/ganancias/[id]">) {
   const usuario = await requerirPermiso("liquidaciones.ver_propias")
   const { id } = await params
-  if (!UUID.test(id) || !usuario.medioId) notFound()
+  if (!UUID.test(id)) notFound()
+  if (!usuario.medioId) redirect(RUTA_GANANCIAS)
 
   const liquidacion = await miLiquidacion(id)
-  if (!liquidacion) notFound()
+  if (!liquidacion) redirect(RUTA_GANANCIAS)
   const hoy = hoyBogota()
+
+  if (liquidacion.estado === "ANULADA") {
+    return (
+      <ContenedorPagina>
+        <CabeceraLiquidacionMedio liquidacion={liquidacion} hoy={hoy} />
+        <AvisoLiquidacionAnulada />
+      </ContenedorPagina>
+    )
+  }
+
   const facturaPrimero =
     documentoParaMedio(liquidacion).tipo === "factura-pendiente"
+  const aviso = avisoSegSocial(liquidacion)
 
   return (
     <ContenedorPagina>
       <CabeceraLiquidacionMedio liquidacion={liquidacion} hoy={hoy} />
-      {liquidacion.alertaSegSocial ? (
+      {aviso ? (
         <AvisoSeguridadSocial
-          bloquea={liquidacion.bloqueaSegSocial}
+          bloquea={aviso.bloquea}
           enlaceDocumentos={tieneAlgunPermiso(usuario, [
             "medios.editar_propio",
           ])}

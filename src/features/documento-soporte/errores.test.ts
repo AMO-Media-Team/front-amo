@@ -144,6 +144,24 @@ describe("interpretarErrorDocumento", () => {
     ).toBe(MENSAJES_DOCUMENTO.requiereNotaAjuste)
   })
 
+  it("anular el documento de una liquidación ya pagada dice por qué no y cómo se corrige", () => {
+    const resultado = interpretarErrorDocumento(
+      errorBd(
+        "AMO_TRANSICION_INVALIDA",
+        "La liquidación ya se pagó: su documento soporte no se anula; corrígelo con una nota de ajuste.",
+        "liquidacion_pagada"
+      ),
+      "anular"
+    )
+    expect(resultado).toMatchObject({
+      mensaje: MENSAJES_DOCUMENTO.liquidacionPagada,
+      esperado: true,
+    })
+    expect(resultado.campo).toBeUndefined()
+    expect(resultado.mensaje).toMatch(/ya se pagó/)
+    expect(resultado.mensaje).toMatch(/nota de ajuste/)
+  })
+
   it("lo inesperado no se presenta como esperado ni muestra el texto técnico", () => {
     const resultado = interpretarErrorDocumento(
       { code: "XX000", message: "relation x does not exist" },

@@ -18,6 +18,16 @@ export interface CampoArchivoProps {
   /** Al elegir o quitar el archivo (p. ej. para limpiar el error). */
   onCambio?: () => void
   deshabilitado?: boolean
+  /** Id del contenedor: el formulario enfoca su primer botón si el archivo tiene error. */
+  id?: string
+}
+
+/** Enfoca el primer botón habilitado del campo («Elegir archivo», «Quitar»…). */
+export function enfocarCampoArchivo(id: string): void {
+  document
+    .getElementById(id)
+    ?.querySelector<HTMLElement>("button:not([disabled])")
+    ?.focus()
 }
 
 /**
@@ -33,10 +43,11 @@ export function CampoArchivo({
   error,
   onCambio,
   deshabilitado = false,
+  id,
 }: CampoArchivoProps) {
   const idError = useId()
   return (
-    <div className="flex flex-col gap-2">
+    <div id={id} className="flex flex-col gap-2">
       {archivo.elemento ? (
         <ListaSubidas
           elementos={[archivo.elemento]}

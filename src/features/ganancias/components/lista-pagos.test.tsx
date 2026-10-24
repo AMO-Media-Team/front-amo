@@ -108,6 +108,41 @@ describe("ListaPagos", () => {
     expect(boton).toHaveFocus()
   })
 
+  it("mientras firma la descarga, el botón sigue enfocable y no admite otro toque", async () => {
+    let responder: (valor: unknown) => void = () => {}
+    acciones.firmarArchivoLiquidacion.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver
+      })
+    )
+    render(
+      <ListaPagos
+        inicial={{ liquidaciones: [liquidacion()], siguiente: null }}
+        hoy={HOY}
+      />
+    )
+    const boton = within(tarjetas()[0]).getByRole("button", {
+      name: /^Soporte de pago/,
+    })
+    await userEvent.click(boton)
+    expect(boton).toHaveFocus()
+    expect(boton).toHaveAttribute("aria-disabled", "true")
+    expect(boton).toHaveAttribute("aria-busy", "true")
+    expect(boton).not.toBeDisabled()
+    await userEvent.keyboard("{Enter}")
+    expect(acciones.firmarArchivoLiquidacion).toHaveBeenCalledTimes(1)
+
+    responder({
+      ok: true,
+      datos: { url: "https://firmada.example/s.pdf", vigenciaSegundos: 300 },
+    })
+    await waitFor(() =>
+      expect(asignar).toHaveBeenCalledWith("https://firmada.example/s.pdf")
+    )
+    expect(boton).not.toHaveAttribute("aria-disabled", "true")
+    expect(boton).toHaveFocus()
+  })
+
   it("el medio que factura ve «Carga tu factura» y la fecha prevista del pago", () => {
     render(
       <ListaPagos
@@ -168,8 +203,42 @@ describe("ListaPagos", () => {
       within(enRevision).getByText("Documento soporte en preparación")
     ).toBeVisible()
     expect(
-      within(enRevision).getByText(/Seguridad social pendiente/)
+      within(enRevision).getByText(
+        "Seguridad social pendiente: cárgala para respaldar tus pagos."
+      )
     ).toBeVisible()
+  })
+
+  it("el aviso de seguridad social solo va en las que esperan pago, según la política", () => {
+    render(
+      <ListaPagos
+        inicial={{
+          liquidaciones: [
+            liquidacion({
+              id: "a",
+              estado: "BORRADOR",
+              fechaPago: null,
+              alertaSegSocial: true,
+              bloqueaSegSocial: true,
+            }),
+            // Pagada con la alerta con que se generó: ya no pide nada.
+            liquidacion({ id: "b", alertaSegSocial: true }),
+          ],
+          siguiente: null,
+        }}
+        hoy={HOY}
+      />
+    )
+    const [bloqueada, pagada] = tarjetas()
+    expect(
+      within(bloqueada).getByText(
+        "Seguridad social pendiente: cárgala para que podamos aprobar y pagar tu liquidación."
+      )
+    ).toBeVisible()
+    expect(within(pagada).getByText("Pagada el 21 oct 2026")).toBeVisible()
+    expect(
+      within(pagada).queryByText(/Seguridad social pendiente/)
+    ).not.toBeInTheDocument()
   })
 
   it("«Ver pagos anteriores» agrega la página siguiente y lo anuncia", async () => {
@@ -205,6 +274,41 @@ describe("ListaPagos", () => {
     expect(
       screen.queryByRole("button", { name: "Ver pagos anteriores" })
     ).not.toBeInTheDocument()
+    // El foco no se pierde: pasa al primer pago agregado, que quedó encima
+    // del botón, y el aviso final queda después de él.
+    expect(
+      within(tarjetas()[1]).getByRole("link", { name: "16 – 30 sept 2026" })
+    ).toHaveFocus()
+    expect(screen.getByText("Estos son todos tus pagos.")).toBeVisible()
+  })
+
+  it("mientras carga, «Ver pagos anteriores» sigue enfocable; sin pagos nuevos, el foco va al aviso final", async () => {
+    let responder: (valor: unknown) => void = () => {}
+    acciones.cargarPagos.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver
+      })
+    )
+    render(
+      <ListaPagos
+        inicial={{ liquidaciones: [liquidacion()], siguiente: ID_LIQUIDACION }}
+        hoy={HOY}
+      />
+    )
+    const boton = screen.getByRole("button", { name: "Ver pagos anteriores" })
+    await userEvent.click(boton)
+    const cargando = screen.getByRole("button", { name: "Cargando…" })
+    expect(cargando).toHaveFocus()
+    expect(cargando).toHaveAttribute("aria-disabled", "true")
+    expect(cargando).not.toBeDisabled()
+    // Un segundo Enter mientras carga no pide otra página.
+    await userEvent.keyboard("{Enter}")
+    expect(acciones.cargarPagos).toHaveBeenCalledTimes(1)
+
+    responder({ ok: true, datos: { liquidaciones: [], siguiente: null } })
+    await waitFor(() =>
+      expect(screen.getByText("Estos son todos tus pagos.")).toHaveFocus()
+    )
   })
 
   it("sin pagos explica cuándo aparecerán", () => {
