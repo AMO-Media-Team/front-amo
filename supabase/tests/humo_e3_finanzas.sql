@@ -410,6 +410,11 @@ begin
     pg_temp.ok(v_e ->> 'e' = 'AMO_NO_AUTORIZADO' and v_j ->> 'd' = 'Este medio no factura: su pago lleva documento soporte.'
                and (select numero_factura_medio = 'FE-77' and factura_medio_path = 'liquidacion/' || liq_f || '/factura/fe-77.pdf'
                     from public.liquidaciones where id = liq_f), jsonb_build_array(v_e, v_j)));
+  r := r || jsonb_build_object('e3_finanzas_sabe_que_ya_puede_pagar',
+    pg_temp.ok((select count(*) = 1 from public.notificaciones where usuario_id = u_fin and tipo = 'cola.factura_medio_cargada'
+                and entidad_id = liq_f::text)
+               and not exists (select 1 from public.notificaciones where usuario_id = u_adm and tipo = 'cola.factura_medio_cargada'),
+               null));
 
   -- ── (f) Dispersión en dos pasos (LIQ-005) ──────────────────────────────────────────────────────────────────────
   v_e := pg_temp.srv_falla(format('select public.datos_dispersion_srv(array[%L]::uuid[], %L, %L)', liq_s, u_tes, s_tes));
@@ -438,6 +443,11 @@ begin
                     and entidad_id = disp::text)
                and (select cantidad_liquidaciones = 2 and monto_total = 7442720 + 760272 from public.dispersiones where id = disp)
                and (select count(*) = 2 from public.liquidaciones where dispersion_id = disp), v_e));
+  v_txt := pg_temp.como(c_fin, 'authenticated', format('select string_agg(nombre, '','') from public.nombres_equipo(array[%L, %L]::uuid[])',
+                                                        u_fin, u_ms)) #>> '{}';
+  v_n := pg_temp.como(c_ms, 'authenticated', format('select count(*) from public.nombres_equipo(array[%L]::uuid[])', u_fin));
+  r := r || jsonb_build_object('f6_nombres_del_equipo_solo_internos', pg_temp.ok(v_txt = 'Fabio Finanzas' and v_n = 0,
+                                                                                 jsonb_build_array(v_txt, v_n)));
   v_e := pg_temp.srv_falla(format('select public.datos_dispersion_srv(array[%L]::uuid[], %L, %L)', liq_s, u_fin, s_fin));
   v_n := pg_temp.srv(format('select count(*) from public.datos_dispersion_srv(array[%L]::uuid[], %L, %L, true)', liq_s, u_fin, s_fin));
   r := r || jsonb_build_object('f5_no_se_dispersa_dos_veces_sin_confirmar',

@@ -47,7 +47,10 @@ insert into public.plantillas_notificacion (clave, canal, nombre, asunto, cuerpo
    'Registramos la nota crédito {{nota}} por {{valor}} a la factura {{numero}}. Saldo: {{saldo}}.',
    array['nota', 'valor', 'numero', 'saldo']),
   ('factura.anulada', 'APP', 'Factura anulada', null,
-   'La factura {{numero}} quedó anulada con la nota crédito {{nota}}.', array['numero', 'nota'])
+   'La factura {{numero}} quedó anulada con la nota crédito {{nota}}.', array['numero', 'nota']),
+  ('cola.factura_medio_cargada', 'APP', 'Factura del medio cargada', null,
+   '{{medio}} cargó su factura {{numero}} de la liquidación del periodo {{periodo}}: ya se puede pagar.',
+   array['medio', 'numero', 'periodo'])
 on conflict (clave, canal) do nothing;
 
 -- El archivo para el proveedor tecnológico del documento soporte es JSON (formato genérico hasta tener el suyo).
@@ -825,12 +828,13 @@ grant execute on function public.registrar_dispersion_srv(uuid, uuid[], text, uu
 -- medios_privado; los datos de pago se revelan solo al generar el archivo).
 create function public.liquidaciones_por_pagar(p_limite integer default 100, p_desplazamiento integer default 0)
 returns table (id uuid, medio_id uuid, medio text, periodo_inicio date, periodo_fin date, cantidad_asignaciones integer,
-               monto_neto numeric, aprobada_at timestamptz, requiere_documento_soporte boolean, documento_listo boolean,
+               monto_neto numeric, created_at timestamptz, aprobada_at timestamptz, requiere_documento_soporte boolean,
+               documento_listo boolean,
                datos_pago_listos boolean, metodo_pago public.metodo_pago, dispersion_id uuid, dispersada_at timestamptz,
                total bigint)
 language sql stable security definer set search_path = '' as $$
-  select l.id, l.medio_id, m.nombre, l.periodo_inicio, l.periodo_fin, l.cantidad_asignaciones, l.monto_neto, l.aprobada_at,
-         l.requiere_documento_soporte,
+  select l.id, l.medio_id, m.nombre, l.periodo_inicio, l.periodo_fin, l.cantidad_asignaciones, l.monto_neto, l.created_at,
+         l.aprobada_at, l.requiere_documento_soporte,
          case when l.requiere_documento_soporte
               then exists (select 1 from public.documentos_soporte d where d.liquidacion_id = l.id and d.estado = 'EMITIDO')
               else l.numero_factura_medio is not null and l.factura_medio_path is not null end,
@@ -848,6 +852,19 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.liquidaciones_por_pagar(integer, integer) from public, anon;
 grant execute on function public.liquidaciones_por_pagar(integer, integer) to authenticated;
+
+-- Nombres de las personas del equipo AMO que generaron o registraron algo de Finanzas (quien no tiene `usuarios.ver`
+-- no lee perfiles): solo perfiles de roles internos y solo para quien ve liquidaciones o facturas.
+create function public.nombres_equipo(p_ids uuid[])
+returns table (id uuid, nombre text)
+language sql stable security definer set search_path = '' as $$
+  select p.id, p.nombre from public.perfiles p join public.roles r on r.id = p.rol_id
+  where p.id = any (p_ids) and r.tipo = 'ADMIN'
+    and (select private.acceso_valido())
+    and ((select private.tiene_permiso('liquidaciones.ver')) or (select private.tiene_permiso('facturas.ver')))
+$$;
+revoke all on function public.nombres_equipo(uuid[]) from public, anon;
+grant execute on function public.nombres_equipo(uuid[]) to authenticated;
 
 -- LIQ-004: el medio que factura aporta el número y el archivo de su factura (también puede hacerlo Finanzas).
 create function private.puedo_subir_factura_medio(p_liquidacion_id uuid) returns boolean
@@ -894,6 +911,13 @@ begin
       detail = 'Carga el PDF de la factura.', hint = 'archivo_no_cargado';
   end if;
   update public.liquidaciones x set numero_factura_medio = v_numero, factura_medio_path = p_archivo_path where x.id = l.id;
+  -- Quien paga se entera de que ya puede hacerlo (si la cargó el medio).
+  if v_tipo = 'MEDIO' then
+    perform private.notificar_cola('liquidaciones.registrar_pago', 'cola.factura_medio_cargada',
+      jsonb_build_object('medio', (select m.nombre from public.medios m where m.id = l.medio_id), 'numero', v_numero,
+                         'periodo', to_char(l.periodo_inicio, 'DD/MM/YYYY') || ' al ' || to_char(l.periodo_fin, 'DD/MM/YYYY')),
+      'liquidaciones', l.id::text, 0::smallint);
+  end if;
 end $$;
 revoke all on function public.registrar_factura_medio_srv(uuid, text, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.registrar_factura_medio_srv(uuid, text, text, uuid, uuid) to service_role;

@@ -21,10 +21,14 @@ import { serializarFecha } from "../../src/lib/fechas"
 import type { Database } from "../../src/types/database.types"
 import {
   CUENTA_INSTAGRAM_E2E,
+  CUENTA_INSTAGRAM_FACTURA_E2E,
+  CUENTA_INSTAGRAM_FINANZAS_E2E,
   CUENTA_INSTAGRAM_SUSPENSION_E2E,
   type CuentaSocialE2E,
   type DatosBaseMedio,
   MEDIO_E2E,
+  MEDIO_FACTURA_E2E,
+  MEDIO_FINANZAS_E2E,
   MEDIO_SUSPENSION_E2E,
   NIVEL_MEDIO_E2E,
 } from "./medios-e2e"
@@ -36,6 +40,20 @@ export type TipoDocumentoMedio = Enums["documento_medio_tipo"]
 export type MetodoPago = Enums["metodo_pago"]
 
 // ── Datos de pago ────────────────────────────────────────────────────────────
+
+/** Condición tributaria del medio (`medios_privado`): decide retenciones y si lleva documento soporte. */
+export interface CondicionTributariaE2E {
+  declarante: boolean
+  obligadoFacturar: boolean
+  responsableIva: boolean
+}
+
+/** No declarante, no factura ni es responsable de IVA: lleva documento soporte. */
+export const SIN_OBLIGACIONES_E2E: CondicionTributariaE2E = {
+  declarante: false,
+  obligadoFacturar: false,
+  responsableIva: false,
+}
 
 /** Datos de pago y condición tributaria de un medio E2E (ficticios; siempre por banco). */
 export interface PagoMedioE2E {
@@ -49,6 +67,8 @@ export interface PagoMedioE2E {
   celular: string
   email: string
   direccion: string
+  /** Por omisión, sin obligaciones (`SIN_OBLIGACIONES_E2E`). */
+  condicion?: CondicionTributariaE2E
 }
 
 /** Datos de pago y condición tributaria del Medio E2E (ficticios). */
@@ -79,6 +99,40 @@ export const PAGO_MEDIO_SUSPENSION_E2E = {
   direccion: "Carrera 50 # 70-10, Barranquilla",
 } as const satisfies PagoMedioE2E
 
+/** Datos de pago del Medio Finanzas E2E: no declarante ni facturador (documento soporte). */
+export const PAGO_MEDIO_FINANZAS_E2E = {
+  titular: "Titular Medio Finanzas E2E",
+  tipoDocumento: "CC",
+  numeroDocumento: "1099000004",
+  metodo: "BANCARIO",
+  banco: "Banco de Bogotá",
+  tipoCuenta: "AHORROS",
+  numeroCuenta: "40900012348",
+  celular: "+57 3000000004",
+  email: "pagos.medio.finanzas.e2e@amo.test",
+  direccion: "Calle 26 # 13-19, Bogotá",
+  condicion: SIN_OBLIGACIONES_E2E,
+} as const satisfies PagoMedioE2E
+
+/** Datos de pago del Medio Factura E2E: declarante y obligado a facturar (carga su factura). */
+export const PAGO_MEDIO_FACTURA_E2E = {
+  titular: "Titular Medio Factura E2E",
+  tipoDocumento: "CC",
+  numeroDocumento: "1099000005",
+  metodo: "BANCARIO",
+  banco: "Davivienda",
+  tipoCuenta: "CORRIENTE",
+  numeroCuenta: "40900012349",
+  celular: "+57 3000000005",
+  email: "pagos.medio.factura.e2e@amo.test",
+  direccion: "Carrera 7 # 71-21, Bogotá",
+  condicion: {
+    declarante: true,
+    obligadoFacturar: true,
+    responsableIva: false,
+  },
+} as const satisfies PagoMedioE2E
+
 /**
  * Cuenta que va cifrada en `datos_pago_cifrados`, con el contrato del paquete
  * «Mi medio» (`serializarCuentaPago`): la revisión de AMO y la dispersión la
@@ -104,6 +158,12 @@ export interface MedioVerificadoE2E {
   nivel: number
   cuenta: CuentaSocialE2E
   pago: PagoMedioE2E
+  /**
+   * Exige que la certificación de su medio de pago se haya aprobado después
+   * del último cambio de los datos de pago (la regla de `datos_pago_listos`
+   * del archivo de pagos, LIQ-005): si se vuelven a guardar, se aprueba otra.
+   */
+  certificacionPosteriorAlPago?: boolean
 }
 
 /** «Medio E2E»: el de la pauta del medio. */
@@ -120,6 +180,24 @@ export const MEDIO_SUSPENSION_VERIFICADO_E2E: MedioVerificadoE2E = {
   nivel: NIVEL_MEDIO_E2E,
   cuenta: CUENTA_INSTAGRAM_SUSPENSION_E2E,
   pago: PAGO_MEDIO_SUSPENSION_E2E,
+}
+
+/** «Medio Finanzas E2E»: lleva documento soporte; listo para el archivo de pagos. */
+export const MEDIO_FINANZAS_VERIFICADO_E2E: MedioVerificadoE2E = {
+  datos: MEDIO_FINANZAS_E2E,
+  nivel: NIVEL_MEDIO_E2E,
+  cuenta: CUENTA_INSTAGRAM_FINANZAS_E2E,
+  pago: PAGO_MEDIO_FINANZAS_E2E,
+  certificacionPosteriorAlPago: true,
+}
+
+/** «Medio Factura E2E»: declarante y obligado a facturar; listo para el archivo de pagos. */
+export const MEDIO_FACTURA_VERIFICADO_E2E: MedioVerificadoE2E = {
+  datos: MEDIO_FACTURA_E2E,
+  nivel: NIVEL_MEDIO_E2E,
+  cuenta: CUENTA_INSTAGRAM_FACTURA_E2E,
+  pago: PAGO_MEDIO_FACTURA_E2E,
+  certificacionPosteriorAlPago: true,
 }
 
 /** Las funciones de `src/lib/cifrado.ts` que necesita el aprovisionamiento. */
@@ -140,6 +218,7 @@ function camposPlanosPago(
   pago: PagoMedioE2E
 ) {
   const numeroDocumento = normalizarNumeroDocumento(pago.numeroDocumento)
+  const condicion = pago.condicion ?? SIN_OBLIGACIONES_E2E
   return {
     titular_nombre: pago.titular,
     tipo_documento: pago.tipoDocumento,
@@ -149,9 +228,9 @@ function camposPlanosPago(
     numero_documento_resumen: cifrador.enmascarar(numeroDocumento),
     metodo_pago: pago.metodo,
     datos_pago_resumen: cifrador.enmascarar(pago.numeroCuenta, pago.banco),
-    es_declarante: false,
-    obligado_facturar: false,
-    responsable_iva: false,
+    es_declarante: condicion.declarante,
+    obligado_facturar: condicion.obligadoFacturar,
+    responsable_iva: condicion.responsableIva,
     celular: pago.celular,
     email_contacto: pago.email,
     direccion: pago.direccion,
@@ -280,14 +359,17 @@ export function cuentaAlDia(
 
 // ── Documentos ───────────────────────────────────────────────────────────────
 
+/** Certificado que respalda el medio de pago (bancaria o de billetera). */
+export function certificadoDe(metodo: MetodoPago): TipoDocumentoMedio {
+  return metodo === "BANCARIO" ? "CERT_BANCARIA" : "CERT_BILLETERA"
+}
+
 /** Documentos del nivel más el certificado de su medio de pago (`validar_verificacion_medio`). */
 export function documentosExigidos(
   requeridosDelNivel: readonly TipoDocumentoMedio[],
   metodo: MetodoPago
 ): TipoDocumentoMedio[] {
-  const certificado: TipoDocumentoMedio =
-    metodo === "BANCARIO" ? "CERT_BANCARIA" : "CERT_BILLETERA"
-  return [...new Set([...requeridosDelNivel, certificado])]
+  return [...new Set([...requeridosDelNivel, certificadoDe(metodo)])]
 }
 
 export type FilaDocumentoAprobado = Pick<
@@ -311,6 +393,31 @@ export function tiposVigentes(
         .map((documento) => documento.tipo)
     ),
   ]
+}
+
+/**
+ * ¿Hay una certificación del medio de pago aprobada, vigente y cargada
+ * después del último cambio de los datos de pago? Es la regla de
+ * `private.datos_pago_listos` (LIQ-005): sin ella el archivo de pagos rechaza
+ * al medio (`datos_pago_incompletos`). `cambiadoAt` nulo: nunca cambió.
+ */
+export function certificacionPosteriorAlPago(
+  aprobados: readonly (FilaDocumentoAprobado & { created_at: string })[],
+  {
+    metodo,
+    cambiadoAt,
+    hoy,
+  }: { metodo: MetodoPago; cambiadoAt: string | null; hoy: string }
+): boolean {
+  const certificado = certificadoDe(metodo)
+  const desde = cambiadoAt === null ? null : Date.parse(cambiadoAt)
+  return aprobados.some(
+    (documento) =>
+      documento.tipo === certificado &&
+      (documento.fecha_vencimiento === null ||
+        documento.fecha_vencimiento >= hoy) &&
+      (desde === null || Date.parse(documento.created_at) >= desde)
+  )
 }
 
 /** Las fotos de la cédula van como imagen; los certificados y registros, en PDF. */
@@ -351,6 +458,12 @@ export interface EstadoMedioVerificado {
   /** Tipos con un documento APROBADO y vigente. */
   documentosVigentes: readonly TipoDocumentoMedio[]
   documentosExigidos: readonly TipoDocumentoMedio[]
+  /**
+   * La certificación del medio de pago se aprobó después del último cambio de
+   * los datos de pago (`certificacionPosteriorAlPago`). Solo cuenta para los
+   * medios que lo exigen; sin dato se da por cumplida.
+   */
+  certificacionPosteriorAlPago?: boolean
 }
 
 export type PasoMedio =
@@ -433,14 +546,41 @@ export function pasosEstadoMedio(
  */
 export function planMedioVerificado(
   estado: EstadoMedioVerificado,
-  medio: Pick<MedioVerificadoE2E, "cuenta" | "nivel"> = MEDIO_VERIFICADO_E2E
+  medio: Pick<
+    MedioVerificadoE2E,
+    "cuenta" | "nivel" | "pago" | "certificacionPosteriorAlPago"
+  > = MEDIO_VERIFICADO_E2E
 ): PasoMedio[] {
+  const documentos = pasosDocumentos(estado)
   return [
     ...pasosCuenta(estado.cuenta, medio.cuenta.seguidores),
     ...(estado.pagoAlDia ? [] : [{ paso: "GUARDAR_PAGO" } as const]),
-    ...pasosDocumentos(estado),
+    ...documentos,
+    ...pasoCertificacionPosterior(estado, medio, documentos),
     ...pasosEstadoMedio(estado.estado, estado.nivel, medio.nivel),
   ]
+}
+
+/**
+ * Guardar el pago marca `datos_pago_cambiados_at`: si el medio exige la
+ * certificación posterior y no queda ya en la lista, se aprueba otra después.
+ */
+function pasoCertificacionPosterior(
+  estado: EstadoMedioVerificado,
+  medio: Pick<MedioVerificadoE2E, "pago" | "certificacionPosteriorAlPago">,
+  documentos: readonly PasoMedio[]
+): PasoMedio[] {
+  if (!medio.certificacionPosteriorAlPago) return []
+  const certificado = certificadoDe(medio.pago.metodo)
+  const yaVa = documentos.some(
+    (paso) =>
+      paso.paso === "APROBAR_DOCUMENTO" && paso.documento === certificado
+  )
+  const hace =
+    !estado.pagoAlDia || estado.certificacionPosteriorAlPago === false
+  return hace && !yaVa
+    ? [{ paso: "APROBAR_DOCUMENTO", documento: certificado }]
+    : []
 }
 
 /** Resumen legible de un paso para el registro del aprovisionamiento. */

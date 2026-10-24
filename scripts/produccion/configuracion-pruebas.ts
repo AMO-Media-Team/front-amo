@@ -7,6 +7,12 @@
  * - Términos, condiciones y política de datos «VERSIÓN DE PRUEBA» (`0.1-PRUEBA`) publicados, para
  *   probar la compuerta de aceptación. Si el cliente ya publicó un texto propio de un tipo, ese tipo
  *   no se toca.
+ * - Finanzas de prueba (fase 5), solo lo que falte y todo `pendiente_validacion`: retención en la fuente
+ *   por servicios de referencia (4 % declarante y 6 % no declarante, desde 4 UVT), ReteICA de referencia
+ *   de una lista corta de capitales (Bogotá 9,66 ‰; Medellín, Cali y Barranquilla 10 ‰) y resoluciones
+ *   DIAN «PRUEBA» de documento soporte (`PDS`) y de factura (`PFE`), 1–5000, activas solo si no hay otra
+ *   activa y vigente. `--revertir` quita lo que el script creó y nadie usó (una liquidación, un documento
+ *   soporte o una factura lo referencian: se conserva).
  *
  * Sin argumentos solo muestra lo que haría. Escribe como servicio con contexto confiable, a nombre del
  * superadministrador de `SUPERADMIN_EMAIL` (la bitácora lo registra). Lo que cambia queda en
@@ -18,6 +24,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
+import { serializarFecha } from "../../src/lib/fechas"
 import { esProduccion } from "../bootstrap/produccion"
 import {
   buscarUsuarioPorEmail,
@@ -30,15 +37,24 @@ import {
 } from "../bootstrap/supabase"
 import {
   contenidoTerminosPrueba,
+  type CreadoFinanzas,
   leerArgumentos,
   mostrar,
+  olvidarCreadoFinanzas,
   olvidarParametro,
   PARAMETROS_PRUEBA,
   type PasoParametro,
+  type PasoResolucion,
   planAplicar,
+  planResoluciones,
+  planRetenciones,
+  planReteica,
   planRevertir,
+  planRevertirFinanzas,
   planTerminos,
+  RETEICA_REFERENCIA,
   registrarCambio,
+  registrarCreadoFinanzas,
   type RespaldoConfiguracion,
   respaldoVacio,
   VERSION_TERMINOS_PRUEBA,
@@ -200,6 +216,283 @@ async function aplicarTerminos(
   return resultado
 }
 
+// ── Finanzas de prueba ───────────────────────────────────────────────────────
+
+function porcentaje(tarifa: number): string {
+  return `${(tarifa * 100).toLocaleString("es-CO")} %`
+}
+
+function describirResolucion(paso: PasoResolucion): string {
+  const { tipo, prefijo, numeroResolucion, rangoDesde, rangoHasta } =
+    paso.resolucion
+  const etiqueta = `${tipo} ${prefijo} (${numeroResolucion}, ${rangoDesde}–${rangoHasta})`
+  switch (paso.tipo) {
+    case "vigente":
+      return `${tipo}: ya hay una resolución activa y vigente (prefijo «${paso.prefijo}»); no hace falta la de prueba`
+    case "activa-vencida":
+      return `${tipo}: la resolución activa (prefijo «${paso.prefijo}») no está vigente hoy; actualízala en Configuración (no se activa otra)`
+    case "activar":
+      return `${etiqueta}: activar la de prueba que ya existe`
+    case "crear":
+      return `${etiqueta}: crear y activar, vigente del ${paso.vigenteDesde} al ${paso.vigenteHasta}`
+  }
+}
+
+function fallaEscritura(accion: string, error: { message: string }): never {
+  throw new ErrorBootstrap(`${accion}: ${error.message}`)
+}
+
+/**
+ * Retenciones, ReteICA y resoluciones de prueba (solo lo que falte). Cada id
+ * creado se guarda en el respaldo en cuanto existe.
+ */
+async function aplicarFinanzas(
+  servicio: ClienteSupabase,
+  respaldo: RespaldoConfiguracion,
+  { simular, ruta }: { simular: boolean; ruta: string }
+): Promise<RespaldoConfiguracion> {
+  const hoy = serializarFecha(new Date())
+  const municipios = RETEICA_REFERENCIA.map((regla) => regla.municipio)
+  const [retenciones, reteica, catalogo, resoluciones] = await Promise.all([
+    servicio
+      .from("retenciones_config")
+      .select("id, tipo, aplica_declarante, vigente_desde, vigente_hasta"),
+    servicio
+      .from("reteica_municipal")
+      .select("id, municipio_codigo, vigente_desde, vigente_hasta")
+      .in("municipio_codigo", municipios),
+    servicio.from("municipios").select("codigo").in("codigo", municipios),
+    servicio
+      .from("resoluciones_dian")
+      .select(
+        "id, tipo, prefijo, numero_resolucion, activa, vigente_desde, vigente_hasta"
+      ),
+  ])
+  for (const { error } of [retenciones, reteica, catalogo, resoluciones]) {
+    if (error)
+      fallaEscritura("No se pudo leer la configuración tributaria", error)
+  }
+  let resultado = respaldo
+  const registrar = (tabla: keyof CreadoFinanzas, id: string) => {
+    resultado = {
+      ...resultado,
+      finanzas: registrarCreadoFinanzas(resultado.finanzas, tabla, id),
+    }
+    guardarRespaldo(ruta, resultado)
+  }
+  const marca = simular ? "→" : "✓"
+
+  for (const paso of planRetenciones(retenciones.data ?? [], hoy)) {
+    const { regla } = paso
+    const etiqueta = `${regla.tipo} ${regla.concepto} ${regla.aplicaDeclarante ? "declarante" : "no declarante"} ${porcentaje(regla.tarifa)} desde ${regla.baseMinimaUvt} UVT`
+    if (paso.tipo === "existe") {
+      informar(`  · ${etiqueta}: ya hay una vigente (no se toca)`)
+      continue
+    }
+    informar(`  ${marca} ${etiqueta}: crear desde ${paso.vigenteDesde}`)
+    if (simular) continue
+    const { data, error } = await servicio
+      .from("retenciones_config")
+      .insert({
+        tipo: regla.tipo,
+        concepto: regla.concepto,
+        aplica_declarante: regla.aplicaDeclarante,
+        tarifa: regla.tarifa,
+        base_minima_uvt: regla.baseMinimaUvt,
+        vigente_desde: paso.vigenteDesde,
+        pendiente_validacion: true,
+      })
+      .select("id")
+      .single()
+    if (error) fallaEscritura(`No se pudo crear ${etiqueta}`, error)
+    registrar("retenciones", data.id)
+  }
+
+  const disponibles = new Set((catalogo.data ?? []).map((fila) => fila.codigo))
+  for (const paso of planReteica(reteica.data ?? [], disponibles, hoy)) {
+    const { regla } = paso
+    const etiqueta = `ReteICA ${regla.nombre} (${regla.municipio}) ${regla.tarifaPorMil.toLocaleString("es-CO")} ‰`
+    if (paso.tipo === "sin-municipio") {
+      informar(`  · ${etiqueta}: el municipio no está en esta base (se omite)`)
+      continue
+    }
+    if (paso.tipo === "existe") {
+      informar(`  · ${etiqueta}: ya hay una vigente (no se toca)`)
+      continue
+    }
+    informar(`  ${marca} ${etiqueta}: crear desde ${paso.vigenteDesde}`)
+    if (simular) continue
+    const { data, error } = await servicio
+      .from("reteica_municipal")
+      .insert({
+        municipio_codigo: regla.municipio,
+        tarifa_por_mil: regla.tarifaPorMil,
+        base_minima_uvt: 0,
+        vigente_desde: paso.vigenteDesde,
+        pendiente_validacion: true,
+      })
+      .select("id")
+      .single()
+    if (error) fallaEscritura(`No se pudo crear ${etiqueta}`, error)
+    registrar("reteica", data.id)
+  }
+
+  for (const paso of planResoluciones(resoluciones.data ?? [], hoy)) {
+    const cambia = paso.tipo === "crear" || paso.tipo === "activar"
+    informar(`  ${cambia ? marca : "·"} ${describirResolucion(paso)}`)
+    if (simular || !cambia) continue
+    if (paso.tipo === "activar") {
+      const { error } = await servicio
+        .from("resoluciones_dian")
+        .update({ activa: true })
+        .eq("id", paso.id)
+      if (error)
+        fallaEscritura("No se pudo activar la resolución de prueba", error)
+      continue
+    }
+    const { resolucion } = paso
+    const { data, error } = await servicio
+      .from("resoluciones_dian")
+      .insert({
+        tipo: resolucion.tipo,
+        prefijo: resolucion.prefijo,
+        numero_resolucion: resolucion.numeroResolucion,
+        fecha_resolucion: paso.fechaResolucion,
+        rango_desde: resolucion.rangoDesde,
+        rango_hasta: resolucion.rangoHasta,
+        consecutivo_actual: resolucion.rangoDesde - 1,
+        vigente_desde: paso.vigenteDesde,
+        vigente_hasta: paso.vigenteHasta,
+        activa: true,
+      })
+      .select("id")
+      .single()
+    if (error) fallaEscritura("No se pudo crear la resolución de prueba", error)
+    registrar("resoluciones", data.id)
+  }
+  return resultado
+}
+
+/** Ids de `ids` que aún existen en la tabla. */
+async function existentes(
+  servicio: ClienteSupabase,
+  tabla: "retenciones_config" | "reteica_municipal" | "resoluciones_dian",
+  ids: readonly string[]
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await servicio
+    .from(tabla)
+    .select("id")
+    .in("id", [...ids])
+  if (error) fallaEscritura(`No se pudo leer ${tabla}`, error)
+  return data.map((fila) => fila.id)
+}
+
+async function hayFilas(
+  consulta: PromiseLike<{
+    count: number | null
+    error: { message: string } | null
+  }>
+): Promise<boolean> {
+  const { count, error } = await consulta
+  if (error) fallaEscritura("No se pudo comprobar el uso", error)
+  return (count ?? 0) > 0
+}
+
+/** ¿Alguna liquidación aplicó esa regla (`config_id` en las retenciones por asignación)? */
+function reglaUsada(servicio: ClienteSupabase, id: string) {
+  return hayFilas(
+    servicio
+      .from("asignacion_montos")
+      .select("asignacion_id", { count: "exact", head: true })
+      .contains("retenciones_aplicadas", [{ config_id: id }])
+  )
+}
+
+async function resolucionUsada(
+  servicio: ClienteSupabase,
+  id: string
+): Promise<boolean> {
+  const [documentos, facturas] = await Promise.all([
+    hayFilas(
+      servicio
+        .from("documentos_soporte")
+        .select("id", { count: "exact", head: true })
+        .eq("resolucion_id", id)
+    ),
+    hayFilas(
+      servicio
+        .from("facturas")
+        .select("id", { count: "exact", head: true })
+        .eq("resolucion_id", id)
+    ),
+  ])
+  return documentos || facturas
+}
+
+const TABLA_DE: Record<
+  keyof CreadoFinanzas,
+  "retenciones_config" | "reteica_municipal" | "resoluciones_dian"
+> = {
+  retenciones: "retenciones_config",
+  reteica: "reteica_municipal",
+  resoluciones: "resoluciones_dian",
+}
+
+async function revertirFinanzas(
+  servicio: ClienteSupabase,
+  respaldo: RespaldoConfiguracion,
+  ruta: string
+): Promise<RespaldoConfiguracion> {
+  const creado = respaldo.finanzas
+  if (!creado) return respaldo
+  const vivos = new Set<string>()
+  const usadas = new Set<string>()
+  for (const tabla of Object.keys(TABLA_DE) as (keyof CreadoFinanzas)[]) {
+    for (const id of await existentes(
+      servicio,
+      TABLA_DE[tabla],
+      creado[tabla]
+    )) {
+      vivos.add(id)
+      const usada =
+        tabla === "resoluciones"
+          ? await resolucionUsada(servicio, id)
+          : await reglaUsada(servicio, id)
+      if (usada) usadas.add(id)
+    }
+  }
+  let resultado = respaldo
+  for (const paso of planRevertirFinanzas(creado, {
+    existentes: vivos,
+    usadas,
+  })) {
+    const etiqueta = `${TABLA_DE[paso.tabla]} ${paso.id}`
+    if (paso.tipo === "usada") {
+      informar(
+        `  · ${etiqueta}: ya se usó en liquidaciones o documentos (se conserva)`
+      )
+      continue
+    }
+    if (paso.tipo === "quitar") {
+      const { error } = await servicio
+        .from(TABLA_DE[paso.tabla])
+        .delete()
+        .eq("id", paso.id)
+      if (error) fallaEscritura(`No se pudo quitar ${etiqueta}`, error)
+      informar(`  ✓ ${etiqueta}: quitada`)
+    } else {
+      informar(`  · ${etiqueta}: ya no existe`)
+    }
+    resultado = {
+      ...resultado,
+      finanzas: olvidarCreadoFinanzas(resultado.finanzas, paso.tabla, paso.id),
+    }
+    guardarRespaldo(ruta, resultado)
+  }
+  return resultado
+}
+
 async function main(): Promise<void> {
   const argumentos = leerArgumentos(process.argv.slice(2))
   const entorno = cargarEntorno()
@@ -245,6 +538,9 @@ async function main(): Promise<void> {
       )
     }
     guardarRespaldo(ruta, respaldo)
+    informar("Finanzas de prueba:")
+    respaldo = await revertirFinanzas(servicio, respaldo, ruta)
+    guardarRespaldo(ruta, respaldo)
     return
   }
 
@@ -261,6 +557,8 @@ async function main(): Promise<void> {
   }
   informar("Textos legales:")
   respaldo = await aplicarTerminos(servicio, respaldo, simular)
+  informar("Finanzas de prueba (pendientes de validar por el contador):")
+  respaldo = await aplicarFinanzas(servicio, respaldo, { simular, ruta })
   if (!simular) {
     guardarRespaldo(ruta, respaldo)
     informar(`Respaldo de lo cambiado: ${ruta}`)

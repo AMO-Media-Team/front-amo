@@ -11,3 +11,8 @@ export type VistaPagosMedios = (typeof VISTAS_PAGOS_MEDIOS)[number]
 export function rutaVistaPagosMedios(vista: VistaPagosMedios): Route {
   return `${RUTA_PAGOS_MEDIOS}?vista=${vista}` as Route
 }
+
+/** Ficha de un archivo de pagos (dispersión): sus liquidaciones y la descarga. */
+export function rutaDispersion(dispersionId: string): Route {
+  return `${RUTA_PAGOS_MEDIOS}/${encodeURIComponent(dispersionId)}` as Route
+}

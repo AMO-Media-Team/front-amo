@@ -4,8 +4,8 @@
  */
 import { expect, type Page } from "@playwright/test"
 
+import { codigoTotpNuevo } from "../../scripts/bootstrap/mfa"
 import {
-  codigoTotpEstable,
   type CuentaE2E,
   cuentaE2E,
   emailDe,
@@ -18,7 +18,6 @@ import {
   rutaConfirmacion,
 } from "../../scripts/bootstrap/supabase"
 import { exigirFueraDeProduccion } from "../../scripts/bootstrap/produccion"
-import { PASO_TOTP_SEGUNDOS } from "../../scripts/bootstrap/totp"
 
 export const entorno: EntornoBootstrap = cargarEntorno()
 exigirFueraDeProduccion(entorno.url, "La suite E2E")
@@ -63,22 +62,16 @@ export function saludoDe(nombre: string): RegExp {
 export const CUALQUIER_SALUDO =
   /^(?:Buenos días|Buenas tardes|Buenas noches), \p{L}+$/u
 
-let ultimoPasoTotp = -1
-
 /**
  * Código TOTP del administrador E2E. Nunca repite el código de una
- * verificación anterior de la misma ejecución: espera al siguiente periodo.
+ * verificación anterior del mismo proceso (tampoco el que gastó una fábrica
+ * con esa cuenta, p. ej. al generar una liquidación): espera al siguiente
+ * periodo.
  */
 export async function codigoAdmin(): Promise<string> {
   const secreto = process.env[VARIABLE_TOTP_ADMIN]
   if (!secreto) throw new Error(`Falta ${VARIABLE_TOTP_ADMIN} en .env.local.`)
-  const pasoActual = () => Math.floor(Date.now() / 1000 / PASO_TOTP_SEGUNDOS)
-  while (pasoActual() <= ultimoPasoTotp) {
-    await new Promise((resolver) => setTimeout(resolver, 1000))
-  }
-  const codigo = await codigoTotpEstable(secreto)
-  ultimoPasoTotp = pasoActual()
-  return codigo
+  return codigoTotpNuevo(secreto)
 }
 
 export async function escribirCodigoMfa(page: Page): Promise<void> {

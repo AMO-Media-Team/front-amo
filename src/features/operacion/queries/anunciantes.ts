@@ -438,7 +438,7 @@ export const carteraDelAnunciante = cache(
     const { data, error } = await supabase
       .from("facturas")
       .select(
-        "id, numero, estado, fecha_emision, fecha_vencimiento, total, pagado, saldo, campana:campanas ( nombre )"
+        "id, numero, estado, fecha_emision, fecha_vencimiento, total, pagado, saldo, valor_notas_credito, campana:campanas ( nombre )"
       )
       .eq("anunciante_id", anuncianteId)
       .order("fecha_emision", { ascending: false, nullsFirst: true })
@@ -448,7 +448,8 @@ export const carteraDelAnunciante = cache(
       resumen: resumirCartera(
         data.map((fila) => ({
           estado: fila.estado,
-          total: fila.total,
+          // Lo facturado neto de notas crédito parciales (como `reporte_cartera`): el saldo cuadra.
+          total: (fila.total ?? 0) - fila.valor_notas_credito,
           pagado: fila.pagado,
           fechaVencimiento: fila.fecha_vencimiento,
         }))

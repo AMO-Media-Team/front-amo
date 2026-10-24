@@ -105,10 +105,11 @@ begin
   -- configuración: 53 + vinculacion.max_solicitudes_ip_dia (e2_onboarding_medio) + ofertas.estimador_n_minimo y
   -- archivos.tolerancia_aspecto (e2_anunciantes_ofertas) + metricas.tolerancia_cortes (e2_integridad_ejecucion);
   -- e3_validacion suma las plantillas asignacion.reabierta y cola.disputa_mensaje y las claves
-  -- evidencias.plazo_recarga_horas y soporte.correo; e3_finanzas suma 5 plantillas (cola.liquidacion_por_aprobar,
-  -- cola.liquidaciones_por_aprobar, liquidacion.factura_requerida, factura.nota_credito, factura.anulada) y 6 claves
+  -- evidencias.plazo_recarga_horas y soporte.correo; e3_finanzas suma 6 plantillas (cola.liquidacion_por_aprobar,
+  -- cola.liquidaciones_por_aprobar, cola.factura_medio_cargada, liquidacion.factura_requerida, factura.nota_credito,
+  -- factura.anulada) y 6 claves
   -- (facturacion.esquema, tributario.numeracion_documento_soporte y los datos de AMO como adquiriente).
-  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_65', v_n = 65);
+  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_66', v_n = 66);
   select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_65', v_n = 65);
   select count(*) into v_n from public.terminos_versiones where tipo = 'POLITICA_DATOS' and version like 'humo-%';
                                                                        r := r || jsonb_build_object('a2_admin_ve_borradores', v_n = 2);

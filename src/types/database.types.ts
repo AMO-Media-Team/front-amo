@@ -4383,6 +4383,7 @@ export type Database = {
         Returns: {
           aprobada_at: string
           cantidad_asignaciones: number
+          created_at: string
           datos_pago_listos: boolean
           dispersada_at: string
           dispersion_id: string
@@ -4732,6 +4733,13 @@ export type Database = {
           refrescada_at: string
           ultima_actividad_at: string
           user_agent: string
+        }[]
+      }
+      nombres_equipo: {
+        Args: { p_ids: string[] }
+        Returns: {
+          id: string
+          nombre: string
         }[]
       }
       notificaciones_no_leidas: { Args: never; Returns: number }

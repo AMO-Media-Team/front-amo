@@ -16,6 +16,7 @@ import { serializarFecha } from "../../src/lib/fechas"
 import type { Json } from "../../src/types/database.types"
 import { type ColorRgb, pdfDeMuestra, pngDeMuestra } from "./archivos-prueba"
 import {
+  certificacionPosteriorAlPago,
   type CifradorPago,
   cuentaAlDia,
   datosPagoE2E,
@@ -40,6 +41,8 @@ import {
   diferencia,
   MEDIO_E2E,
   MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E,
+  MEDIO_FINANZAS_E2E,
   MEDIO_NUEVO_E2E,
   MEDIO_NUEVO_E2E_ID,
   MEDIO_SUSPENSION_E2E,
@@ -407,15 +410,21 @@ export async function restablecerMedioNuevo(
 
 /**
  * Deja listos los medios antes de preparar sus cuentas (un perfil MEDIO
- * activo exige su medio): el Medio E2E y el Medio Suspensión E2E con sus
- * datos base, y el Medio Nuevo E2E reiniciado.
+ * activo exige su medio): el Medio E2E, el Medio Suspensión E2E y los dos de
+ * Finanzas con sus datos base, y el Medio Nuevo E2E reiniciado.
  */
 export async function prepararMediosBase(
   servicio: ClienteSupabase,
   emailUsuarioNuevo: string
 ): Promise<AccionMedioNuevo> {
-  await asegurarFilaMedio(servicio, MEDIO_E2E)
-  await asegurarFilaMedio(servicio, MEDIO_SUSPENSION_E2E)
+  for (const datos of [
+    MEDIO_E2E,
+    MEDIO_SUSPENSION_E2E,
+    MEDIO_FINANZAS_E2E,
+    MEDIO_FACTURA_E2E,
+  ]) {
+    await asegurarFilaMedio(servicio, datos)
+  }
   return restablecerMedioNuevo(servicio, emailUsuarioNuevo)
 }
 
@@ -467,13 +476,13 @@ async function leerMedioVerificado(
     servicio
       .from("medios_privado")
       .select(
-        "titular_nombre, tipo_documento, numero_documento_cifrado, numero_documento_hash, numero_documento_resumen, metodo_pago, datos_pago_cifrados, datos_pago_resumen, es_declarante, obligado_facturar, responsable_iva, celular, email_contacto, direccion"
+        "titular_nombre, tipo_documento, numero_documento_cifrado, numero_documento_hash, numero_documento_resumen, metodo_pago, datos_pago_cifrados, datos_pago_resumen, es_declarante, obligado_facturar, responsable_iva, celular, email_contacto, direccion, datos_pago_cambiados_at"
       )
       .eq("medio_id", datos.id)
       .maybeSingle(),
     servicio
       .from("documentos_medio")
-      .select("tipo, fecha_vencimiento")
+      .select("tipo, fecha_vencimiento, created_at")
       .eq("medio_id", datos.id)
       .eq("estado_validacion", "APROBADO"),
     servicio
@@ -511,6 +520,14 @@ async function leerMedioVerificado(
       documentosExigidos: documentosExigidos(
         nivel.data.documentos_requeridos,
         pago.metodo
+      ),
+      certificacionPosteriorAlPago: certificacionPosteriorAlPago(
+        aprobados.data,
+        {
+          metodo: pago.metodo,
+          cambiadoAt: privado.data?.datos_pago_cambiados_at ?? null,
+          hoy: serializarFecha(ahora),
+        }
       ),
     },
   }
@@ -825,7 +842,9 @@ async function ejecutarPaso(
 
 /**
  * Completa lo que le falte al medio (por omisión, el Medio E2E; también el
- * Medio Suspensión E2E): cuenta verificada, pago, documentos y estado
+ * Medio Suspensión E2E y los de Finanzas): cuenta verificada, pago, documentos
+ * (y, si el medio lo exige, la certificación bancaria posterior al último
+ * cambio de sus datos de pago) y estado
  * VERIFICADO en su nivel (si quedó suspendido, lo reactiva). Solo crea el
  * operador temporal si hay algo que hacer. Devuelve lo hecho, en palabras,
  * para el registro de la corrida.

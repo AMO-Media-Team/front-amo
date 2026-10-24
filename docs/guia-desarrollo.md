@@ -211,5 +211,13 @@ Geist (UI), Geist Mono / `tabular-nums` (cifras). Detalle completo en `docs/marc
   (`E2E_MEDIO_SUSPENSION_*`, verificado en Barranquilla para no recibir las ofertas del «Medio E2E»). Las limpiezas cierran
   las disputas y los reclamos pendientes; una disputa con mensajes, igual que una descarga, no se puede borrar. Los specs de
   `pauta-medio-*` y `anunciante-*` no llaman a `restablecerValidacionE2E()`.
-- `pnpm pruebas:pauta-e2e` y `pnpm pruebas:validacion-e2e` comprueban las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
+- Proyecto `finanzas` (`finanzas-*`, en serie, al final): liquidaciones, documento soporte, archivo de pagos, facturas y notas
+  crédito, y lo que ven el medio (Ganancias) y el anunciante (Facturas). Fábricas en `e2e/utilidades/finanzas.ts`
+  (`ingresarComoFinanzas`, `campanaFinanzasE2E`, `asignacionVerificadaFinanzasE2E`, `liquidacionFinanzasE2E({ hasta })`,
+  `facturaFinanzasE2E`, `restablecerFinanzasE2E()` —solo local o develop: borra en modo carga y purga lo de las campañas
+  «Finanzas E2E» y de los dos medios de finanzas para que cada corrida genere su corte sin traslapes—). La liquidación la
+  genera el ADMIN E2E y la aprueba Finanzas (segregación). Cuentas propias: FINANZAS con TOTP (`E2E_FINANZAS_*`), «Medio
+  Finanzas E2E» (no factura: documento soporte, `E2E_MEDIO_FINANZAS_*`) y «Medio Factura E2E» (factura,
+  `E2E_MEDIO_FACTURA_*`). «Generar corte» en la interfaz liquida también a los medios de la demo: los specs no lo ejecutan.
+- `pnpm pruebas:pauta-e2e`, `pnpm pruebas:validacion-e2e` y `pnpm pruebas:finanzas-e2e` comprueban las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
   de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia).

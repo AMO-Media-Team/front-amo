@@ -12,6 +12,8 @@ import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 import { type EstadoPerfil, transicionesParaRestaurar } from "./estado-perfil"
 import {
   MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E_ID,
+  MEDIO_FINANZAS_E2E_ID,
   MEDIO_NUEVO_E2E_ID,
   MEDIO_SUSPENSION_E2E_ID,
 } from "./medios-e2e"
@@ -42,6 +44,8 @@ export { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 
 export {
   MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E_ID,
+  MEDIO_FINANZAS_E2E_ID,
   MEDIO_NUEVO_E2E_ID,
   MEDIO_SUSPENSION_E2E_ID,
 } from "./medios-e2e"
@@ -90,6 +94,20 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     debeCambiarPassword: false,
     conTotp: true,
     variableTotp: "E2E_OPERACIONES_TOTP_SECRET",
+  },
+  {
+    // Finanzas (fase 5): aprueba, emite, registra pagos y facturas. Las
+    // liquidaciones de las fábricas las genera el ADMIN E2E (D17: quien genera
+    // no aprueba).
+    clave: "FINANZAS",
+    rol: "FINANZAS",
+    nombre: "Finanzas E2E",
+    emailPorDefecto: "e2e.finanzas@amo.test",
+    variableEmail: "E2E_FINANZAS_EMAIL",
+    variablePassword: "E2E_FINANZAS_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: true,
+    variableTotp: "E2E_FINANZAS_TOTP_SECRET",
   },
   {
     clave: "ANUNCIANTE",
@@ -145,6 +163,33 @@ export const CUENTAS_E2E: readonly CuentaE2E[] = [
     emailPorDefecto: "e2e.medio.suspension@amo.test",
     variableEmail: "E2E_MEDIO_SUSPENSION_EMAIL",
     variablePassword: "E2E_MEDIO_SUSPENSION_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: false,
+  },
+  {
+    // «Medio Finanzas E2E»: VERIFICADO nivel 1, no declarante ni facturador
+    // (documento soporte), con su certificación bancaria posterior al último
+    // cambio de sus datos de pago (medios-e2e.ts).
+    clave: "MEDIO_FINANZAS",
+    rol: "MEDIO",
+    medioId: MEDIO_FINANZAS_E2E_ID,
+    nombre: "Medio Finanzas E2E",
+    emailPorDefecto: "e2e.medio.finanzas@amo.test",
+    variableEmail: "E2E_MEDIO_FINANZAS_EMAIL",
+    variablePassword: "E2E_MEDIO_FINANZAS_PASSWORD",
+    debeCambiarPassword: false,
+    conTotp: false,
+  },
+  {
+    // «Medio Factura E2E»: como el anterior, pero declarante y obligado a
+    // facturar (carga su factura en cada liquidación).
+    clave: "MEDIO_FACTURA",
+    rol: "MEDIO",
+    medioId: MEDIO_FACTURA_E2E_ID,
+    nombre: "Medio Factura E2E",
+    emailPorDefecto: "e2e.medio.factura@amo.test",
+    variableEmail: "E2E_MEDIO_FACTURA_EMAIL",
+    variablePassword: "E2E_MEDIO_FACTURA_PASSWORD",
     debeCambiarPassword: false,
     conTotp: false,
   },

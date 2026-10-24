@@ -17,6 +17,15 @@
  *   prueba lo dejó suspendido, lo reactiva.
  * - Sin las pruebas de validación anteriores: las campañas «Validación E2E…»
  *   se limpian (`fabricas-validacion.ts`).
+ * - FINANZAS con TOTP verificado (clave en `E2E_FINANZAS_TOTP_SECRET`): aprueba,
+ *   emite, paga y factura en las pruebas de la fase 5.
+ * - MEDIO del «Medio Finanzas E2E» (no declarante ni facturador: documento
+ *   soporte) y del «Medio Factura E2E» (declarante y obligado a facturar):
+ *   VERIFICADOS nivel 1 en Bogotá, con Instagram vigente, datos de pago
+ *   cifrados y su certificación bancaria aprobada después del último cambio.
+ * - Sin las pruebas de Finanzas anteriores (campañas «Finanzas E2E…» y lo de
+ *   esos dos medios), solo si la base es la local o develop con
+ *   `.env.db.develop` (`fabricas-finanzas.ts`, por la conexión directa).
  * - ANUNCIANTE (y la del cambio obligatorio) del «Anunciante E2E»: VERIFICADO
  *   con el RUT y la Cámara de Comercio aprobados y vigentes
  *   (`aprovisionar-anunciantes.ts`).
@@ -31,8 +40,9 @@
  * idempotente. Requiere un superadministrador activo (`pnpm bootstrap:superadmin`)
  * y se niega a correr contra producción. No imprime contraseñas ni claves.
  */
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 
+import { archivoDe } from "../db/entorno-db"
 import { describirAccionAnuncianteNuevo } from "./anunciantes-e2e"
 import {
   completarAnuncianteVerificado,
@@ -44,9 +54,19 @@ import {
 } from "./aprovisionar-medios"
 import { agregarVariables } from "./archivo-env"
 import { generarContrasena } from "./contrasena"
+import { restablecerFinanzas } from "./fabricas-finanzas"
 import { type MedioPauta, restablecerPautaMedio } from "./fabricas-pauta"
 import { restablecerValidacion } from "./fabricas-validacion"
-import { MEDIO_SUSPENSION_VERIFICADO_E2E } from "./medio-verificado-e2e"
+import {
+  baseRestablecible,
+  describirRestablecimientoFinanzas,
+} from "./finanzas-e2e"
+import {
+  MEDIO_FACTURA_VERIFICADO_E2E,
+  MEDIO_FINANZAS_VERIFICADO_E2E,
+  MEDIO_SUSPENSION_VERIFICADO_E2E,
+  type MedioVerificadoE2E,
+} from "./medio-verificado-e2e"
 import {
   describirAccionMedioNuevo,
   MEDIO_E2E_ID,
@@ -127,14 +147,15 @@ async function completarCuenta(
       )
     }
   }
-  if (cuenta.clave === "MEDIO_SUSPENSION") {
+  const verificados: Record<string, MedioVerificadoE2E> = {
+    MEDIO_SUSPENSION: MEDIO_SUSPENSION_VERIFICADO_E2E,
+    MEDIO_FINANZAS: MEDIO_FINANZAS_VERIFICADO_E2E,
+    MEDIO_FACTURA: MEDIO_FACTURA_VERIFICADO_E2E,
+  }
+  const verificado = verificados[cuenta.clave]
+  if (verificado) {
     hechos.push(
-      ...(await completarMedioVerificado(
-        entorno,
-        servicio,
-        lista,
-        MEDIO_SUSPENSION_VERIFICADO_E2E
-      ))
+      ...(await completarMedioVerificado(entorno, servicio, lista, verificado))
     )
   }
   if (cuenta.clave === "ANUNCIANTE") {
@@ -159,6 +180,25 @@ function mediosVerificados(
     const password = variables[cuenta.variablePassword]
     return email && password ? [{ id, credenciales: { email, password } }] : []
   })
+}
+
+/**
+ * Limpia las pruebas de Finanzas anteriores si la base lo permite (la local, o
+ * develop con su conexión en `.env.db.develop`); si no, lo dice y sigue.
+ */
+async function restablecerFinanzasSiSePuede(
+  entorno: EntornoBootstrap
+): Promise<string> {
+  let base
+  try {
+    base = baseRestablecible(entorno.url)
+  } catch {
+    return "omitido (solo en la base local o develop)"
+  }
+  if (base === "develop" && !existsSync(archivoDe("develop"))) {
+    return `omitido (falta ${archivoDe("develop")} con la conexión de develop)`
+  }
+  return describirRestablecimientoFinanzas(await restablecerFinanzas(entorno))
 }
 
 const CUENTAS_DEMO_EXTERNAS = [
@@ -222,6 +262,7 @@ async function main(): Promise<void> {
     medioSuspension: MEDIO_SUSPENSION_E2E_ID,
   })
   informar(`✓ Validación E2E: ${describirRestablecimiento(validacion)}`)
+  informar(`✓ Finanzas E2E: ${await restablecerFinanzasSiSePuede(entorno)}`)
 
   // Sesiones compartidas de la suite (e2e/preparacion.setup.ts): las cuentas
   // demo externas tampoco deben quedar retenidas en la compuerta de términos.

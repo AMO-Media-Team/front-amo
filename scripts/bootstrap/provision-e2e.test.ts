@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest"
 import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
 import {
   MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E_ID,
+  MEDIO_FINANZAS_E2E_ID,
   MEDIO_NUEVO_E2E_ID,
   MEDIO_SUSPENSION_E2E_ID,
 } from "./medios-e2e"
@@ -109,6 +111,39 @@ describe("CUENTAS_E2E", () => {
       expect(organizacionDe(cuentaE2E(clave)).anunciante_id).toBe(
         ANUNCIANTE_E2E_ID
       )
+    }
+  })
+
+  it("incluye las cuentas de la fase 5: Finanzas con TOTP y los dos medios de Finanzas", () => {
+    expect(cuentaE2E("FINANZAS")).toMatchObject({
+      rol: "FINANZAS",
+      nombre: "Finanzas E2E",
+      emailPorDefecto: "e2e.finanzas@amo.test",
+      conTotp: true,
+      debeCambiarPassword: false,
+      variableEmail: "E2E_FINANZAS_EMAIL",
+      variablePassword: "E2E_FINANZAS_PASSWORD",
+    })
+    expect(variableTotpDe(cuentaE2E("FINANZAS"))).toBe(
+      "E2E_FINANZAS_TOTP_SECRET"
+    )
+    expect(organizacionDe(cuentaE2E("FINANZAS"))).toEqual({
+      anunciante_id: null,
+      medio_id: null,
+    })
+    for (const [clave, medioId, nombre] of [
+      ["MEDIO_FINANZAS", MEDIO_FINANZAS_E2E_ID, "Medio Finanzas E2E"],
+      ["MEDIO_FACTURA", MEDIO_FACTURA_E2E_ID, "Medio Factura E2E"],
+    ] as const) {
+      const cuenta = cuentaE2E(clave)
+      expect(cuenta).toMatchObject({
+        rol: "MEDIO",
+        medioId,
+        nombre,
+        conTotp: false,
+        debeCambiarPassword: false,
+      })
+      expect(organizacionDe(cuenta).medio_id).toBe(medioId)
     }
   })
 
