@@ -32,6 +32,8 @@ export interface CorteMetrica {
   validadaAt: string | null
   /** Hay captura que firmar (la ruta no viaja al navegador). */
   conImagen: boolean
+  /** `updated_at` tal cual lo entrega la BD: la versión que se ve y se valida. */
+  actualizadaAt: string
 }
 
 export interface NombresColumnas {

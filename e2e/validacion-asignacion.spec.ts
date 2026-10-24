@@ -216,7 +216,7 @@ test.describe("gestión de la asignación", () => {
         name: /La publicación no existe o no es de la cuenta registrada/,
       })
       .click()
-    await expect(dialogo.getByLabel("Motivo")).toHaveValue(
+    await expect(dialogo.getByRole("textbox", { name: "Motivo" })).toHaveValue(
       "La publicación no existe o no es de la cuenta registrada."
     )
     await dialogo

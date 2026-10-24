@@ -54,8 +54,14 @@ import {
   SUGERENCIAS_RECHAZO_EVIDENCIA,
   SUGERENCIAS_RECHAZO_METRICA,
   SUGERENCIAS_REVISION_ALERTA,
+  TEXTO_VUELVE_TRAS_RECHAZO_EVIDENCIA,
 } from "../decision"
-import { type DecisionEnDisputa, esperaDisputa } from "../errores"
+import {
+  type DecisionEnDisputa,
+  type ElementoValidado,
+  elementoCambiado,
+  esperaDisputa,
+} from "../errores"
 import { CAMPOS_EVIDENCIA, esquemaAprobarEvidencia } from "../schemas"
 
 /** Id del encabezado de una publicación en la ficha (destino del foco). */
@@ -91,20 +97,28 @@ function useFocoTrasDecision(destino: () => HTMLElement | null) {
 }
 
 /**
- * La asignación entró en disputa mientras se decidía (hint `en_disputa`): el
- * diálogo muestra el porqué y, al cerrarlo, la ficha se refresca para
- * cambiar la decisión por la explicación (el foco va al encabezado, que
- * sigue ahí).
+ * La decisión no se aplicó porque la asignación entró en disputa (hint
+ * `en_disputa`) o porque el medio cambió lo que se revisaba (hints
+ * `evidencia_cambiada` y `metrica_cambiada`): el diálogo muestra el porqué y,
+ * al cerrarlo, la ficha se refresca para cambiar la decisión por la
+ * explicación o para mostrar la versión nueva antes de decidir (el foco va al
+ * encabezado, que sigue ahí).
  */
-function useEsperaDisputa(
+function useRefrescoTrasFallo(
   decision: DecisionEnDisputa,
+  elemento: ElementoValidado,
   foco: ReturnType<typeof useFocoTrasDecision>
 ) {
   const router = useRouter()
   const refrescar = useRef(false)
   return {
     revisar: (resultado: { ok: boolean; error?: string }) => {
-      if (!esperaDisputa(resultado, decision)) return
+      if (
+        !esperaDisputa(resultado, decision) &&
+        !elementoCambiado(resultado, elemento)
+      ) {
+        return
+      }
       refrescar.current = true
       foco.anotar()
     },
@@ -127,6 +141,7 @@ function DialogoAprobarEvidencia({
   abierto,
   onAbiertoChange,
   publicacion,
+  enviadaAt,
   focoAlCerrar,
   onAprobada,
   onFallo,
@@ -134,6 +149,8 @@ function DialogoAprobarEvidencia({
   abierto: boolean
   onAbiertoChange: (abierto: boolean) => void
   publicacion: PublicacionEvidencia
+  /** Versión que mostraba la ficha al abrir el diálogo (`updated_at`). */
+  enviadaAt: string
   focoAlCerrar: () => HTMLElement | null
   onAprobada: () => void
   /** El resultado de un intento fallido (por si la decisión espera a la disputa). */
@@ -165,6 +182,7 @@ function DialogoAprobarEvidencia({
       const resultado = await validarEvidencia({
         aprobar: true,
         ...formulario.getValues(),
+        enviadaAt,
       })
       if (!resultado.ok) {
         aplicarErroresServidor(formulario.setError, resultado, CAMPOS_EVIDENCIA)
@@ -306,7 +324,9 @@ function DialogoAprobarEvidencia({
 /**
  * Aprobar o rechazar la evidencia de una publicación desde la ficha (ADM-007),
  * con los mismos controles que la cola. Tras decidir, el foco va al
- * encabezado de la publicación (los botones desaparecen).
+ * encabezado de la publicación (los botones desaparecen). Se decide sobre la
+ * versión que mostraba la ficha al abrir el diálogo: si el medio la cambió
+ * mientras tanto, la BD no decide y, al cerrar, la ficha muestra la nueva.
  */
 export function DecisionEvidencia({
   publicacion,
@@ -317,18 +337,21 @@ export function DecisionEvidencia({
   medio?: string | null
 }) {
   const [dialogo, setDialogo] = useState<"aprobar" | "rechazar" | null>(null)
+  // La versión que se ve al abrir: un refresco con el diálogo abierto no la cambia.
+  const [versionVista, setVersionVista] = useState(publicacion.actualizadaAt)
   const foco = useFocoTrasDecision(porId(idPublicacion(publicacion.id)))
-  const disputa = useEsperaDisputa("evidencia", foco)
+  const refresco = useRefrescoTrasFallo("evidencia", "evidencia", foco)
 
   function abrir(tipo: "aprobar" | "rechazar") {
     foco.reiniciar()
+    setVersionVista(publicacion.actualizadaAt)
     setDialogo(tipo)
   }
 
   function cerrar(abierto: boolean) {
     if (abierto) return
     setDialogo(null)
-    disputa.alCerrar()
+    refresco.alCerrar()
   }
 
   return (
@@ -349,9 +372,10 @@ export function DecisionEvidencia({
         abierto={dialogo === "aprobar"}
         onAbiertoChange={cerrar}
         publicacion={publicacion}
+        enviadaAt={versionVista}
         focoAlCerrar={foco.focoAlCerrar}
         onAprobada={foco.anotar}
-        onFallo={disputa.revisar}
+        onFallo={refresco.revisar}
       />
       <DialogoMotivo
         abierto={dialogo === "rechazar"}
@@ -361,8 +385,8 @@ export function DecisionEvidencia({
         descripcion={
           <>
             {medio ? <strong>{medio}</strong> : "El medio"} recibe un aviso con
-            tus observaciones y un plazo para cargar una evidencia nueva. La
-            asignación vuelve a «Contenido entregado».
+            tus observaciones y un plazo para cargar una evidencia nueva.{" "}
+            {TEXTO_VUELVE_TRAS_RECHAZO_EVIDENCIA}
           </>
         }
         etiqueta="Observaciones para el medio"
@@ -376,8 +400,9 @@ export function DecisionEvidencia({
             aprobar: false,
             publicacionId: publicacion.id,
             observaciones,
+            enviadaAt: versionVista,
           })
-          disputa.revisar(resultado)
+          refresco.revisar(resultado)
           if (resultado.ok) {
             foco.anotar()
             const plazo = resultado.datos.fechaLimitePublicacion
@@ -402,7 +427,9 @@ export function DecisionEvidencia({
  * revisó (con sus razones a la vista); uno sin alerta, solo confirmar. Si el
  * rechazo espera a la disputa (`rechazoEnDisputa`), solo se ofrece aprobar.
  * «Corregir» (métrica aprobada) lo abre quien monta este control, que tiene
- * la captura firmada.
+ * la captura firmada. Se decide sobre las cifras que mostraba la ficha al
+ * abrir el diálogo: si el medio las cambió mientras tanto, la BD no decide y,
+ * al cerrar, la ficha muestra las nuevas.
  */
 export function DecisionCorte({
   corte,
@@ -419,21 +446,24 @@ export function DecisionCorte({
   onCorregir: () => void
 }) {
   const [dialogo, setDialogo] = useState<"aprobar" | "rechazar" | null>(null)
+  // La versión que se ve al abrir: un refresco con el diálogo abierto no la cambia.
+  const [versionVista, setVersionVista] = useState(corte.actualizadaAt)
   const foco = useFocoTrasDecision(porId(idCorte(corte.id)))
-  const disputa = useEsperaDisputa("rechazoMetrica", foco)
+  const refresco = useRefrescoTrasFallo("rechazoMetrica", "metrica", foco)
   const nombre = CORTES[corte.corte].etiqueta
   const conAlerta = alertaRevisable(corte.alerta)
   const motivos = conAlerta ? frasesAlerta(corte.alerta, plataforma) : []
 
   function abrir(tipo: "aprobar" | "rechazar") {
     foco.reiniciar()
+    setVersionVista(corte.actualizadaAt)
     setDialogo(tipo)
   }
 
   function cerrar(abierto: boolean) {
     if (abierto) return
     setDialogo(null)
-    disputa.alCerrar()
+    refresco.alCerrar()
   }
 
   async function aprobar(observaciones: string) {
@@ -442,7 +472,9 @@ export function DecisionCorte({
       metricaId: corte.id,
       conAlerta,
       observaciones,
+      enviadaAt: versionVista,
     })
+    refresco.revisar(resultado)
     if (resultado.ok) {
       foco.anotar()
       toast.success(`Métricas de ${nombre} aprobadas`)
@@ -535,8 +567,9 @@ export function DecisionCorte({
             aprobar: false,
             metricaId: corte.id,
             observaciones,
+            enviadaAt: versionVista,
           })
-          disputa.revisar(resultado)
+          refresco.revisar(resultado)
           if (resultado.ok) {
             foco.anotar()
             toast.success(`Métricas de ${nombre} rechazadas`, {

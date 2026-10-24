@@ -25,10 +25,16 @@ vi.mock("../actions", () => ({
 vi.mock("@/features/disputas/actions", () => ({
   abrirDisputa: acciones.abrirDisputa,
 }))
+// «Verificar» (el de la página) usa la acción de la validación.
+vi.mock("@/features/validacion/actions", () => ({
+  verificarAsignacion: vi.fn(),
+}))
 const navegacion = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => navegacion }))
 const avisos = vi.hoisted(() => ({ success: vi.fn() }))
 vi.mock("sonner", () => ({ toast: avisos }))
+
+import { verificarEnFicha } from "@/features/validacion/components/verificar-en-ficha"
 
 import { AccionesAsignacion } from "./acciones-asignacion"
 
@@ -435,5 +441,66 @@ describe("AccionesAsignacion · pie del celular", () => {
     expect(
       screen.queryByRole("region", { name: "Acciones de la asignación" })
     ).not.toBeInTheDocument()
+  })
+
+  /** Lo que la página pasa como «Verificar» (U2): nada si no aplica. */
+  function verificarDeLaPagina(
+    estado: EstadoAsignacion,
+    puedeVerificar = true
+  ) {
+    return verificarEnFicha({
+      asignacionId: ASIGNACION,
+      estado,
+      publicaciones: [],
+      cortesRequeridos: ["H24"],
+      puedeVerificar,
+      puedeConstanciaManual: false,
+    })
+  }
+
+  it("con el «Verificar» de la página, fuera de «Métricas cargadas» tampoco hay pie", () => {
+    for (const estado of ["CANCELADA", "VERIFICADA", "PAGADA"] as const) {
+      const { unmount } = render(
+        <Ficha
+          estado={estado}
+          disposicion="pie"
+          permisos={["asignaciones.ver"]}
+          verificar={verificarDeLaPagina(estado)}
+        />
+      )
+      expect(
+        screen.queryByRole("region", { name: "Acciones de la asignación" })
+      ).not.toBeInTheDocument()
+      unmount()
+    }
+    // Sin `metricas.validar` tampoco, aunque esté en «Métricas cargadas».
+    render(
+      <Ficha
+        estado="METRICAS_CARGADAS"
+        disposicion="pie"
+        permisos={["asignaciones.ver"]}
+        verificar={verificarDeLaPagina("METRICAS_CARGADAS", false)}
+      />
+    )
+    expect(
+      screen.queryByRole("region", { name: "Acciones de la asignación" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("con el «Verificar» de la página en «Métricas cargadas», el pie lo muestra", () => {
+    render(
+      <Ficha
+        estado="METRICAS_CARGADAS"
+        disposicion="pie"
+        permisos={["asignaciones.ver"]}
+        verificar={verificarDeLaPagina("METRICAS_CARGADAS")}
+      />
+    )
+    const pie = screen.getByRole("region", {
+      name: "Acciones de la asignación",
+    })
+    expect(
+      within(pie).getByRole("button", { name: /Verificar/ })
+    ).toBeInTheDocument()
   })
 })

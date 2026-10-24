@@ -28,11 +28,16 @@ import {
   idPublicacion,
 } from "./decisiones-ficha"
 
+/** `updated_at` tal cual lo entrega la BD: la versión que muestra la ficha. */
+const VERSION = "2026-10-22T16:00:00.123456+00:00"
+const VERSION_NUEVA = "2026-10-22T17:45:00.000002+00:00"
+
 const PUBLICACION = {
   id: "0192f3a4-5b6c-7d8e-9f01-0000000000b1",
   numero: 1,
   url: "https://www.instagram.com/p/abc/",
   estado: "PENDIENTE",
+  actualizadaAt: VERSION,
 } as PublicacionEvidencia
 
 function corte(cambios: Partial<CorteMetrica> = {}): CorteMetrica {
@@ -50,6 +55,7 @@ function corte(cambios: Partial<CorteMetrica> = {}): CorteMetrica {
     observaciones: null,
     validadaAt: null,
     conImagen: false,
+    actualizadaAt: VERSION,
     ...cambios,
   } as CorteMetrica
 }
@@ -86,13 +92,19 @@ beforeEach(() => {
 })
 
 describe("DecisionEvidencia (ficha)", () => {
-  function Ficha({ pendiente = true }: { pendiente?: boolean }) {
+  function Ficha({
+    pendiente = true,
+    publicacion = PUBLICACION,
+  }: {
+    pendiente?: boolean
+    publicacion?: PublicacionEvidencia
+  }) {
     return (
       <article>
-        <h3 id={idPublicacion(PUBLICACION.id)} tabIndex={-1}>
+        <h3 id={idPublicacion(publicacion.id)} tabIndex={-1}>
           Publicación
         </h3>
-        {pendiente ? <DecisionEvidencia publicacion={PUBLICACION} /> : null}
+        {pendiente ? <DecisionEvidencia publicacion={publicacion} /> : null}
       </article>
     )
   }
@@ -127,6 +139,7 @@ describe("DecisionEvidencia (ficha)", () => {
       publicacionId: PUBLICACION.id,
       etiquetaVerificada: true,
       observaciones: "",
+      enviadaAt: VERSION,
     })
     rerender(<Ficha pendiente={false} />)
     await waitFor(() =>
@@ -141,6 +154,8 @@ describe("DecisionEvidencia (ficha)", () => {
     const dialogo = await screen.findByRole("alertdialog", {
       name: "¿Rechazar la evidencia?",
     })
+    // El estado con el nombre que muestran las insignias (U6).
+    expect(dialogo).toHaveTextContent("vuelve a «Contenido descargado»")
     await usuario.type(
       within(dialogo).getByRole("textbox"),
       "La captura no corresponde al post."
@@ -152,7 +167,63 @@ describe("DecisionEvidencia (ficha)", () => {
       aprobar: false,
       publicacionId: PUBLICACION.id,
       observaciones: "La captura no corresponde al post.",
+      enviadaAt: VERSION,
     })
+  })
+
+  it("decide sobre la versión que se veía al abrir, aunque la ficha se refresque", async () => {
+    acciones.validarEvidencia.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.evidenciaCambiada)
+    )
+    const usuario = userEvent.setup()
+    const { rerender } = render(<Ficha />)
+    await usuario.click(
+      screen.getByRole("button", { name: "Aprobar evidencia" })
+    )
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Aprobar la evidencia?",
+    })
+    // Otro refresco trae la versión nueva con el diálogo abierto.
+    rerender(
+      <Ficha publicacion={{ ...PUBLICACION, actualizadaAt: VERSION_NUEVA }} />
+    )
+    await usuario.click(
+      within(dialogo).getByRole("checkbox", {
+        name: "La etiqueta de publicidad es visible",
+      })
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Aprobar evidencia" })
+    )
+    expect(acciones.validarEvidencia).toHaveBeenCalledWith(
+      expect.objectContaining({ enviadaAt: VERSION })
+    )
+    // La BD no decidió: se explica y, al cerrar, la ficha muestra la nueva.
+    expect(
+      await within(dialogo).findByText(MENSAJES_VALIDACION.evidenciaCambiada)
+    ).toBeInTheDocument()
+    expect(navegacion.refresh).not.toHaveBeenCalled()
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(navegacion.refresh).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Publicación" })).toHaveFocus()
+    )
+
+    // Al volver a abrirlo, se decide sobre la versión nueva.
+    await usuario.click(screen.getByRole("button", { name: "Rechazar" }))
+    const rechazo = await screen.findByRole("alertdialog", {
+      name: "¿Rechazar la evidencia?",
+    })
+    await usuario.type(
+      within(rechazo).getByRole("textbox"),
+      "La captura no corresponde al post."
+    )
+    await usuario.click(
+      within(rechazo).getByRole("button", { name: "Rechazar evidencia" })
+    )
+    expect(acciones.validarEvidencia).toHaveBeenLastCalledWith(
+      expect.objectContaining({ aprobar: false, enviadaAt: VERSION_NUEVA })
+    )
   })
 })
 
@@ -216,6 +287,7 @@ describe("DecisionCorte (ficha)", () => {
       metricaId: conAlerta.id,
       conAlerta: true,
       observaciones: "Comparé las cifras con la captura del panel y coinciden.",
+      enviadaAt: VERSION,
     })
     rerender(
       <Fila
@@ -304,7 +376,30 @@ describe("DecisionCorte (ficha)", () => {
       metricaId: corte().id,
       conAlerta: false,
       observaciones: "",
+      enviadaAt: VERSION,
     })
+  })
+
+  it("si el medio cambió las cifras, no aprueba y al cerrar muestra las nuevas", async () => {
+    acciones.validarMetrica.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.metricaCambiada)
+    )
+    const usuario = userEvent.setup()
+    render(<Fila valor={corte()} />)
+    await usuario.click(screen.getByRole("button", { name: "Aprobar" }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Aprobar las métricas de 24 horas?",
+    })
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Aprobar" })
+    )
+    expect(
+      await within(dialogo).findByText(MENSAJES_VALIDACION.metricaCambiada)
+    ).toBeInTheDocument()
+    expect(avisos.success).not.toHaveBeenCalled()
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(navegacion.refresh).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByText("24 horas")).toHaveFocus())
   })
 
   it("sin la evidencia aprobada, «Aprobar» queda deshabilitado y explicado", () => {

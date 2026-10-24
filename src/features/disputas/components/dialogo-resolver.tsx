@@ -166,7 +166,12 @@ export function DialogoResolver({
   }
 
   return (
-    <Dialog open={abierto} onOpenChange={cambiarAbierto}>
+    // Tocar fuera no cierra: borraría la decisión y la explicación escritas.
+    <Dialog
+      open={abierto}
+      onOpenChange={cambiarAbierto}
+      disablePointerDismissal
+    >
       <DialogContent
         showCloseButton={false}
         finalFocus={focoAlCerrar}
@@ -448,7 +453,8 @@ export function DialogoResolver({
             disabled={pendiente}
             render={<Button variant="outline" />}
           >
-            Cancelar
+            {/* «Cancelar» se confundiría con «Cancelar la asignación». */}
+            Volver
           </DialogClose>
           <Button onClick={confirmar} disabled={pendiente}>
             {pendiente ? (

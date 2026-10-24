@@ -108,6 +108,11 @@ export function valoresConAlertaMultiplo({
 export interface AlertaDeMetrica {
   multiplo: boolean
   desviacion: boolean
+  /**
+   * Alertó en una versión anterior: la BD la conserva en
+   * `detalle_alertas.alerta_previa` aunque el medio corrija las cifras.
+   */
+  previa: boolean
   limiteAlcance: number | null
 }
 
@@ -117,16 +122,29 @@ export function leerAlerta(fila: {
   alerta_desviacion: boolean
   detalle_alertas: Json
 }): AlertaDeMetrica {
-  const detalle = fila.detalle_alertas
-  const limite =
-    typeof detalle === "object" && detalle !== null && !Array.isArray(detalle)
-      ? Number(detalle.limite_alcance)
-      : Number.NaN
+  const detalle =
+    typeof fila.detalle_alertas === "object" &&
+    fila.detalle_alertas !== null &&
+    !Array.isArray(fila.detalle_alertas)
+      ? fila.detalle_alertas
+      : null
+  const limite = detalle ? Number(detalle.limite_alcance) : Number.NaN
   return {
     multiplo: fila.alerta_multiplo,
     desviacion: fila.alerta_desviacion,
+    // Cuenta con solo existir, como en la BD (`detalle_alertas ? 'alerta_previa'`).
+    previa: detalle !== null && Object.hasOwn(detalle, "alerta_previa"),
     limiteAlcance: Number.isFinite(limite) ? limite : null,
   }
+}
+
+/**
+ * ¿Aprobarla exige anotar qué se revisó? Con una alerta vigente o previa,
+ * `validar_metrica_srv` sin observaciones responde AMO_MOTIVO_REQUERIDO
+ * (`alerta_sin_revision`).
+ */
+export function exigeRevision(alerta: AlertaDeMetrica): boolean {
+  return alerta.multiplo || alerta.desviacion || alerta.previa
 }
 
 // ── Disputas ─────────────────────────────────────────────────────────────────

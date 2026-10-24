@@ -276,8 +276,8 @@ function FormularioCorreccion({
             {...register("motivo")}
           />
           <FieldDescription id={`${idMotivo}-ayuda`}>
-            Obligatorio: queda en la bitácora con tu nombre y se suma a las
-            observaciones de la métrica.
+            Obligatorio: queda en la bitácora con tu nombre; el medio y el
+            anunciante no lo ven.
           </FieldDescription>
           <FieldError
             id={`${idMotivo}-error`}

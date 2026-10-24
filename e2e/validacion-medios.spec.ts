@@ -281,7 +281,7 @@ test.describe("suspensión del medio", () => {
       destino: "/ofertas",
     })
     await expect(
-      pagina.getByRole("heading", { name: "Tu medio está suspendido" })
+      pagina.getByText("Tu medio está suspendido", { exact: true })
     ).toBeVisible()
     await expect(
       pagina.getByRole("article").filter({ hasText: aceptada.oferta.titulo })

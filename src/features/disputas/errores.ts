@@ -22,7 +22,7 @@ export const MENSAJES_DISPUTA = {
   ofertaCerrada:
     "La oferta ya cerró: no se puede reabrir la publicación. Mantén el vencimiento o cancela la asignación.",
   metricasPendientes:
-    "Hay métricas pendientes de revisión en esta asignación: apruébalas o recházalas antes de verificar.",
+    "Hay métricas pendientes de revisión: apruébalas desde la ficha de la asignación antes de verificar. Si alguna debe corregirse, restaura el estado previo y recházala después.",
   permanenciaPendiente:
     "La permanencia mínima de la publicación aún no se cumple: espera a que pase o deja constancia manual.",
   asignacionCerrada:
@@ -33,6 +33,8 @@ export const MENSAJES_DISPUTA = {
     "La asignación ya está en una liquidación: anula primero la liquidación.",
   alertaSinRevision:
     "La métrica tiene alertas: anota qué revisaste antes de aprobarla.",
+  reclamoPrevio:
+    "Ya reclamaste esta publicación: una vencida admite un solo reclamo. Actualiza la página para ver cómo terminó.",
 } as const
 
 /** `hint` de la BD con texto propio en la interfaz. */
@@ -47,6 +49,7 @@ const POR_HINT: Readonly<Record<string, { mensaje: string; campo?: string }>> =
       mensaje: MENSAJES_DISPUTA.alertaSinRevision,
       campo: "motivo",
     },
+    reclamo_previo: { mensaje: MENSAJES_DISPUTA.reclamoPrevio },
   }
 
 const RESTRICCIONES: Restricciones = {
@@ -65,6 +68,14 @@ const RESTRICCIONES: Restricciones = {
   disputa_mensajes_adjunto_chk: {
     mensaje: MENSAJES_DISPUTA.adjuntoAjeno,
     campo: "adjunto",
+  },
+  // La BD recorta lo que copia en la asignación (admite 1.000); si una base
+  // sin ese recorte lo rechaza, se dice junto al texto qué acortar (al abrir,
+  // la acción lo lleva a la descripción).
+  asignaciones_motivo_chk: {
+    mensaje:
+      "El texto es demasiado largo para la asignación (admite 1.000 caracteres): acórtalo e inténtalo de nuevo.",
+    campo: "motivo",
   },
 }
 

@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import type { ReactNode } from "react"
 
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
 import {
@@ -16,7 +15,7 @@ import {
 import { ProgresoAsignacion } from "@/features/operacion/components/linea-tiempo-asignacion"
 import { opcionesGestion } from "@/features/operacion/gestion-asignacion"
 import { obtenerAsignacion } from "@/features/operacion/queries/asignaciones"
-import { VerificarAsignacion } from "@/features/validacion/components/verificar-asignacion"
+import { verificarEnFicha } from "@/features/validacion/components/verificar-en-ficha"
 import { validacionEnFicha } from "@/features/validacion/decision"
 import { requerirPermiso, tieneAlgunPermiso } from "@/lib/auth/dal"
 
@@ -84,18 +83,18 @@ export default async function PaginaAsignacion({
     },
   }
   // «Verificar» (ADM-009): en la cabecera y, en el celular, en el pie fijo.
-  const verificar: ReactNode = (
-    <VerificarAsignacion
-      asignacionId={asignacion.id}
-      estado={asignacion.estado}
-      publicaciones={asignacion.publicaciones}
-      cortesRequeridos={asignacion.cortesRequeridos}
-      puedeVerificar={tieneAlgunPermiso(usuario, ["metricas.validar"])}
-      puedeConstanciaManual={tieneAlgunPermiso(usuario, [
-        "metricas.editar_validadas",
-      ])}
-    />
-  )
+  // Fuera de «Métricas cargadas» o sin permiso no llega nada: el pie no se
+  // pinta vacío.
+  const verificar = verificarEnFicha({
+    asignacionId: asignacion.id,
+    estado: asignacion.estado,
+    publicaciones: asignacion.publicaciones,
+    cortesRequeridos: asignacion.cortesRequeridos,
+    puedeVerificar: tieneAlgunPermiso(usuario, ["metricas.validar"]),
+    puedeConstanciaManual: tieneAlgunPermiso(usuario, [
+      "metricas.editar_validadas",
+    ]),
+  })
   // Las decisiones de la validación sobre cada publicación y cada corte
   // (`evidencias-asignacion.tsx`), con lo que espera a una disputa abierta;
   // sin permiso de validar ni de corregir, solo se consulta.

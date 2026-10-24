@@ -1,8 +1,11 @@
-import { render, screen, within } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { render, screen, waitFor, within } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import { exito } from "@/lib/result"
 
 // Las Server Actions no se ejecutan en jsdom: se sustituyen por espías.
-vi.mock("@/features/operacion/actions", () => ({ firmarEvidencias: vi.fn() }))
+const firmas = vi.hoisted(() => ({ firmarEvidencias: vi.fn() }))
+vi.mock("@/features/operacion/actions", () => firmas)
 vi.mock("@/features/validacion/actions", () => ({
   validarEvidencia: vi.fn(),
   validarMetrica: vi.fn(),
@@ -42,6 +45,7 @@ function corte(cambios: Partial<CorteMetrica> = {}): CorteMetrica {
     observaciones: null,
     validadaAt: null,
     conImagen: false,
+    actualizadaAt: "2026-10-11T16:00:00.000Z",
     ...cambios,
   }
 }
@@ -63,10 +67,19 @@ function publicacion(
     observaciones: null,
     retiradaDetectadaAt: null,
     conImagen: false,
+    actualizadaAt: "2026-10-10T16:00:00.000Z",
     cortes: [],
     ...cambios,
   }
 }
+
+beforeEach(() => {
+  firmas.firmarEvidencias
+    .mockReset()
+    .mockResolvedValue(
+      exito({ publicaciones: {}, metricas: {}, vigenciaSegundos: 300 })
+    )
+})
 
 /** OPERACIONES con `disputas.ver`, en una asignación en disputa. */
 function enDisputa(
@@ -189,5 +202,71 @@ describe("EvidenciasAsignacion · alertas", () => {
     })
     expect(within(porque).getByRole("heading", { level: 4 })).toBeVisible()
     expect(porque).toHaveTextContent("El alcance (95.000) supera el límite")
+  })
+})
+
+describe("EvidenciasAsignacion · capturas y observaciones", () => {
+  it("vuelve a firmar si un refresco trae otra versión (otra captura o un corte nuevo)", async () => {
+    const conCaptura = publicacion({ conImagen: true })
+    const { rerender } = render(<Ficha publicaciones={[conCaptura]} />)
+    await waitFor(() =>
+      expect(firmas.firmarEvidencias).toHaveBeenCalledTimes(1)
+    )
+    expect(firmas.firmarEvidencias).toHaveBeenCalledWith({
+      asignacionId: ASIGNACION,
+    })
+
+    // El mismo refresco sin cambios no vuelve a firmar.
+    rerender(<Ficha publicaciones={[{ ...conCaptura }]} />)
+    expect(firmas.firmarEvidencias).toHaveBeenCalledTimes(1)
+    // El medio cargó otra captura: misma publicación, otra versión.
+    rerender(
+      <Ficha
+        publicaciones={[
+          { ...conCaptura, actualizadaAt: "2026-10-12T09:00:00.000Z" },
+        ]}
+      />
+    )
+    await waitFor(() =>
+      expect(firmas.firmarEvidencias).toHaveBeenCalledTimes(2)
+    )
+
+    // Llega un corte nuevo con su captura.
+    rerender(
+      <Ficha
+        publicaciones={[
+          {
+            ...conCaptura,
+            actualizadaAt: "2026-10-12T09:00:00.000Z",
+            cortes: [corte({ conImagen: true })],
+          },
+        ]}
+      />
+    )
+    await waitFor(() =>
+      expect(firmas.firmarEvidencias).toHaveBeenCalledTimes(3)
+    )
+  })
+
+  it("las observaciones de un corte corregido tras un rechazo se leen como revisión anterior", () => {
+    render(
+      <Ficha
+        publicaciones={[
+          publicacion({
+            estado: "APROBADA",
+            cortes: [
+              corte({
+                observaciones: "El alcance no coincide con la captura.",
+              }),
+            ],
+          }),
+        ]}
+      />
+    )
+    expect(
+      screen.getByText("Revisión anterior:").parentElement
+    ).toHaveTextContent(
+      "Revisión anterior: El alcance no coincide con la captura."
+    )
   })
 })

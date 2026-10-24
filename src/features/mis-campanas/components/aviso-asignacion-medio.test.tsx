@@ -88,6 +88,28 @@ describe("AvisoAsignacionMedio", () => {
     ).toHaveAttribute("href", `/mis-campanas/${ASIGNACION_ID}/disputa`)
   })
 
+  it("en disputa sobre una verificada: solo se detiene la liquidación, sin cortes que cargar (C4)", () => {
+    pintar({
+      estado: "EN_DISPUTA",
+      estadoPrevioDisputa: "VERIFICADA",
+      disputa: {
+        id: DISPUTA,
+        estado: "ABIERTA",
+        parte: "ANUNCIANTE",
+        estadoOrigen: "VERIFICADA",
+        estadoResultante: null,
+        creadaAt: "2026-10-20T15:00:00.000Z",
+        resueltaAt: null,
+      },
+    })
+    const aviso = screen.getByRole("alert")
+    expect(aviso).toHaveTextContent(
+      "La abrió el anunciante. Mientras dure la disputa, esta publicación no se liquida."
+    )
+    expect(aviso).not.toHaveTextContent(/no se verifica/)
+    expect(aviso).not.toHaveTextContent(/cortes de métricas/)
+  })
+
   it("el reclamo de una vencida: el cupo no vuelve mientras se revisa", () => {
     pintar({
       estado: "EN_DISPUTA",

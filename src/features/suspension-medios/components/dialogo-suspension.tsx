@@ -255,7 +255,11 @@ export function DialogoSuspension({
                 ref={campo}
                 id={idCampo}
                 value={motivo}
-                onChange={(evento) => setMotivo(evento.target.value)}
+                onChange={(evento) => {
+                  setMotivo(evento.target.value)
+                  // El aviso se va al corregirlo, como en los demás diálogos.
+                  if (error) setError(null)
+                }}
                 maxLength={LONGITUD_MAXIMA_MOTIVO}
                 rows={3}
                 disabled={pendiente}

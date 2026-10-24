@@ -1,9 +1,10 @@
-import { CircleCheck, ExternalLink, Scale } from "lucide-react"
+import { CircleCheck, ExternalLink, RefreshCw, Scale } from "lucide-react"
 import type { Route } from "next"
 import Link from "next/link"
 import { type ReactNode, useId } from "react"
 
 import { EnlaceBotonExterno } from "@/components/layout/enlace-boton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { formatearHandle } from "@/features/operacion/formato"
 import { formatearFechaHora, formatearRelativo } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -187,5 +188,34 @@ export function EsperaDisputa({
         ) : null}
       </p>
     </div>
+  )
+}
+
+/** Sin la versión nueva en esta página de la cola: dónde buscarla. */
+export const TEXTO_VERSION_FUERA_DE_PAGINA =
+  "Ya no está pendiente en esta página de la cola: puede que otra persona la haya decidido o que, al cambiar, haya pasado a otra página. Vuelve a la cola y búscala allí."
+
+/**
+ * El medio cambió lo que se revisaba (hints `evidencia_cambiada` y
+ * `metrica_cambiada`): la decisión no se aplicó. Va en lugar del formulario;
+ * el pie ofrece revisar la versión nueva si la cola ya la trae
+ * (`conVersionNueva`) o volver a la cola.
+ */
+export function AvisoVersionCambiada({
+  mensaje,
+  conVersionNueva,
+}: {
+  mensaje: string
+  conVersionNueva: boolean
+}) {
+  return (
+    <Alert className="border-warning/45 bg-warning/10">
+      <RefreshCw aria-hidden />
+      <AlertTitle>Hay una versión más reciente</AlertTitle>
+      <AlertDescription className="flex flex-col gap-1 text-pretty">
+        <p>{mensaje}</p>
+        {conVersionNueva ? null : <p>{TEXTO_VERSION_FUERA_DE_PAGINA}</p>}
+      </AlertDescription>
+    </Alert>
   )
 }

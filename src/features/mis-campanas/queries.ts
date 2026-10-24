@@ -15,6 +15,7 @@ import { cache } from "react"
 
 import { disputasDeAsignacion } from "@/features/disputas/queries"
 import type { DisputaDetalle } from "@/features/disputas/tipos"
+import { notaDeRechazo } from "@/features/ejecucion/metricas"
 import { medioPropio } from "@/features/mi-medio/queries"
 import { clienteSolicitud, fallar } from "@/features/operacion/queries/comun"
 import type { Database, Json } from "@/types/database.types"
@@ -391,7 +392,10 @@ export const ejecucionDeAsignacion = cache(
         periodoDesde: fila.periodo_desde,
         periodoHasta: fila.periodo_hasta,
         estado: fila.estado_validacion,
-        observaciones: texto(fila.observaciones),
+        // Solo la nota de un rechazo: la revisión de una alerta no viaja (D67).
+        observaciones: texto(
+          notaDeRechazo(fila.estado_validacion, fila.observaciones)
+        ),
         validadaAt: fila.validada_at,
         creadaAt: fila.created_at,
         actualizadaAt: fila.updated_at,

@@ -129,7 +129,12 @@ describe("HiloDisputa", () => {
     await usuario.click(
       screen.getByRole("button", { name: "Ver la imagen adjunta" })
     )
-    expect(screen.getByRole("dialog", { name: "Imagen adjunta" })).toBeVisible()
+    const visor = screen.getByRole("dialog", { name: "Imagen adjunta" })
+    expect(visor).toBeVisible()
+    // A 390 px la imagen y su pie no caben: el visor se desplaza y «Cerrar»
+    // queda al alcance (U1).
+    expect(visor).toHaveClass("max-h-[calc(100dvh-2rem)]", "overflow-y-auto")
+    expect(within(visor).getByRole("button", { name: "Cerrar" })).toBeVisible()
     await waitFor(() =>
       expect(acciones.firmarAdjuntoDisputa).toHaveBeenCalledWith({
         disputaId: DISPUTA.id,
@@ -153,6 +158,12 @@ describe("HiloDisputa", () => {
     expect(campo).toHaveAccessibleDescription(
       "Lo que escribas y adjuntes lo verán el anunciante y el equipo AMO."
     )
+    // La región viva existe vacía y fuera de la vista, no oculta: así se
+    // anuncia «Mensaje enviado.» (U3, WCAG 4.1.3).
+    const anuncio = within(caja).getByRole("status")
+    expect(anuncio).toBeEmptyDOMElement()
+    expect(anuncio).toHaveClass("empty:sr-only")
+    expect(anuncio).not.toHaveClass("empty:hidden")
     expect(
       within(caja).queryByLabelText(/Nota interna/)
     ).not.toBeInTheDocument()

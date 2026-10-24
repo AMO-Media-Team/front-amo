@@ -10,6 +10,7 @@ import type { CorteMetrica } from "@/features/operacion/metricas"
 import {
   type AccionesCorte,
   accionesCorte,
+  aplicaVerificacion,
   BLOQUEO_EVIDENCIA_SIN_APROBAR,
   bloqueoEnCola,
   detalleFaltanMetricas,
@@ -196,6 +197,21 @@ describe("durante una disputa (hint `en_disputa`)", () => {
     expect(
       accionesCorte({ estado: "APROBADA" }, true, conTodo).rechazoEnDisputa
     ).toBe(false)
+  })
+})
+
+describe("aplicaVerificacion (ADM-009)", () => {
+  it("solo en «Métricas cargadas» y para quien verifica", () => {
+    expect(aplicaVerificacion("METRICAS_CARGADAS", true)).toBe(true)
+    expect(aplicaVerificacion("METRICAS_CARGADAS", false)).toBe(false)
+    for (const estado of [
+      "EVIDENCIA_VALIDADA",
+      "VERIFICADA",
+      "CANCELADA",
+      "EN_DISPUTA",
+    ] as const) {
+      expect(aplicaVerificacion(estado, true)).toBe(false)
+    }
   })
 })
 

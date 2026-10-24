@@ -271,12 +271,20 @@ test.describe("disputas del anunciante", () => {
       .getByRole("textbox", { name: "Mensaje" })
       .fill("Ya corregimos el enlace en la versión 2 del contenido.")
     await caja.getByRole("button", { name: "Enviar" }).click()
-    await expect(hilo).toContainText(
-      "Ya corregimos el enlace en la versión 2 del contenido."
-    )
-    expect(
-      (await leerDisputaE2E(disputaId)).mensajes.map((m) => m.parte)
-    ).toEqual(["MEDIO", "ANUNCIANTE"])
+    // En la lista de mensajes (el campo de respuesta también está en la región
+    // y tiene el texto antes de enviarse).
+    await expect(
+      hilo
+        .getByRole("listitem")
+        .filter({
+          hasText: "Ya corregimos el enlace en la versión 2 del contenido.",
+        })
+    ).toBeVisible()
+    await expect
+      .poll(async () =>
+        (await leerDisputaE2E(disputaId)).mensajes.map((m) => m.parte)
+      )
+      .toEqual(["MEDIO", "ANUNCIANTE"])
 
     // El equipo AMO cancela: la empresa lo lee en su voz y ya no escribe.
     await resolverDisputaE2E({

@@ -55,6 +55,7 @@ const AHORA_D7 = new Date("2026-10-28T21:00:00.000Z")
 const ASIGNACION: AsignacionEjecucion = {
   id: ID,
   estado: "EVIDENCIA_VALIDADA",
+  estadoPrevioDisputa: null,
   plataforma: "INSTAGRAM",
   formatoClave: "REEL",
   formatoNombre: "Reel",

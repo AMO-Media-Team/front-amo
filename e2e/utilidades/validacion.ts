@@ -562,6 +562,30 @@ export async function restablecerValidacionE2E(): Promise<ValidacionRestablecida
   })
 }
 
+/**
+ * Motivos que dejó la bitácora sobre una métrica, del más antiguo al más
+ * reciente: la constancia de una aprobación con alerta y el motivo de una
+ * corrección van ahí, no en `observaciones`, que leen el medio y el anunciante
+ * (D67). Con el cliente de servicio: la bitácora es del equipo AMO.
+ */
+export async function motivosBitacoraMetricaE2E(
+  metricaId: string
+): Promise<string[]> {
+  const { data, error } = await crearClienteServicio(entorno)
+    .from("bitacora")
+    .select("motivo")
+    .eq("entidad", "metricas")
+    .eq("entidad_id", metricaId)
+    .not("motivo", "is", null)
+    .order("id", { ascending: true })
+  if (error) {
+    throw new Error(
+      `No se pudo leer la bitácora de la métrica ${metricaId}: ${error.message}`
+    )
+  }
+  return data.flatMap((fila) => (fila.motivo ? [fila.motivo] : []))
+}
+
 /** Alerta registrada en la métrica (el servicio lee las columnas que la sesión no ve). */
 export async function leerAlertaMetricaE2E(
   metricaId: string

@@ -5,10 +5,11 @@
  * `validar_evidencia_srv`, `validar_metrica_srv`, `corregir_metrica_srv` y
  * `transicionar_srv` revalidan permiso, estado y condiciones.
  */
-import type {
-  Corte,
-  EstadoAsignacion,
-  EstadoValidacion,
+import {
+  type Corte,
+  type EstadoAsignacion,
+  ESTADOS_ASIGNACION,
+  type EstadoValidacion,
 } from "@/features/operacion/estados"
 import {
   cerrarFrase,
@@ -227,6 +228,18 @@ export type SituacionVerificacion =
     }
 
 /**
+ * ¿Hay «Verificar» que ofrecer? Solo en «Métricas cargadas» y a quien
+ * verifica; fuera de eso no se muestra nada (ni un hueco vacío en el pie fijo
+ * del celular).
+ */
+export function aplicaVerificacion(
+  estado: EstadoAsignacion,
+  puedeVerificar: boolean
+): boolean {
+  return estado === "METRICAS_CARGADAS" && puedeVerificar
+}
+
+/**
  * ¿Se puede verificar la asignación? Las mismas condiciones que
  * `private.validar_verificacion_asignacion`: cada publicación con todos los
  * cortes requeridos aprobados, ninguna métrica pendiente (también un
@@ -250,9 +263,7 @@ export function situacionVerificacion({
   puedeConstanciaManual: boolean
   ahora: Date
 }): SituacionVerificacion {
-  if (estado !== "METRICAS_CARGADAS" || !puedeVerificar) {
-    return { tipo: "no-aplica" }
-  }
+  if (!aplicaVerificacion(estado, puedeVerificar)) return { tipo: "no-aplica" }
   let sinAprobar = 0
   let pendientes = 0
   let permanenciaHasta: string | null = null
@@ -328,6 +339,12 @@ export const COMPROBACIONES_METRICA: readonly string[] = [
   "La captura es de esta publicación y muestra la fecha del corte.",
   "Si hay alerta, la captura respalda el alcance reportado.",
 ]
+
+/**
+ * Adónde vuelve la asignación al rechazar su evidencia, con el nombre que
+ * muestran las insignias («Contenido descargado»).
+ */
+export const TEXTO_VUELVE_TRAS_RECHAZO_EVIDENCIA = `La asignación vuelve a «${ESTADOS_ASIGNACION.CONTENIDO_ENTREGADO.etiqueta}».`
 
 export const SUGERENCIAS_RECHAZO_EVIDENCIA: readonly string[] = [
   "El post no abre públicamente: revisa que la cuenta sea pública y que el enlace sea el de la publicación.",

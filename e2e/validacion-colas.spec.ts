@@ -9,6 +9,7 @@ import {
   asignacionConMetricaPendienteE2E,
   asignacionListaParaVerificarE2E,
   ingresarComoOperaciones,
+  motivosBitacoraMetricaE2E,
   restablecerValidacionE2E,
   rutaFichaAsignacion,
 } from "./utilidades/validacion"
@@ -27,12 +28,13 @@ import {
  *     medio recibe el aviso (ADM-007 c1).
  *   - La métrica con alerta por múltiplo de seguidores aparece con el filtro y
  *     su porqué se ve al lado de la captura; aprobarla exige anotar qué se
- *     revisó (ADM-008 c1). Una cuya evidencia no está aprobada no se aprueba.
+ *     revisó, que queda en la bitácora y no a la vista de las partes (ADM-008
+ *     c1, D67). Una cuya evidencia no está aprobada no se aprueba.
  *   - Verifica una asignación lista (ADM-009 c2); una con la permanencia
  *     pendiente dice hasta cuándo (ADM-009 c1) y solo un ADMIN la verifica
  *     con constancia manual.
  *   - Un ADMIN corrige una métrica aprobada desde la ficha con un motivo
- *     obligatorio que queda en la métrica (ADM-008 c2).
+ *     obligatorio que queda en la bitácora (ADM-008 c2).
  *   Antes y después, `restablecerValidacionE2E()` limpia las campañas
  *   «Validación E2E».
  */
@@ -266,7 +268,10 @@ test.describe("validación · decisiones", () => {
         "Múltiplo permitido",
         "Límite",
       ]) {
-        await expect(porque.getByText(dato, { exact: true })).toBeVisible()
+        // Con dos motivos (desviación y múltiplo) el alcance aparece en los dos.
+        await expect(
+          porque.getByText(dato, { exact: true }).first()
+        ).toBeVisible()
       }
 
       // A 1.440 px la captura queda a la izquierda del porqué.
@@ -303,11 +308,15 @@ test.describe("validación · decisiones", () => {
             )?.estado
         )
         .toBe("APROBADA")
+      // D67: la constancia va a la bitácora; observaciones las leen las partes.
       const leida = await leerAsignacionE2E(metrica.asignacionId)
       expect(
         leida.metricas.find((corte) => corte.id === metrica.metricaId)
           ?.observaciones
-      ).toBe("Comparé las cifras con la captura del panel y coinciden.")
+      ).toBeNull()
+      expect(await motivosBitacoraMetricaE2E(metrica.metricaId)).toContain(
+        "Comparé las cifras con la captura del panel y coinciden."
+      )
     })
 
     test("sin la evidencia aprobada, la métrica no se aprueba y se explica", async ({
@@ -469,8 +478,10 @@ test.describe("validación · decisiones", () => {
       if (error) throw new Error(`No se pudo leer la métrica: ${error.message}`)
       expect(data.alcance).toBe(1)
       expect(data.estado_validacion).toBe("APROBADA")
-      expect(data.observaciones).toContain(
-        "Corrección: El medio digitó mal el alcance"
+      // El motivo queda en la bitácora, no a la vista del medio ni de la empresa.
+      expect(data.observaciones).toBeNull()
+      expect(await motivosBitacoraMetricaE2E(metrica.metricaId)).toContain(
+        "El medio digitó mal el alcance: la captura del panel muestra 1."
       )
     })
   })

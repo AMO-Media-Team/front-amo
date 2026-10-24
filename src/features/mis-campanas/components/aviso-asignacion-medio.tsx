@@ -7,6 +7,7 @@ import { CAUSAS_CANCELACION } from "@/features/operacion/estados"
 import { formatearFechaHora } from "@/lib/format"
 
 import { textoContacto } from "../contacto"
+import { efectoApertura } from "../disputa"
 import { consecuenciaCancelacion, estaEnCurso } from "../estados"
 import type { AsignacionMedio } from "../tipos"
 import { AvisoSuspensionMedio } from "./aviso-suspension"
@@ -122,7 +123,19 @@ function AvisoEstadoMedio({
         </AvisoFicha>
       )
     case "EN_DISPUTA": {
-      const reclamo = asignacion.estadoPrevioDisputa === "VENCIDA_SIN_PUBLICAR"
+      const previo = asignacion.estadoPrevioDisputa
+      const reclamo = previo === "VENCIDA_SIN_PUBLICAR"
+      // Lo que queda en pausa según de dónde venía: una verificada solo deja
+      // de liquidarse y ya no recibe cortes (D72).
+      const efecto = reclamo
+        ? "Mientras lo revisamos, el cupo no vuelve a tu cuenta."
+        : previo
+          ? efectoApertura({
+              perspectiva: "medio",
+              modo: "problema",
+              estadoAsignacion: previo,
+            })
+          : "Mientras dure la disputa, esta publicación no se verifica ni se liquida."
       return (
         <AvisoFicha
           tono="aviso"
@@ -131,12 +144,7 @@ function AvisoEstadoMedio({
             reclamo ? "Estamos revisando tu reclamo" : "Hay una disputa abierta"
           }
         >
-          {[
-            reclamo ? null : quienAbrioDisputa(asignacion),
-            reclamo
-              ? "Mientras lo revisamos, el cupo no vuelve a tu cuenta."
-              : "Mientras dure, esta campaña no se verifica ni se liquida. Si tienes cortes de métricas pendientes, sigue cargándolos.",
-          ]
+          {[reclamo ? null : quienAbrioDisputa(asignacion), efecto]
             .filter(Boolean)
             .join(" ")}
           <EnlaceAvisoDisputa

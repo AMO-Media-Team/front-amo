@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { NuqsTestingAdapter, type UrlUpdateEvent } from "nuqs/adapters/testing"
 import type { ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { formatearCOP } from "@/lib/format"
 
@@ -13,6 +13,16 @@ import { ListadoOfertas } from "./listado-ofertas"
 import { SinElegibilidad } from "./vacio-marketplace"
 
 const AHORA = new Date("2026-10-23T15:00:00.000Z").getTime()
+
+// La cuenta regresiva vuelve a leer el reloj en el cliente: se fija en AHORA
+// (solo Date, para no detener los temporizadores de userEvent).
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(AHORA)
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function cop(valor: number): string {
   return formatearCOP(valor).replace(/\s/g, " ")

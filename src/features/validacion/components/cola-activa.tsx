@@ -29,6 +29,7 @@ import {
   plazoRecargaHoras,
 } from "../queries"
 import { FiltroAlertas } from "./filtro-alertas"
+import { FocoTrasPaginar } from "./foco-paginacion"
 import { ListaPorVerificar } from "./lista-por-verificar"
 import { PaginacionValidacion } from "./paginacion-validacion"
 import { RevisorEvidencias } from "./revisor-evidencias"
@@ -254,6 +255,8 @@ export function ColaValidacionActiva({
             key={`${cola}-${pagina}-${soloAlertas}`}
             fallback={<EsqueletoCola etiqueta={`Cargando ${recurso}…`} />}
           >
+            {/* Se monta con la lista nueva: tras paginar, el foco va al título. */}
+            <FocoTrasPaginar />
             <Contenido
               cola={cola}
               pagina={pagina}

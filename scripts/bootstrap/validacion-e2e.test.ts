@@ -7,6 +7,7 @@ import {
   esBaseLocal,
   ESTADOS_DISPUTABLES,
   esReclamable,
+  exigeRevision,
   leerAlerta,
   limiteAlcance,
   MOTIVO_RESOLUCION,
@@ -104,17 +105,73 @@ describe("leerAlerta", () => {
         alerta_desviacion: false,
         detalle_alertas: { limite_alcance: 80_000, multiplo: 2 },
       })
-    ).toEqual({ multiplo: true, desviacion: false, limiteAlcance: 80_000 })
+    ).toEqual({
+      multiplo: true,
+      desviacion: false,
+      previa: false,
+      limiteAlcance: 80_000,
+    })
   })
 
-  it("sin detalle, el límite es nulo", () => {
+  it("sin detalle, el límite es nulo y no hay previa", () => {
+    const alerta = leerAlerta({
+      alerta_multiplo: false,
+      alerta_desviacion: false,
+      detalle_alertas: null,
+    })
+    expect(alerta.limiteAlcance).toBeNull()
+    expect(alerta.previa).toBe(false)
+  })
+
+  it("la alerta previa cuenta con solo existir, como en la BD", () => {
+    for (const previa of [
+      { desviacion: true, multiplo_superado: false, alcance: 45_000 },
+      { desviacion: false, multiplo_superado: false },
+      null,
+    ]) {
+      expect(
+        leerAlerta({
+          alerta_multiplo: false,
+          alerta_desviacion: false,
+          detalle_alertas: { limite_alcance: 80_000, alerta_previa: previa },
+        }).previa
+      ).toBe(true)
+    }
+  })
+})
+
+describe("exigeRevision", () => {
+  const SIN_ALERTA = {
+    multiplo: false,
+    desviacion: false,
+    previa: false,
+    limiteAlcance: 80_000,
+  }
+
+  it("sin alerta vigente ni previa se aprueba sin anotar nada", () => {
+    expect(exigeRevision(SIN_ALERTA)).toBe(false)
+  })
+
+  it("con alerta vigente, por múltiplo o por desviación, exige la revisión", () => {
+    expect(exigeRevision({ ...SIN_ALERTA, multiplo: true })).toBe(true)
+    expect(exigeRevision({ ...SIN_ALERTA, desviacion: true })).toBe(true)
+  })
+
+  // Rechazada con alerta y corregida por el medio con cifras normales: la BD
+  // sigue exigiendo la constancia (alerta_sin_revision).
+  it("con solo la alerta previa también la exige", () => {
     expect(
-      leerAlerta({
-        alerta_multiplo: false,
-        alerta_desviacion: false,
-        detalle_alertas: null,
-      }).limiteAlcance
-    ).toBeNull()
+      exigeRevision(
+        leerAlerta({
+          alerta_multiplo: false,
+          alerta_desviacion: false,
+          detalle_alertas: {
+            limite_alcance: 80_000,
+            alerta_previa: { desviacion: false, multiplo_superado: true },
+          },
+        })
+      )
+    ).toBe(true)
   })
 })
 

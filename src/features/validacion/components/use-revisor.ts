@@ -31,6 +31,13 @@ export interface Revisor<T> {
   proximoDe: (id: string) => T | null
   /** Tras decidir `id`: abre `proximo` o cierra la hoja. */
   decidido: (id: string, proximo: T | null) => void
+  /** El elemento `id` como lo trae la lista ahora (o `null` si ya no está). */
+  vigenteDe: (id: string) => T | null
+  /**
+   * Muestra en la hoja la versión nueva de lo abierto (el medio lo cambió
+   * mientras se revisaba); el título recibe el foco.
+   */
+  reabrir: (elemento: T) => void
   /** `focoAlCerrar` de la hoja. */
   focoAlCerrar: () => HTMLElement | null
   /** `focoAlCerrar` de los diálogos que se abren desde la hoja. */
@@ -42,7 +49,9 @@ export interface Revisor<T> {
  * abre el siguiente de la lista (sin los ya decididos, aunque la lista aún no
  * se haya refrescado) y, al terminar, la hoja se cierra. La hoja guarda el
  * elemento que muestra: el refresco de la lista (la acción revalida la
- * página) no la cierra a mitad de camino.
+ * página) no la cierra a mitad de camino ni le cambia lo que se está
+ * revisando. Si el medio lo cambió mientras tanto, la BD no decide y la hoja
+ * ofrece `reabrir` con la versión que trae la lista refrescada (`vigenteDe`).
  *
  * Foco: al pasar al siguiente, al título de la hoja; al cerrarla, al botón
  * «Revisar» que la abrió o, si ese elemento ya se decidió, al título de la
@@ -89,6 +98,16 @@ export function useRevisor<T>(
     )
   }
 
+  function vigenteDe(id: string): T | null {
+    return elementos.find((elemento) => clave(elemento) === id) ?? null
+  }
+
+  function reabrir(elemento: T) {
+    ultimo.current = clave(elemento)
+    setEnfocar(true)
+    setHoja({ actual: elemento, abierta: true })
+  }
+
   function focoAlCerrar(): HTMLElement | null {
     const id = ultimo.current
     const boton =
@@ -106,6 +125,8 @@ export function useRevisor<T>(
     cerrar: () => setHoja((previa) => ({ ...previa, abierta: false })),
     proximoDe,
     decidido,
+    vigenteDe,
+    reabrir,
     focoAlCerrar,
     focoTrasDialogo: () => tituloHoja() ?? tituloCola(),
   }

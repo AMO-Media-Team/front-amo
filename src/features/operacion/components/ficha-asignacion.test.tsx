@@ -43,6 +43,7 @@ function publicacion(
     observaciones: null,
     retiradaDetectadaAt: null,
     conImagen: true,
+    actualizadaAt: "2026-10-11T15:00:00.000Z",
     cortes,
   }
 }
@@ -173,6 +174,7 @@ describe("CabeceraAsignacion", () => {
       observaciones: null,
       validadaAt: null,
       conImagen: true,
+      actualizadaAt: "2026-10-11T16:00:00.000Z",
     }
     render(
       <CabeceraAsignacion

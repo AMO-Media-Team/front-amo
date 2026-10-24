@@ -16,6 +16,8 @@ const ASIGNACION = "0192f3a4-5b6c-7d8e-9f01-0000000000a1"
 const PUBLICACION = "0192f3a4-5b6c-7d8e-9f01-0000000000b1"
 const METRICA = "0192f3a4-5b6c-7d8e-9f01-0000000000c1"
 const PERMANENCIA = "2026-10-30T15:00:00+00:00"
+/** `updated_at` tal cual lo entrega la BD (con microsegundos). */
+const VERSION = "2026-10-22T16:00:00.123456+00:00"
 
 const estado = vi.hoisted(() => ({
   orden: [] as string[],
@@ -105,6 +107,7 @@ describe("validarEvidencia (ADM-007)", () => {
     const resultado = await validarEvidencia({
       aprobar: true,
       publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
       etiquetaVerificada: true,
       observaciones: "",
     })
@@ -119,6 +122,7 @@ describe("validarEvidencia (ADM-007)", () => {
           p_observaciones: null,
           p_actor_id: "u1",
           p_session_id: "s1",
+          p_enviada_at: VERSION,
         },
       },
     ])
@@ -145,6 +149,7 @@ describe("validarEvidencia (ADM-007)", () => {
     const resultado = await validarEvidencia({
       aprobar: false,
       publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
       observaciones: "Falta la etiqueta de publicidad.",
     })
     expect(estado.rpc[0].argumentos).toMatchObject({
@@ -161,6 +166,7 @@ describe("validarEvidencia (ADM-007)", () => {
     const resultado = await validarEvidencia({
       aprobar: true,
       publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
       etiquetaVerificada: false,
       observaciones: "",
     })
@@ -183,6 +189,7 @@ describe("validarEvidencia (ADM-007)", () => {
     const resultado = await validarEvidencia({
       aprobar: true,
       publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
       etiquetaVerificada: true,
       observaciones: "",
     })
@@ -207,11 +214,74 @@ describe("validarEvidencia (ADM-007)", () => {
     const resultado = await validarEvidencia({
       aprobar: false,
       publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
       observaciones: "La captura no corresponde al post.",
     })
     expect(resultado).toEqual({
       ok: false,
       error: MENSAJES_VALIDACION.enDisputaEvidencia,
+    })
+    expect(estado.revalidadas).toEqual([RUTA_COLA])
+  })
+})
+
+describe("validarEvidencia y validarMetrica · versión revisada (S3/C2)", () => {
+  it("sin la versión que se vio no llama a la BD", async () => {
+    const resultado = await validarEvidencia({
+      aprobar: true,
+      publicacionId: PUBLICACION,
+      etiquetaVerificada: true,
+      observaciones: "",
+    } as Parameters<typeof validarEvidencia>[0])
+    expect(estado.rpc).toEqual([])
+    expect(resultado.ok).toBe(false)
+  })
+
+  it("si el medio cambió la evidencia, lo explica y actualiza la cola", async () => {
+    estado.respuesta = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        details:
+          "El medio cambió esta evidencia mientras la revisabas: vuelve a abrirla para revisar la versión actual.",
+        hint: "evidencia_cambiada",
+      },
+    }
+    const resultado = await validarEvidencia({
+      aprobar: true,
+      publicacionId: PUBLICACION,
+      enviadaAt: VERSION,
+      etiquetaVerificada: true,
+      observaciones: "",
+    })
+    expect(estado.rpc[0].argumentos.p_enviada_at).toBe(VERSION)
+    expect(resultado).toEqual({
+      ok: false,
+      error: MENSAJES_VALIDACION.evidenciaCambiada,
+    })
+    expect(estado.revalidadas).toEqual([RUTA_COLA])
+  })
+
+  it("si el medio cambió la métrica, lo explica y actualiza la cola", async () => {
+    estado.respuesta = {
+      data: null,
+      error: {
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        hint: "metrica_cambiada",
+      },
+    }
+    const resultado = await validarMetrica({
+      aprobar: false,
+      metricaId: METRICA,
+      enviadaAt: VERSION,
+      observaciones: "Las cifras no coinciden con la captura.",
+    })
+    expect(estado.rpc[0].argumentos.p_enviada_at).toBe(VERSION)
+    expect(resultado).toEqual({
+      ok: false,
+      error: MENSAJES_VALIDACION.metricaCambiada,
     })
     expect(estado.revalidadas).toEqual([RUTA_COLA])
   })
@@ -231,6 +301,7 @@ describe("validarMetrica (ADM-008)", () => {
     const resultado = await validarMetrica({
       aprobar: true,
       metricaId: METRICA,
+      enviadaAt: VERSION,
       conAlerta: false,
       observaciones: "",
     })
@@ -250,6 +321,7 @@ describe("validarMetrica (ADM-008)", () => {
     await validarMetrica({
       aprobar: false,
       metricaId: METRICA,
+      enviadaAt: VERSION,
       observaciones: "Las cifras no coinciden con la captura.",
     })
     expect(estado.rpc[0]).toEqual({
@@ -260,6 +332,7 @@ describe("validarMetrica (ADM-008)", () => {
         p_observaciones: "Las cifras no coinciden con la captura.",
         p_actor_id: "u1",
         p_session_id: "s1",
+        p_enviada_at: VERSION,
       },
     })
   })
@@ -276,6 +349,7 @@ describe("validarMetrica (ADM-008)", () => {
     const resultado = await validarMetrica({
       aprobar: false,
       metricaId: METRICA,
+      enviadaAt: VERSION,
       observaciones: "Las cifras no coinciden con la captura.",
     })
     expect(resultado).toEqual({

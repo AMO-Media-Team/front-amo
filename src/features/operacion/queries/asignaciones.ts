@@ -21,6 +21,7 @@ import {
   calcularProgreso,
   construirLineaTiempo,
   type MarcasAsignacion,
+  type RevisionMetricaRegistrada,
   type TransicionRegistrada,
 } from "../linea-tiempo"
 import { type CorteMetrica, ordenarCortes } from "../metricas"
@@ -388,8 +389,50 @@ async function transicionesDe(
 }
 
 /**
+ * Aprobaciones y correcciones de las métricas en la bitácora (RLS:
+ * `auditoria.ver`): la constancia de lo revisado y el motivo de una
+ * corrección ya no quedan en `metricas.observaciones`.
+ */
+async function revisionesDeMetricas(
+  supabase: ClienteServidor,
+  metricaIds: readonly string[]
+): Promise<RevisionMetricaRegistrada[]> {
+  if (metricaIds.length === 0) return []
+  const { data, error } = await supabase
+    .from("bitacora")
+    .select(
+      "id, created_at, accion, entidad_id, estado_nuevo, actor_email, actor_rol, motivo"
+    )
+    .eq("entidad", "metricas")
+    .in("entidad_id", [...metricaIds])
+    .in("accion", ["TRANSICION", "UPDATE"])
+    .order("id")
+    .limit(200)
+  if (error) fallar("leer la bitácora de las métricas", error)
+  return data.flatMap((fila): RevisionMetricaRegistrada[] => {
+    const aprobacion =
+      fila.accion === "TRANSICION" && fila.estado_nuevo === "APROBADA"
+    // Una corrección deja su motivo; otras ediciones (la del medio) no.
+    const correccion = fila.accion === "UPDATE" && fila.motivo !== null
+    if (!fila.entidad_id || (!aprobacion && !correccion)) return []
+    return [
+      {
+        id: fila.id,
+        at: fila.created_at,
+        metricaId: fila.entidad_id,
+        tipo: aprobacion ? "aprobacion" : "correccion",
+        actor: fila.actor_email,
+        actorRol: fila.actor_rol,
+        motivo: fila.motivo,
+      },
+    ]
+  })
+}
+
+/**
  * Ficha completa de una asignación; `null` si no existe o no es visible.
- * `verBitacora` (`auditoria.ver`): la línea de tiempo incluye actores y motivos.
+ * `verBitacora` (`auditoria.ver`): la línea de tiempo incluye actores y motivos,
+ * también los de la validación de las métricas.
  */
 export const obtenerAsignacion = cache(
   async (
@@ -417,7 +460,7 @@ export const obtenerAsignacion = cache(
         .select(
           `id, numero, url_post, fecha_publicacion, permanencia_hasta, permanencia_verificada_at,
              etiqueta_publicidad_confirmada, etiqueta_verificada, estado_validacion, validada_at,
-             observaciones, retirada_detectada_at, captura_path, created_at`
+             observaciones, retirada_detectada_at, captura_path, created_at, updated_at`
         )
         .eq("asignacion_id", id)
         .order("numero"),
@@ -425,7 +468,8 @@ export const obtenerAsignacion = cache(
         .from("metricas")
         .select(
           `id, publicacion_id, corte, fecha_corte, alcance_norm, impresiones_norm, interacciones,
-             clics_enlace, estado_validacion, observaciones, validada_at, created_at, captura_path`
+             clics_enlace, estado_validacion, observaciones, validada_at, created_at, updated_at,
+             captura_path`
         )
         .eq("asignacion_id", id)
         .order("fecha_corte"),
@@ -457,6 +501,12 @@ export const obtenerAsignacion = cache(
     if (descargas.error) fallar("leer las descargas", descargas.error)
     const fila = asignacion.data
     if (!fila) return null
+    const revisiones = verBitacora
+      ? await revisionesDeMetricas(
+          supabase,
+          metricas.data.map((metrica) => metrica.id)
+        )
+      : []
 
     const numeroDePublicacion = new Map(
       publicaciones.data.map((p) => [p.id, p.numero])
@@ -481,6 +531,7 @@ export const obtenerAsignacion = cache(
         observaciones: metrica.observaciones,
         validadaAt: metrica.validada_at,
         conImagen: Boolean(metrica.captura_path),
+        actualizadaAt: metrica.updated_at,
       })
     )
 
@@ -498,6 +549,7 @@ export const obtenerAsignacion = cache(
       observaciones: p.observaciones,
       retiradaDetectadaAt: p.retirada_detectada_at,
       conImagen: Boolean(p.captura_path),
+      actualizadaAt: p.updated_at,
       cortes: ordenarCortes(cortes.filter((c) => c.publicacionId === p.id)),
     }))
 
@@ -590,6 +642,7 @@ export const obtenerAsignacion = cache(
           corte: c.corte,
           conAlerta: alertaRevisable(c.alerta),
         })),
+        revisionesMetricas: revisiones,
         disputas: disputas.data.map((d) => ({
           id: d.id,
           creadaAt: d.created_at,

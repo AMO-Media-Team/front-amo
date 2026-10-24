@@ -163,6 +163,43 @@ describe("DecisionDisputa", () => {
     ).toHaveFocus()
   })
 
+  it("resolver: tocar fuera no borra la decisión y el pie dice «Volver» (U5)", async () => {
+    const usuario = userEvent.setup()
+    render(<Ficha />)
+    await usuario.click(screen.getByRole("button", { name: "Resolver" }))
+    const dialogo = screen.getByRole("dialog", { name: "Resolver la disputa" })
+    const cancelar = within(dialogo).getByRole("radio", {
+      name: "Cancelar la asignación",
+    })
+    await usuario.click(cancelar)
+    const explicacion = within(dialogo).getByLabelText(
+      "Explicación de la decisión"
+    )
+    await usuario.type(
+      explicacion,
+      "El medio no publicó el contenido aprobado."
+    )
+
+    const fondo = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-overlay"]'
+    )
+    expect(fondo).not.toBeNull()
+    await usuario.click(fondo ?? document.body)
+    expect(dialogo).toBeInTheDocument()
+    expect(cancelar).toBeChecked()
+    expect(explicacion).toHaveValue(
+      "El medio no publicó el contenido aprobado."
+    )
+
+    // «Cancelar» se confundiría con «Cancelar la asignación».
+    expect(
+      within(dialogo).queryByRole("button", { name: "Cancelar" })
+    ).not.toBeInTheDocument()
+    await usuario.click(within(dialogo).getByRole("button", { name: "Volver" }))
+    await waitFor(() => expect(dialogo).not.toBeInTheDocument())
+    expect(acciones.resolverDisputa).not.toHaveBeenCalled()
+  })
+
   it("si al resolver el panel desaparece (disputa cerrada), el foco igual va al estado", async () => {
     const usuario = userEvent.setup()
     const { rerender } = render(<Ficha estado="EN_REVISION" />)

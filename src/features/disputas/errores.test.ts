@@ -83,6 +83,33 @@ describe("interpretarErrorDisputa", () => {
     })
   })
 
+  it("un segundo reclamo de la misma vencida se explica (hint `reclamo_previo`)", () => {
+    expect(
+      interpretarErrorDisputa({
+        code: "P0001",
+        message: "AMO_TRANSICION_INVALIDA",
+        details:
+          "Ya reclamaste esta publicación: una vencida admite un solo reclamo.",
+        hint: "reclamo_previo",
+      })
+    ).toEqual({ mensaje: MENSAJES_DISPUTA.reclamoPrevio, esperado: true })
+    expect(MENSAJES_DISPUTA.reclamoPrevio).toMatch(/un solo reclamo/)
+  })
+
+  it("si la asignación no admite el texto completo, lo dice junto al campo (C1)", () => {
+    expect(
+      interpretarErrorDisputa({
+        code: "23514",
+        message:
+          'new row for relation "asignaciones" violates check constraint "asignaciones_motivo_chk"',
+      })
+    ).toEqual({
+      mensaje: expect.stringMatching(/admite 1\.000 caracteres/),
+      campo: "motivo",
+      esperado: true,
+    })
+  })
+
   it("lo desconocido no es esperado (se registra)", () => {
     expect(
       interpretarErrorDisputa({ code: "XX000", message: "boom" }).esperado

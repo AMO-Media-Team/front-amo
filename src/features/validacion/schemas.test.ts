@@ -11,6 +11,8 @@ import {
 } from "./schemas"
 
 const ID = "0192f3a4-5b6c-7d8e-9f01-0000000000a1"
+/** `updated_at` tal cual lo entrega la BD (con microsegundos). */
+const VERSION = "2026-10-22T16:00:00.123456+00:00"
 
 function mensajes(resultado: {
   success: boolean
@@ -38,12 +40,14 @@ describe("evidencias (ADM-007)", () => {
       esquemaValidarEvidencia.safeParse({
         aprobar: true,
         publicacionId: ID,
+        enviadaAt: VERSION,
         etiquetaVerificada: true,
         observaciones: "  Todo en orden  ",
       }).data
     ).toEqual({
       aprobar: true,
       publicacionId: ID,
+      enviadaAt: VERSION,
       etiquetaVerificada: true,
       observaciones: "Todo en orden",
     })
@@ -53,6 +57,7 @@ describe("evidencias (ADM-007)", () => {
     const resultado = esquemaValidarEvidencia.safeParse({
       aprobar: false,
       publicacionId: ID,
+      enviadaAt: VERSION,
       observaciones: "  ",
     })
     expect(Object.keys(mensajes(resultado))).toEqual(["observaciones"])
@@ -60,9 +65,34 @@ describe("evidencias (ADM-007)", () => {
       esquemaValidarEvidencia.safeParse({
         aprobar: false,
         publicacionId: ID,
+        enviadaAt: VERSION,
         observaciones: "Falta la etiqueta de publicidad.",
       }).success
     ).toBe(true)
+  })
+
+  it("decidir exige la versión que se vio (el formulario no la lleva)", () => {
+    expect(
+      esquemaAprobarEvidencia.safeParse({
+        publicacionId: ID,
+        etiquetaVerificada: true,
+        observaciones: "",
+      }).success
+    ).toBe(true)
+    for (const enviadaAt of [undefined, "", "ayer"]) {
+      expect(
+        Object.keys(
+          mensajes(
+            esquemaValidarEvidencia.safeParse({
+              aprobar: false,
+              publicacionId: ID,
+              enviadaAt,
+              observaciones: "Falta la etiqueta de publicidad.",
+            })
+          )
+        )
+      ).toEqual(["enviadaAt"])
+    }
   })
 })
 
@@ -81,10 +111,35 @@ describe("métricas (ADM-008)", () => {
       esquemaValidarMetrica.safeParse({
         aprobar: true,
         metricaId: ID,
+        enviadaAt: VERSION,
         conAlerta: false,
         observaciones: "",
       }).success
     ).toBe(true)
+    // Sin la versión que se vio no se decide; con ella, la constancia se sigue exigiendo.
+    expect(
+      Object.keys(
+        mensajes(
+          esquemaValidarMetrica.safeParse({
+            aprobar: true,
+            metricaId: ID,
+            conAlerta: false,
+            observaciones: "",
+          })
+        )
+      )
+    ).toEqual(["enviadaAt"])
+    expect(
+      mensajes(
+        esquemaValidarMetrica.safeParse({
+          aprobar: true,
+          metricaId: ID,
+          enviadaAt: VERSION,
+          conAlerta: true,
+          observaciones: "",
+        })
+      )
+    ).toEqual({ observaciones: MENSAJES_VALIDACION.alertaSinRevision })
   })
 
   it("rechazar exige observaciones", () => {
@@ -92,6 +147,7 @@ describe("métricas (ADM-008)", () => {
       esquemaValidarMetrica.safeParse({
         aprobar: false,
         metricaId: ID,
+        enviadaAt: VERSION,
         observaciones: "",
       }).success
     ).toBe(false)

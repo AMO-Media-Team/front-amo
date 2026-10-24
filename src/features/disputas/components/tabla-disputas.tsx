@@ -20,6 +20,7 @@ import {
   MOTIVOS,
   ORDEN_MOTIVOS,
   presentacionEstado,
+  quienAbrio,
   RESUMEN_EFECTO,
 } from "../presentacion"
 import { rutaDisputaInterna } from "../rutas"
@@ -59,7 +60,7 @@ function CeldaMotivo({ fila }: { fila: DisputaFila }) {
     <span className="flex min-w-0 flex-col">
       <span className="truncate">{MOTIVOS[fila.motivo].etiqueta}</span>
       <span className="truncate text-xs text-muted-foreground">
-        La abrió: {ETIQUETAS_PARTE[fila.parte].toLocaleLowerCase("es-CO")}
+        {quienAbrio(fila.parte, "interno")}
       </span>
     </span>
   )

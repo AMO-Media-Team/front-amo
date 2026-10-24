@@ -164,6 +164,27 @@ describe("AccionesSuspensionMedio · suspender", () => {
     )
   })
 
+  it("el aviso del motivo se va al corregirlo (U7)", async () => {
+    const usuario = userEvent.setup()
+    pintar()
+    await usuario.click(screen.getByRole("button", { name: "Suspender" }))
+    const dialogo = screen.getByRole("alertdialog")
+    await within(dialogo).findByRole("list", { name: "Asignaciones en curso" })
+    const campo = within(dialogo).getByLabelText("Motivo de la suspensión")
+    await usuario.type(campo, "No")
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Suspender medio" })
+    )
+    expect(campo).toHaveAttribute("aria-invalid", "true")
+    expect(within(dialogo).getByRole("alert")).toBeInTheDocument()
+
+    await usuario.type(campo, " publicó a tiempo en dos campañas.")
+    expect(campo).not.toHaveAttribute("aria-invalid")
+    expect(within(dialogo).queryByRole("alert")).not.toBeInTheDocument()
+    expect(campo).not.toHaveAccessibleDescription(/al menos/)
+    expect(acciones.suspenderMedio).not.toHaveBeenCalled()
+  })
+
   it("tras suspender, el foco queda en el mismo botón, ahora «Reactivar»", async () => {
     const usuario = userEvent.setup()
     const vista = pintar()

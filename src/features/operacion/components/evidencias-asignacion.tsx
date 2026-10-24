@@ -17,6 +17,7 @@ import {
   Miniatura,
   urlCaptura,
   useFirmas,
+  versionCapturas,
   VisorCaptura,
 } from "@/features/validacion/components/capturas"
 import { HojaCorreccion } from "@/features/validacion/components/correccion-metrica"
@@ -191,9 +192,13 @@ function FilaCorte({
                 />
               ) : null}
               {corte.observaciones ? (
+                // Solo la nota de un rechazo: la constancia de una aprobación
+                // y el motivo de una corrección quedan en la bitácora.
                 <p>
                   <span className="font-medium text-foreground/80">
-                    Observaciones:
+                    {corte.estado === "PENDIENTE"
+                      ? "Revisión anterior:"
+                      : "Observaciones:"}
                   </span>{" "}
                   {corte.observaciones}
                 </p>
@@ -402,9 +407,11 @@ export function EvidenciasAsignacion({
       publicacion.conImagen ||
       publicacion.cortes.some((corte) => corte.conImagen)
   )
+  // Un refresco con otra captura (o un corte nuevo) vuelve a firmar.
   const { estado, firmar, asegurarVigentes } = useFirmas(
     asignacionId,
-    conImagenes
+    conImagenes,
+    versionCapturas(publicaciones)
   )
   const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
   const [correccion, setCorreccion] = useState<{

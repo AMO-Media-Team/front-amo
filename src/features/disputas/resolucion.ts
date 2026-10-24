@@ -180,11 +180,16 @@ export const BLOQUEO_SIN_PREVIO =
 export const BLOQUEO_OFERTA_CERRADA =
   "La oferta ya cerró: no se puede reabrir la publicación. Mantén el vencimiento o cancela la asignación."
 
-const BLOQUEO_METRICAS =
-  "Faltan métricas por aprobar: revísalas en la cola de validación antes de verificar."
+/*
+ * En disputa, las métricas no salen en la cola de validación (`cola_metricas`)
+ * y rechazarlas espera a la resolución (hint `en_disputa`): se aprueban desde
+ * la ficha de la asignación.
+ */
+export const BLOQUEO_METRICAS =
+  "Faltan métricas por aprobar: apruébalas desde la ficha de la asignación antes de verificar. Si alguna debe corregirse, restaura el estado previo y recházala después."
 
-const BLOQUEO_PENDIENTES =
-  "Hay métricas pendientes de revisión en esta asignación: apruébalas o recházalas antes de verificar."
+export const BLOQUEO_PENDIENTES =
+  "Hay métricas pendientes de revisión: apruébalas desde la ficha de la asignación antes de verificar. Si alguna debe corregirse, restaura el estado previo y recházala después."
 
 const BLOQUEO_SIN_PERMISO_VERIFICAR =
   "Verificar exige además el permiso de validar métricas."

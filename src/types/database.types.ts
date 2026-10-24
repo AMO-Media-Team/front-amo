@@ -4982,6 +4982,7 @@ export type Database = {
         Args: {
           p_actor_id: string
           p_aprobar: boolean
+          p_enviada_at?: string
           p_etiqueta_verificada: boolean
           p_observaciones: string
           p_publicacion_id: string
@@ -4993,6 +4994,7 @@ export type Database = {
         Args: {
           p_actor_id: string
           p_aprobar: boolean
+          p_enviada_at?: string
           p_metrica_id: string
           p_observaciones: string
           p_session_id: string

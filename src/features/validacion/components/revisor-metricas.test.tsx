@@ -244,6 +244,7 @@ describe("RevisorMetricas (ADM-008)", () => {
       metricaId: CON_ALERTA.metricaId,
       conAlerta: true,
       observaciones: "Comparé las cifras con la captura del panel y coinciden.",
+      enviadaAt: CON_ALERTA.enviadaAt,
     })
   })
 
@@ -275,7 +276,83 @@ describe("RevisorMetricas (ADM-008)", () => {
       metricaId: metrica(4).metricaId,
       conAlerta: false,
       observaciones: "",
+      enviadaAt: metrica(4).enviadaAt,
     })
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+  })
+
+  it("si el medio cambió las cifras al rechazarla, lo explica y ofrece la versión nueva", async () => {
+    acciones.validarMetrica.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.metricaCambiada)
+    )
+    const usuario = userEvent.setup()
+    const original = metrica(7)
+    const { rerender } = render(<RevisorMetricas metricas={[original]} />)
+    await usuario.click(screen.getByRole("button", { name: /^Revisar/ }))
+    const hoja = await screen.findByRole("dialog")
+    await usuario.click(within(hoja).getByRole("button", { name: "Rechazar" }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Rechazar la métrica?",
+    })
+    await usuario.type(
+      within(dialogo).getByRole("textbox"),
+      "Las cifras no coinciden con la captura."
+    )
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Rechazar métrica" })
+    )
+    expect(acciones.validarMetrica).toHaveBeenCalledWith({
+      aprobar: false,
+      metricaId: original.metricaId,
+      observaciones: "Las cifras no coinciden con la captura.",
+      enviadaAt: original.enviadaAt,
+    })
+    expect(
+      await within(dialogo).findByText(MENSAJES_VALIDACION.metricaCambiada)
+    ).toBeInTheDocument()
+
+    // La cola ya trae las cifras nuevas.
+    const nueva = metrica(7, {
+      enviadaAt: "2026-10-22T18:00:00.000001+00:00",
+      valores: { ...original.valores, alcance: 12000 },
+    })
+    rerender(<RevisorMetricas metricas={[nueva]} />)
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(dialogo).not.toBeInTheDocument())
+
+    expect(within(hoja).getByRole("alert")).toHaveTextContent(
+      MENSAJES_VALIDACION.metricaCambiada
+    )
+    expect(
+      within(hoja).queryByRole("button", { name: "Aprobar" })
+    ).not.toBeInTheDocument()
+    const revisar = within(hoja).getByRole("button", {
+      name: "Revisar la versión nueva",
+    })
+    await waitFor(() => expect(revisar).toHaveFocus())
+    await usuario.click(revisar)
+
+    const actualizada = await screen.findByRole("dialog")
+    expect(
+      within(actualizada).getByRole("region", { name: "Cifras reportadas" })
+    ).toHaveTextContent(formatearNumero(12000))
+    await usuario.click(
+      within(actualizada).getByRole("button", { name: "Aprobar" })
+    )
+    expect(acciones.validarMetrica).toHaveBeenLastCalledWith(
+      expect.objectContaining({ aprobar: true, enviadaAt: nueva.enviadaAt })
+    )
+  })
+
+  it("las observaciones de una aprobación quedan solo en la bitácora", async () => {
+    const usuario = userEvent.setup()
+    render(<RevisorMetricas metricas={[metrica(8)]} />)
+    await usuario.click(screen.getByRole("button", { name: /^Revisar/ }))
+    const hoja = await screen.findByRole("dialog")
+    expect(
+      within(hoja).getByRole("textbox", { name: /Observaciones/ })
+    ).toHaveAccessibleDescription(
+      "Quedan en la bitácora con tu nombre; el medio y el anunciante no las ven."
+    )
   })
 })

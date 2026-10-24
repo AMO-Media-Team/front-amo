@@ -6,6 +6,9 @@
  * reutiliza el esquema de la carga del medio (`esquemaMetricas`) y sus reglas
  * de coherencia (`conReglasMetricas`): una corrección no puede dejar lo que la
  * BD rechazaría.
+ *
+ * Aprobar o rechazar decide sobre la versión que se mostró (`enviadaAt`): los
+ * formularios no la editan, la añade quien llama a la acción.
  */
 import { z } from "zod"
 
@@ -32,6 +35,17 @@ const observacionesObligatorias = observacionesOpcionales.min(
   `Describe qué debe corregir el medio (al menos ${LONGITUD_MINIMA_MOTIVO} caracteres).`
 )
 
+/**
+ * Versión de la evidencia o la métrica que vio quien decide: su `updated_at`
+ * tal cual lo entrega la BD (con sus microsegundos: no se convierte a
+ * `Date`). Si el medio la cambió mientras tanto, la BD rechaza la decisión
+ * (hints `evidencia_cambiada` y `metrica_cambiada`).
+ */
+const enviadaAt = z.iso.datetime({
+  offset: true,
+  error: "No sabemos qué versión revisaste. Actualiza la página.",
+})
+
 // ── Evidencias (ADM-007) ─────────────────────────────────────────────────────
 
 /** Aprobar: la etiqueta de publicidad se comprobó a la vista. */
@@ -50,8 +64,8 @@ export const esquemaRechazarEvidencia = z.object({
 })
 
 export const esquemaValidarEvidencia = z.discriminatedUnion("aprobar", [
-  esquemaAprobarEvidencia.extend({ aprobar: z.literal(true) }),
-  esquemaRechazarEvidencia.extend({ aprobar: z.literal(false) }),
+  esquemaAprobarEvidencia.extend({ aprobar: z.literal(true), enviadaAt }),
+  esquemaRechazarEvidencia.extend({ aprobar: z.literal(false), enviadaAt }),
 ])
 export type EntradaValidarEvidencia = z.input<typeof esquemaValidarEvidencia>
 
@@ -89,8 +103,8 @@ export const esquemaRechazarMetrica = z.object({
 })
 
 export const esquemaValidarMetrica = z.discriminatedUnion("aprobar", [
-  esquemaAprobarMetrica.extend({ aprobar: z.literal(true) }),
-  esquemaRechazarMetrica.extend({ aprobar: z.literal(false) }),
+  esquemaAprobarMetrica.extend({ aprobar: z.literal(true), enviadaAt }),
+  esquemaRechazarMetrica.extend({ aprobar: z.literal(false), enviadaAt }),
 ])
 export type EntradaValidarMetrica = z.input<typeof esquemaValidarMetrica>
 

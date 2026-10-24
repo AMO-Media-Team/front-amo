@@ -195,3 +195,14 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   ajustar las expectativas que cambiaron. Preparación del líder: navegación «Validación» y «Disputas», `/ir` de las disputas,
   rutas, configuración de texto libre, proyecto E2E `validacion` y brief `fase-4.md` (commit `e3757d4`). Workflow de
   implementación con 7 paquetes (VA, AS, MS, DI → DX, E0, SQ).
+- 2026-10-23 · Fase 4: workflow de implementación (VA, AS, MS, E0, SQ y DI en paralelo; DX después de DI, relanzado en modo
+  «retomar» tras el límite de sesión), ronda de integración (una sola fuente para explicar las alertas, la ficha de la
+  asignación con las reglas de disputas, decisiones que esperan una disputa, colas con sus columnas nuevas, lectura de las
+  disputas con ver las asignaciones) y revisión adversarial (4 revisores + verificación): 21 hallazgos confirmados y
+  corregidos, entre ellos la constancia de aprobar una alerta visible para el medio y el anunciante en
+  `metricas.observaciones` (ahora solo en la bitácora), decidir sobre una versión que el medio cambió (sello `p_enviada_at`),
+  partes sin `disputas.abrir` escribiendo por la API, el medio sin poder cargar cortes durante una disputa, reclamos
+  repetidos de una vencida, textos de disputa de más de 1000 caracteres que rompían `asignaciones.motivo`, visor de adjuntos
+  sin alto máximo en el celular, regiones vivas vacías, foco tras paginar y pie fijo vacío. `cola_verificacion` pasó de
+  ~0,9 s a ~2 ms y `private.notificar` reintenta si un destinatario se borra a mitad del aviso. Local: 21 suites SQL
+  (`humo_e3_validacion` 148/148), 5.689 Vitest.

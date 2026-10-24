@@ -132,6 +132,7 @@ describe("RevisorEvidencias (ADM-007)", () => {
       publicacionId: EVIDENCIAS[0].publicacionId,
       etiquetaVerificada: true,
       observaciones: "",
+      enviadaAt: EVIDENCIAS[0].enviadaAt,
     })
     const siguiente = await screen.findByRole("dialog", {
       name: "Evidencia de Medio 2",
@@ -231,6 +232,8 @@ describe("RevisorEvidencias (ADM-007)", () => {
       name: "¿Rechazar la evidencia?",
     })
     expect(dialogo).toHaveTextContent("al menos 24 horas")
+    // El estado con el nombre que muestran las insignias (U6).
+    expect(dialogo).toHaveTextContent("vuelve a «Contenido descargado»")
     await usuario.click(
       within(dialogo).getByRole("button", {
         name: /Falta la etiqueta de publicidad/,
@@ -243,6 +246,7 @@ describe("RevisorEvidencias (ADM-007)", () => {
       aprobar: false,
       publicacionId: EVIDENCIAS[0].publicacionId,
       observaciones: expect.stringMatching(/^Falta la etiqueta de publicidad/),
+      enviadaAt: EVIDENCIAS[0].enviadaAt,
     })
     expect(avisos.success).toHaveBeenCalledWith(
       "Evidencia rechazada",
@@ -253,5 +257,86 @@ describe("RevisorEvidencias (ADM-007)", () => {
     expect(
       await screen.findByRole("dialog", { name: "Evidencia de Medio 2" })
     ).toBeInTheDocument()
+  })
+
+  it("si el medio la cambió mientras se revisaba, no decide a ciegas y ofrece la versión nueva", async () => {
+    acciones.validarEvidencia.mockResolvedValueOnce(
+      fallo(MENSAJES_VALIDACION.evidenciaCambiada)
+    )
+    const usuario = userEvent.setup()
+    const { rerender } = render(
+      <RevisorEvidencias evidencias={EVIDENCIAS} plazoRecargaHoras={24} />
+    )
+    await usuario.click(
+      screen.getByRole("button", {
+        name: "Revisar la evidencia de Medio 1: Reel de Halloween",
+      })
+    )
+    const hoja = await screen.findByRole("dialog", {
+      name: "Evidencia de Medio 1",
+    })
+    await usuario.click(
+      within(hoja).getByRole("checkbox", {
+        name: "La etiqueta de publicidad es visible",
+      })
+    )
+    await usuario.click(within(hoja).getByRole("button", { name: "Aprobar" }))
+
+    expect(await within(hoja).findByRole("alert")).toHaveTextContent(
+      MENSAJES_VALIDACION.evidenciaCambiada
+    )
+    for (const nombre of ["Aprobar", "Rechazar"]) {
+      expect(
+        within(hoja).queryByRole("button", { name: nombre })
+      ).not.toBeInTheDocument()
+    }
+    // La lista aún no trae la versión nueva: se vuelve a la cola.
+    const accion = within(hoja).getByRole("button", {
+      name: "Volver a la cola",
+    })
+    await waitFor(() => expect(accion).toHaveFocus())
+
+    // La acción revalidó la cola: llega la versión nueva y el mismo botón la ofrece.
+    const nueva = evidencia(1, {
+      enviadaAt: "2026-10-22T17:30:00.654321+00:00",
+      urlPost: "https://www.instagram.com/reel/otro/",
+    })
+    rerender(
+      <RevisorEvidencias
+        evidencias={[nueva, EVIDENCIAS[1]]}
+        plazoRecargaHoras={24}
+      />
+    )
+    const revisar = within(hoja).getByRole("button", {
+      name: "Revisar la versión nueva",
+    })
+    expect(revisar).toHaveFocus()
+    await usuario.click(revisar)
+
+    const actualizada = await screen.findByRole("dialog", {
+      name: "Evidencia de Medio 1",
+    })
+    await waitFor(() =>
+      expect(
+        within(actualizada).getByRole("heading", {
+          name: "Evidencia de Medio 1",
+        })
+      ).toHaveFocus()
+    )
+    expect(
+      within(actualizada).getByRole("link", { name: /Abrir la publicación/ })
+    ).toHaveAttribute("href", nueva.urlPost)
+    // Se revisa desde cero: la casilla vuelve a estar sin marcar.
+    const casilla = within(actualizada).getByRole("checkbox", {
+      name: "La etiqueta de publicidad es visible",
+    })
+    expect(casilla).not.toBeChecked()
+    await usuario.click(casilla)
+    await usuario.click(
+      within(actualizada).getByRole("button", { name: "Aprobar" })
+    )
+    expect(acciones.validarEvidencia).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enviadaAt: nueva.enviadaAt })
+    )
   })
 })

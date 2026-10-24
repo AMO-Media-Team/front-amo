@@ -11,8 +11,8 @@
  *   exige que existan y sean imágenes).
  * - Lo del equipo AMO lo hace un operador temporal como la app: evidencias y
  *   métricas con `validar_evidencia_srv` y `validar_metrica_srv` (con la
- *   constancia de revisión si la métrica tiene alerta), y verificar o cancelar
- *   por `transicionar_srv`.
+ *   constancia de revisión si la métrica tiene alerta vigente o previa), y
+ *   verificar o cancelar por `transicionar_srv`.
  *
  * Nada de SQL directo; la limpieza borra con la API de servicio, en orden de
  * dependencias, y libera antes por la máquina de estados los cupos de ofertas
@@ -66,7 +66,7 @@ import {
   type EntornoBootstrap,
   ErrorBootstrap,
 } from "./supabase"
-import { esReclamable } from "./validacion-e2e"
+import { esReclamable, exigeRevision, leerAlerta } from "./validacion-e2e"
 
 type Enums = Database["public"]["Enums"]
 type EstadoAsignacion = Enums["asignacion_estado"]
@@ -741,7 +741,11 @@ export async function validarMetricaCon(
   }
 }
 
-/** Ids de las métricas con alerta (el servicio sí lee esas columnas; la sesión no). */
+/**
+ * Ids de las métricas cuya aprobación exige anotar la revisión: con alerta
+ * vigente o previa (la que conserva la BD cuando el medio corrige una
+ * rechazada). El servicio sí lee esas columnas; la sesión no.
+ */
 async function conAlerta(
   servicio: ClienteSupabase,
   ids: readonly string[]
@@ -749,12 +753,12 @@ async function conAlerta(
   if (ids.length === 0) return new Set()
   const { data, error } = await servicio
     .from("metricas")
-    .select("id, alerta_desviacion, alerta_multiplo")
+    .select("id, alerta_desviacion, alerta_multiplo, detalle_alertas")
     .in("id", ids)
   if (error) fallo("No se pudieron leer las alertas", error)
   return new Set(
     data
-      .filter((fila) => fila.alerta_desviacion || fila.alerta_multiplo)
+      .filter((fila) => exigeRevision(leerAlerta(fila)))
       .map((fila) => fila.id)
   )
 }
@@ -777,7 +781,8 @@ export async function aprobarMetricasCon(
 
 /**
  * El equipo AMO aprueba una métrica (o todas las pendientes de una
- * asignación) con `validar_metrica_srv`; si tiene alerta, anota la revisión.
+ * asignación) con `validar_metrica_srv`; si tiene alerta (vigente o previa),
+ * anota la revisión, que la BD guarda en la bitácora y no en observaciones.
  * Exige la evidencia de su publicación aprobada. Devuelve cuántas aprobó.
  */
 export async function aprobarMetrica(

@@ -27,12 +27,38 @@ export type EstadoFirmas =
   | { tipo: "listo"; imagenes: ImagenesEvidencia; firmadoEn: number }
   | { tipo: "error"; mensaje: string }
 
+/** Versión de lo que se muestra de una asignación, para `useFirmas`. */
+export function versionCapturas(
+  publicaciones: readonly {
+    id: string
+    actualizadaAt: string
+    cortes: readonly { id: string; actualizadaAt: string }[]
+  }[]
+): string {
+  return publicaciones
+    .flatMap((publicacion) => [
+      `${publicacion.id}@${publicacion.actualizadaAt}`,
+      ...publicacion.cortes.map(
+        (corte) => `${corte.id}@${corte.actualizadaAt}`
+      ),
+    ])
+    .join("|")
+}
+
 /**
  * Firma las capturas (evidencia y métricas) de una asignación al montar y
  * bajo demanda, con URL de corta duración (`firmarEvidencias`: la ruta sale
  * de las filas que la RLS deja leer, nunca del navegador).
+ *
+ * `version` resume lo que se muestra (ids y `updated_at` de publicaciones y
+ * cortes): si un refresco trae otra (el medio cargó otra captura, llegó un
+ * corte nuevo), se vuelve a firmar para no mostrar la imagen anterior.
  */
-export function useFirmas(asignacionId: string, conImagenes: boolean) {
+export function useFirmas(
+  asignacionId: string,
+  conImagenes: boolean,
+  version = ""
+) {
   const [estado, setEstado] = useState<EstadoFirmas>({ tipo: "cargando" })
   const [, iniciar] = useTransition()
 
@@ -50,7 +76,7 @@ export function useFirmas(asignacionId: string, conImagenes: boolean) {
 
   useEffect(() => {
     if (conImagenes) firmar()
-  }, [conImagenes, firmar])
+  }, [conImagenes, firmar, version])
 
   /** Vuelve a firmar si las URL están por caducar (se llama al abrir el visor). */
   const asegurarVigentes = useCallback(() => {

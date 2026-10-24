@@ -96,9 +96,12 @@ test.describe("bandeja de disputas · solo lectura", () => {
     for (const grupo of [/^Abiertas: /, /^En revisión: /, /^Cerradas: /]) {
       await expect(resumen.getByRole("button", { name: grupo })).toBeVisible()
     }
+    // En el celular la tabla genérica se pinta como lista de tarjetas.
+    const bandeja = page.getByRole("region", { name: "Disputas", exact: true })
     await expect(
-      page
-        .getByRole("table", { name: /^Disputas/ })
+      bandeja
+        .getByRole("table")
+        .or(bandeja.getByRole("list"))
         .or(page.getByText("No hay disputas"))
         .first()
     ).toBeVisible()
@@ -215,9 +218,10 @@ test.describe("disputas del equipo AMO", () => {
     const cajaNota = page.getByRole("form", { name: "Nueva nota interna" })
     await cajaNota.getByLabel("Nota interna", { exact: true }).fill(nota)
     await cajaNota.getByRole("button", { name: "Guardar nota" }).click()
-    await expect(cajaNota.getByRole("status")).toHaveText(
-      "Nota interna guardada."
-    )
+    // El botón también tiene un estado (el indicador de envío): se busca el del resultado.
+    await expect(
+      cajaNota.getByRole("status").filter({ hasText: /\S/ })
+    ).toHaveText("Nota interna guardada.")
     await expect(
       hilo(page).getByRole("listitem").filter({ hasText: nota })
     ).toContainText("Nota interna · Solo la ve el equipo AMO")
@@ -230,7 +234,9 @@ test.describe("disputas del equipo AMO", () => {
     const caja = page.getByRole("form", { name: "Responder en la disputa" })
     await caja.getByLabel("Mensaje", { exact: true }).fill(mensaje)
     await caja.getByRole("button", { name: "Enviar" }).click()
-    await expect(caja.getByRole("status")).toHaveText("Mensaje enviado.")
+    await expect(caja.getByRole("status").filter({ hasText: /\S/ })).toHaveText(
+      "Mensaje enviado."
+    )
     await expect(hilo(page)).toContainText(mensaje)
     expect((await leerDisputaE2E(disputaId)).mensajes.slice(-2)).toMatchObject([
       { parte: "ADMIN", mensaje: nota, interno: true },

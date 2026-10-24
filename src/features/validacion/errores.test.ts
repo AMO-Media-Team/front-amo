@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { frasePermanenciaPendiente } from "./decision"
 import {
+  elementoCambiado,
   esperaDisputa,
   interpretarErrorValidacion,
   MENSAJES_VALIDACION,
@@ -31,6 +32,28 @@ describe("interpretarErrorValidacion", () => {
         hint: "metricas_pendientes",
       }).mensaje
     ).toBe(MENSAJES_VALIDACION.metricasPendientes)
+  })
+
+  it("el medio cambió lo que se revisaba: se explica, es esperado y no va a un campo", () => {
+    expect(
+      interpretarErrorValidacion({
+        ...TRANSICION,
+        details:
+          "El medio cambió esta evidencia mientras la revisabas: vuelve a abrirla para revisar la versión actual.",
+        hint: "evidencia_cambiada",
+      })
+    ).toEqual({
+      codigo: "AMO_TRANSICION_INVALIDA",
+      esperado: true,
+      mensaje: MENSAJES_VALIDACION.evidenciaCambiada,
+    })
+    expect(
+      interpretarErrorValidacion({ ...TRANSICION, hint: "metrica_cambiada" })
+    ).toEqual({
+      codigo: "AMO_TRANSICION_INVALIDA",
+      esperado: true,
+      mensaje: MENSAJES_VALIDACION.metricaCambiada,
+    })
   })
 
   it("en disputa: dice qué espera a la disputa según lo que se decidía", () => {
@@ -143,6 +166,30 @@ describe("esperaDisputa", () => {
     expect(
       esperaDisputa(
         { ok: false, error: MENSAJES_VALIDACION.asignacionCerrada },
+        "evidencia"
+      )
+    ).toBe(false)
+  })
+})
+
+describe("elementoCambiado", () => {
+  it("reconoce el fallo de cada elemento y nada más", () => {
+    const evidencia = {
+      ok: false,
+      error: MENSAJES_VALIDACION.evidenciaCambiada,
+    }
+    expect(elementoCambiado(evidencia, "evidencia")).toBe(true)
+    expect(elementoCambiado(evidencia, "metrica")).toBe(false)
+    expect(
+      elementoCambiado(
+        { ok: false, error: MENSAJES_VALIDACION.metricaCambiada },
+        "metrica"
+      )
+    ).toBe(true)
+    expect(elementoCambiado({ ok: true }, "evidencia")).toBe(false)
+    expect(
+      elementoCambiado(
+        { ok: false, error: MENSAJES_VALIDACION.enDisputaEvidencia },
         "evidencia"
       )
     ).toBe(false)

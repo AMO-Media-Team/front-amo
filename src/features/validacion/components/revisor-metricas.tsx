@@ -9,6 +9,7 @@ import {
   Clock,
   FileWarning,
   History,
+  RefreshCw,
   ShieldX,
   TriangleAlert,
 } from "lucide-react"
@@ -67,7 +68,11 @@ import {
   SUGERENCIAS_RECHAZO_METRICA,
   SUGERENCIAS_REVISION_ALERTA,
 } from "../decision"
-import { esperaDisputa } from "../errores"
+import {
+  elementoCambiado,
+  esperaDisputa,
+  MENSAJES_VALIDACION,
+} from "../errores"
 import { CAMPOS_METRICA, esquemaAprobarMetrica } from "../schemas"
 import type { MetricaEnCola } from "../tipos"
 import {
@@ -81,6 +86,7 @@ import {
 import { CifrasMetrica } from "./cifras-metrica"
 import { CabeceraHoja, CuerpoHoja, MarcoHoja, PieHoja } from "./hoja-validacion"
 import {
+  AvisoVersionCambiada,
   Comprobaciones,
   Dato,
   EsperaDisputa,
@@ -257,6 +263,10 @@ function datosMetrica(metrica: MetricaEnCola): FilaDato[] {
  * Aprobar una con alerta exige anotar qué se revisó; rechazar pide
  * observaciones para el medio. Si la asignación entró en disputa con todo
  * cargado (hint `en_disputa`), el rechazo deja de ofrecerse y se explica.
+ *
+ * Se decide sobre las cifras que muestra la hoja (`enviadaAt`). Si el medio
+ * las cambió mientras tanto (hint `metrica_cambiada`), no se decide nada: la
+ * hoja lo explica y ofrece revisar la versión nueva, que ya trae la cola.
  */
 function RevisionMetrica({
   metrica,
@@ -274,6 +284,13 @@ function RevisionMetrica({
   const [rechazando, setRechazando] = useState(false)
   // El rechazo espera a la disputa: lo dijo la BD al intentarlo.
   const [rechazoEnDisputa, setRechazoEnDisputa] = useState(false)
+  // La BD respondió que el medio la cambió: se revisa la versión nueva.
+  const [cambiada, setCambiada] = useState(false)
+  // El botón que la reemplaza a Aprobar (destino del foco).
+  const idVersion = useId()
+  const vigente = cambiada ? revisor.vigenteDe(metrica.metricaId) : null
+  const nueva =
+    vigente && vigente.enviadaAt !== metrica.enviadaAt ? vigente : null
   const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
   const firmas = useFirmas(metrica.asignacionId, metrica.conImagen)
   const imagen =
@@ -316,8 +333,17 @@ function RevisionMetrica({
       const resultado = await validarMetrica({
         aprobar: true,
         ...formulario.getValues(),
+        enviadaAt: metrica.enviadaAt,
       })
       if (!resultado.ok) {
+        if (elementoCambiado(resultado, "metrica")) {
+          // En lugar de Aprobar, «Revisar la versión nueva» (o volver a la cola).
+          setCambiada(true)
+          requestAnimationFrame(() =>
+            document.getElementById(idVersion)?.focus()
+          )
+          return
+        }
         aplicarErroresServidor(formulario.setError, resultado, CAMPOS_METRICA)
         return
       }
@@ -390,8 +416,15 @@ function RevisionMetrica({
             </Alert>
           ) : null}
           <ListaDatosRevision filas={datosMetrica(metrica)} />
-          <Comprobaciones puntos={COMPROBACIONES_METRICA} />
-          {bloqueo ? (
+          {cambiada ? (
+            <AvisoVersionCambiada
+              mensaje={MENSAJES_VALIDACION.metricaCambiada}
+              conVersionNueva={nueva !== null}
+            />
+          ) : (
+            <Comprobaciones puntos={COMPROBACIONES_METRICA} />
+          )}
+          {bloqueo && !cambiada ? (
             <Alert id={idBloqueo} className="border-warning/45 bg-warning/10">
               <FileWarning aria-hidden />
               <AlertTitle>Aún no se puede aprobar</AlertTitle>
@@ -406,7 +439,7 @@ function RevisionMetrica({
               </AlertDescription>
             </Alert>
           ) : null}
-          {rechazoEnDisputa ? (
+          {rechazoEnDisputa && !cambiada ? (
             <EsperaDisputa
               detalle={DETALLE_RECHAZO_EN_DISPUTA}
               enlace={{
@@ -415,112 +448,136 @@ function RevisionMetrica({
               }}
             />
           ) : null}
-          <form
-            id={idFormulario}
-            noValidate
-            onSubmit={aprobar}
-            aria-busy={pendiente || undefined}
-            className="flex flex-col gap-4"
-          >
-            {errorGeneral ? (
-              <Alert variant="destructive" role="alert">
-                <CircleAlert aria-hidden />
-                <AlertDescription>{errorGeneral}</AlertDescription>
-              </Alert>
-            ) : null}
-            <Field data-invalid={errorObservaciones ? true : undefined}>
-              <FieldLabel htmlFor={idObservaciones}>
-                {conAlerta ? (
-                  "Qué revisaste"
-                ) : (
-                  <>
-                    Observaciones{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (opcional)
-                    </span>
-                  </>
-                )}
-              </FieldLabel>
-              {conAlerta ? (
-                <div
-                  role="group"
-                  aria-label="Revisiones frecuentes"
-                  className="flex flex-col gap-1.5"
-                >
-                  {SUGERENCIAS_REVISION_ALERTA.map((sugerencia) => (
-                    <button
-                      key={sugerencia}
-                      type="button"
-                      disabled={pendiente}
-                      onClick={() =>
-                        setValue("observaciones", sugerencia, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        })
-                      }
-                      className="w-full rounded-lg border px-3 py-2 text-left text-xs text-pretty transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
-                    >
-                      {sugerencia}
-                    </button>
-                  ))}
-                </div>
+          {cambiada ? null : (
+            <form
+              id={idFormulario}
+              noValidate
+              onSubmit={aprobar}
+              aria-busy={pendiente || undefined}
+              className="flex flex-col gap-4"
+            >
+              {errorGeneral ? (
+                <Alert variant="destructive" role="alert">
+                  <CircleAlert aria-hidden />
+                  <AlertDescription>{errorGeneral}</AlertDescription>
+                </Alert>
               ) : null}
-              <Textarea
-                id={idObservaciones}
-                rows={conAlerta ? 3 : 2}
-                maxLength={LONGITUD_MAXIMA_MOTIVO}
-                disabled={pendiente}
-                placeholder={
-                  conAlerta
-                    ? "Ej.: comparé el alcance con la captura y coincide; la publicación se compartió mucho…"
-                    : undefined
-                }
-                aria-invalid={errorObservaciones ? true : undefined}
-                aria-describedby={`${idObservaciones}-ayuda${
-                  errorObservaciones ? ` ${idObservaciones}-error` : ""
-                }`}
-                {...register("observaciones")}
-              />
-              <FieldDescription id={`${idObservaciones}-ayuda`}>
-                {conAlerta
-                  ? "Obligatorio para aprobar una métrica con alerta: queda como constancia en la bitácora."
-                  : "Quedan con la métrica aprobada y en la bitácora."}
-              </FieldDescription>
-              <FieldError
-                id={`${idObservaciones}-error`}
-                errors={[errorObservaciones]}
-              />
-            </Field>
-          </form>
+              <Field data-invalid={errorObservaciones ? true : undefined}>
+                <FieldLabel htmlFor={idObservaciones}>
+                  {conAlerta ? (
+                    "Qué revisaste"
+                  ) : (
+                    <>
+                      Observaciones{" "}
+                      <span className="font-normal text-muted-foreground">
+                        (opcional)
+                      </span>
+                    </>
+                  )}
+                </FieldLabel>
+                {conAlerta ? (
+                  <div
+                    role="group"
+                    aria-label="Revisiones frecuentes"
+                    className="flex flex-col gap-1.5"
+                  >
+                    {SUGERENCIAS_REVISION_ALERTA.map((sugerencia) => (
+                      <button
+                        key={sugerencia}
+                        type="button"
+                        disabled={pendiente}
+                        onClick={() =>
+                          setValue("observaciones", sugerencia, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                        className="w-full rounded-lg border px-3 py-2 text-left text-xs text-pretty transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
+                      >
+                        {sugerencia}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <Textarea
+                  id={idObservaciones}
+                  rows={conAlerta ? 3 : 2}
+                  maxLength={LONGITUD_MAXIMA_MOTIVO}
+                  disabled={pendiente}
+                  placeholder={
+                    conAlerta
+                      ? "Ej.: comparé el alcance con la captura y coincide; la publicación se compartió mucho…"
+                      : undefined
+                  }
+                  aria-invalid={errorObservaciones ? true : undefined}
+                  aria-describedby={`${idObservaciones}-ayuda${
+                    errorObservaciones ? ` ${idObservaciones}-error` : ""
+                  }`}
+                  {...register("observaciones")}
+                />
+                <FieldDescription id={`${idObservaciones}-ayuda`}>
+                  {conAlerta
+                    ? "Obligatorio para aprobar una métrica con alerta: queda como constancia en la bitácora."
+                    : "Quedan en la bitácora con tu nombre; el medio y el anunciante no las ven."}
+                </FieldDescription>
+                <FieldError
+                  id={`${idObservaciones}-error`}
+                  errors={[errorObservaciones]}
+                />
+              </Field>
+            </form>
+          )}
         </CuerpoRevision>
       </CuerpoHoja>
       <PieHoja>
-        {rechazoEnDisputa ? null : (
+        {cambiada ? (
+          // Un solo botón: si la lista se refresca después, conserva el foco.
           <Button
+            id={idVersion}
             type="button"
-            variant="destructive"
+            variant={nueva ? "default" : "outline"}
             size="lg"
-            disabled={pendiente}
-            onClick={() => setRechazando(true)}
+            onClick={() => (nueva ? revisor.reabrir(nueva) : revisor.cerrar())}
           >
-            <ShieldX data-icon="inline-start" aria-hidden />
-            Rechazar
+            {nueva ? (
+              <>
+                <RefreshCw data-icon="inline-start" aria-hidden />
+                Revisar la versión nueva
+              </>
+            ) : (
+              "Volver a la cola"
+            )}
           </Button>
+        ) : (
+          <>
+            {rechazoEnDisputa ? null : (
+              <Button
+                type="button"
+                variant="destructive"
+                size="lg"
+                disabled={pendiente}
+                onClick={() => setRechazando(true)}
+              >
+                <ShieldX data-icon="inline-start" aria-hidden />
+                Rechazar
+              </Button>
+            )}
+            <Button
+              type="submit"
+              form={idFormulario}
+              size="lg"
+              disabled={pendiente || bloqueo !== null}
+              aria-describedby={bloqueo ? idBloqueo : undefined}
+            >
+              {pendiente ? (
+                <Spinner aria-label="Aprobando" data-icon="inline-start" />
+              ) : (
+                <CircleCheck data-icon="inline-start" aria-hidden />
+              )}
+              Aprobar
+            </Button>
+          </>
         )}
-        <Button
-          type="submit"
-          form={idFormulario}
-          size="lg"
-          disabled={pendiente || bloqueo !== null}
-          aria-describedby={bloqueo ? idBloqueo : undefined}
-        >
-          {pendiente ? (
-            <Spinner aria-label="Aprobando" data-icon="inline-start" />
-          ) : (
-            <CircleCheck data-icon="inline-start" aria-hidden />
-          )}
-          Aprobar
-        </Button>
       </PieHoja>
 
       <VisorCaptura
@@ -547,17 +604,22 @@ function RevisionMetrica({
         ayuda="El medio las verá tal cual; quedan en la bitácora."
         sugerencias={SUGERENCIAS_RECHAZO_METRICA}
         textoConfirmar="Rechazar métrica"
-        focoAlCerrar={revisor.focoTrasDialogo}
+        focoAlCerrar={() =>
+          document.getElementById(idVersion) ?? revisor.focoTrasDialogo()
+        }
         onConfirmar={async (observaciones) => {
           const proximo = revisor.proximoDe(metrica.metricaId)
           const resultado = await validarMetrica({
             aprobar: false,
             metricaId: metrica.metricaId,
             observaciones,
+            enviadaAt: metrica.enviadaAt,
           })
           if (esperaDisputa(resultado, "rechazoMetrica")) {
             setRechazoEnDisputa(true)
           }
+          // El diálogo muestra el porqué; al cerrarlo, la hoja ofrece la versión nueva.
+          if (elementoCambiado(resultado, "metrica")) setCambiada(true)
           if (resultado.ok) {
             toast.success("Métrica rechazada", {
               description: `${metrica.medio.nombre} recibió tus observaciones.`,
@@ -605,8 +667,9 @@ export function RevisorMetricas({
         focoAlCerrar={revisor.focoAlCerrar}
       >
         {actual ? (
+          // Con la versión: la nueva (el medio la cambió) se revisa desde cero.
           <RevisionMetrica
-            key={actual.metricaId}
+            key={`${actual.metricaId}-${actual.enviadaAt}`}
             metrica={actual}
             revisor={revisor}
             pendiente={pendiente}

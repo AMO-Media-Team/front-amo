@@ -2,9 +2,9 @@
  * Errores de la validación en voz del equipo AMO (módulo puro). La BD explica
  * casi todo en el `detail` de sus `AMO_*`; aquí se da texto propio a los
  * `hint` de la fase (`asignacion_cerrada`, `alerta_sin_revision`,
- * `metricas_pendientes`, `en_disputa`), se decide en qué campo mostrar cada
- * error y se traducen las restricciones de `metricas` que puede tocar una
- * corrección.
+ * `metricas_pendientes`, `en_disputa`, `evidencia_cambiada`,
+ * `metrica_cambiada`), se decide en qué campo mostrar cada error y se
+ * traducen las restricciones de `metricas` que puede tocar una corrección.
  */
 import {
   codigoNegocio,
@@ -20,6 +20,13 @@ export const HINT_ASIGNACION_CERRADA = "asignacion_cerrada"
 export const HINT_ALERTA_SIN_REVISION = "alerta_sin_revision"
 export const HINT_METRICAS_PENDIENTES = "metricas_pendientes"
 export const HINT_EN_DISPUTA = "en_disputa"
+/**
+ * El medio reemplazó la evidencia o cambió la métrica después de que se
+ * abriera para revisarla (`updated_at` distinto del que se mostró): la
+ * decisión no se aplica sobre una versión que nadie vio.
+ */
+export const HINT_EVIDENCIA_CAMBIADA = "evidencia_cambiada"
+export const HINT_METRICA_CAMBIADA = "metrica_cambiada"
 
 export const MENSAJES_VALIDACION = {
   asignacionCerrada:
@@ -32,6 +39,10 @@ export const MENSAJES_VALIDACION = {
     "La asignación está en disputa: esta evidencia se decide al resolver la disputa, no desde aquí.",
   enDisputaRechazoMetrica:
     "La asignación entró en disputa con todas sus métricas cargadas: el rechazo de esta métrica se decide al resolver la disputa. Aprobarla sí se puede.",
+  evidenciaCambiada:
+    "El medio cambió esta evidencia mientras la revisabas (el enlace o la captura) y tu decisión no se aplicó. Revisa la versión actual antes de aprobarla o rechazarla.",
+  metricaCambiada:
+    "El medio cambió las cifras o la captura de esta métrica mientras la revisabas y tu decisión no se aplicó. Revisa la versión actual antes de aprobarla o rechazarla.",
   permanenciaPendiente:
     "Aún no se cumple la permanencia mínima de la publicación.",
   etiquetaRequerida:
@@ -91,6 +102,26 @@ export function esperaDisputa(
   return !resultado.ok && resultado.error === MENSAJES_EN_DISPUTA[decision]
 }
 
+/** Qué se decidía cuando la BD respondió que el medio lo cambió. */
+export type ElementoValidado = "evidencia" | "metrica"
+
+const MENSAJES_CAMBIADO: Readonly<Record<ElementoValidado, string>> = {
+  evidencia: MENSAJES_VALIDACION.evidenciaCambiada,
+  metrica: MENSAJES_VALIDACION.metricaCambiada,
+}
+
+/**
+ * El medio cambió el elemento mientras se revisaba (hints
+ * `evidencia_cambiada` y `metrica_cambiada`): no se decidió nada y hay que
+ * revisar la versión nueva antes de volver a intentarlo.
+ */
+export function elementoCambiado(
+  resultado: { ok: boolean; error?: string },
+  elemento: ElementoValidado
+): boolean {
+  return !resultado.ok && resultado.error === MENSAJES_CAMBIADO[elemento]
+}
+
 export interface ContextoErrorValidacion {
   /** Campo donde se escribe el motivo u observación de esta decisión. */
   campoMotivo?: "observaciones" | "motivo"
@@ -139,6 +170,18 @@ export function interpretarErrorValidacion(
         codigo,
         esperado: true,
         mensaje: MENSAJES_EN_DISPUTA[enDisputa],
+      }
+    case HINT_EVIDENCIA_CAMBIADA:
+      return {
+        codigo,
+        esperado: true,
+        mensaje: MENSAJES_VALIDACION.evidenciaCambiada,
+      }
+    case HINT_METRICA_CAMBIADA:
+      return {
+        codigo,
+        esperado: true,
+        mensaje: MENSAJES_VALIDACION.metricaCambiada,
       }
   }
   if (codigo === "AMO_PERMANENCIA_PENDIENTE") {

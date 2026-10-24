@@ -1,3 +1,5 @@
+import { supabaseUrlDe } from "../scripts/bootstrap/produccion"
+import { esBaseLocal } from "../scripts/bootstrap/validacion-e2e"
 import { imagenDePrueba } from "./utilidades/archivos"
 import { clienteDeLectura } from "./utilidades/datos-demo"
 import { esperarSinDesbordeHorizontal } from "./utilidades/interfaz"
@@ -35,6 +37,8 @@ import {
  *   tarjeta dice que se está revisando.
  * - Con la razón a su favor: «Te dimos la razón» con el plazo nuevo, la
  *   explicación del equipo y el botón para cargar la evidencia.
+ * - Las dos de la vencida corren solo contra la base local: vencer una
+ *   asignación escribe el plazo por la conexión directa de Postgres.
  * - En un estado disputable: «Reportar un problema» con los motivos del medio
  *   (Métricas, Contenido, Pago y Otro), el error junto a su campo, quién verá
  *   lo escrito y la conversación; la ficha avisa la disputa y la enlaza.
@@ -115,6 +119,10 @@ test.describe("disputas y reclamos del medio", () => {
   test("vencida: «Reclamar: sí publiqué» precargado, con el enlace y la captura; el cupo no vuelve mientras se revisa", async ({
     page,
   }) => {
+    test.skip(
+      !esBaseLocal(supabaseUrlDe()),
+      "Vencer una asignación solo se puede en la base local."
+    )
     const asignacion = await asignacionValidacionE2E({
       hasta: "CONTENIDO_ENTREGADO",
       prefijo: PREFIJO_PAUTA,
@@ -239,6 +247,10 @@ test.describe("disputas y reclamos del medio", () => {
   test("reclamo a favor: «Te dimos la razón» con el plazo nuevo, la explicación y el paso para cargar la evidencia", async ({
     page,
   }) => {
+    test.skip(
+      !esBaseLocal(supabaseUrlDe()),
+      "Vencer una asignación solo se puede en la base local."
+    )
     const asignacion = await asignacionValidacionE2E({
       hasta: "CONTENIDO_ENTREGADO",
       prefijo: PREFIJO_PAUTA,

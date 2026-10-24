@@ -11,6 +11,9 @@
  *    o por `transicionar` (verificar): la BD revalida permiso, estado,
  *    etiqueta, alerta revisada, cortes, pendientes y permanencia, mueve la
  *    asignación en la misma transacción y deja bitácora y avisos al medio.
+ *    Aprobar o rechazar manda la versión que se vio (`p_enviada_at`): si el
+ *    medio la cambió mientras tanto, la BD no decide (hints
+ *    `evidencia_cambiada` y `metrica_cambiada`) y la cola se actualiza.
  * 4. `revalidatePath` de la ficha de la asignación y de la cola.
  *
  * Los errores esperados se devuelven como `ResultadoAccion`; nunca se lanzan.
@@ -120,8 +123,10 @@ function leerRespuesta(datos: unknown): ResultadoValidacion | null {
 }
 
 /**
- * Si otro validador ya decidió o la asignación cambió, la cola y la ficha se
- * actualizan para que lo que se ve sea lo vigente.
+ * Si otro validador ya decidió, la asignación cambió o el medio cambió lo que
+ * se revisaba (todo llega como `AMO_TRANSICION_INVALIDA`), la cola se
+ * actualiza para que lo que se ve sea lo vigente; la ficha se refresca desde
+ * el navegador.
  */
 function revalidarSiCambio(error: ErrorBd): void {
   if (
@@ -163,6 +168,7 @@ export async function validarEvidencia(
         p_observaciones: decision.observaciones || null,
         p_actor_id: contexto.actorId,
         p_session_id: contexto.sessionId,
+        p_enviada_at: decision.enviadaAt,
       })
     )
     if (error) {
@@ -186,10 +192,10 @@ export async function validarEvidencia(
 
 /**
  * Aprueba (si tiene alerta, hoy o antes de corregirse, con la constancia de
- * lo revisado) o rechaza (con observaciones para el medio) un corte de
- * métricas. Rechazar en una asignación con todo cargado la devuelve a
- * EVIDENCIA_VALIDADA; en disputa con todo cargado, el rechazo espera a que se
- * resuelva (hint `en_disputa`).
+ * lo revisado, que queda solo en la bitácora) o rechaza (con observaciones
+ * para el medio) un corte de métricas. Rechazar en una asignación con todo
+ * cargado la devuelve a EVIDENCIA_VALIDADA; en disputa con todo cargado, el
+ * rechazo espera a que se resuelva (hint `en_disputa`).
  */
 export async function validarMetrica(
   entrada: EntradaValidarMetrica
@@ -209,6 +215,7 @@ export async function validarMetrica(
         p_observaciones: decision.observaciones || null,
         p_actor_id: contexto.actorId,
         p_session_id: contexto.sessionId,
+        p_enviada_at: decision.enviadaAt,
       })
     )
     if (error) {
@@ -275,8 +282,9 @@ const CAMPOS_CORRECCION: readonly string[] = [
  * Corrige una métrica APROBADA con un motivo (ADM-008 c2): solo
  * `metricas.editar_validadas`. Las cifras se revalidan con las mismas reglas
  * de coherencia que la carga del medio y se manda solo lo que cambió; la BD
- * guarda actor y motivo en la bitácora y suma «Corrección: …» a las
- * observaciones. Nadie del equipo reescribe cifras por la sesión.
+ * guarda actor y motivo en la bitácora (las partes no lo ven: las
+ * observaciones de la métrica no cambian). Nadie del equipo reescribe cifras
+ * por la sesión.
  */
 export async function corregirMetrica(
   entrada: ValoresCorreccion

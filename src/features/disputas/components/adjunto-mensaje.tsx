@@ -54,7 +54,12 @@ export function AdjuntoMensaje({
         {pdf ? "Abrir el PDF adjunto" : "Ver la imagen adjunta"}
       </Button>
       <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent showCloseButton={false} className="gap-4 sm:max-w-3xl">
+        {/* En el celular, la imagen y su pie no caben: el visor se desplaza
+            y «Cerrar» queda al alcance. */}
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto overscroll-contain sm:max-w-3xl"
+        >
           <DialogHeader>
             <DialogTitle>{etiqueta}</DialogTitle>
             <DialogDescription>

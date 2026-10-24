@@ -8,6 +8,7 @@ import {
   Clock,
   FileSearch,
   History,
+  RefreshCw,
   ShieldX,
   TriangleAlert,
 } from "lucide-react"
@@ -54,8 +55,13 @@ import {
   DETALLE_EVIDENCIA_EN_DISPUTA,
   evidenciaEnDisputa,
   SUGERENCIAS_RECHAZO_EVIDENCIA,
+  TEXTO_VUELVE_TRAS_RECHAZO_EVIDENCIA,
 } from "../decision"
-import { esperaDisputa } from "../errores"
+import {
+  elementoCambiado,
+  esperaDisputa,
+  MENSAJES_VALIDACION,
+} from "../errores"
 import { CAMPOS_EVIDENCIA, esquemaAprobarEvidencia } from "../schemas"
 import type { EvidenciaEnCola } from "../tipos"
 import {
@@ -69,6 +75,7 @@ import {
 import { CabeceraHoja, CuerpoHoja, MarcoHoja, PieHoja } from "./hoja-validacion"
 import {
   AbrirPublicacion,
+  AvisoVersionCambiada,
   Comprobaciones,
   Dato,
   EsperaDisputa,
@@ -222,6 +229,10 @@ function datosEvidencia(evidencia: EvidenciaEnCola): FilaDato[] {
  * Si la asignación entró en disputa (hint `en_disputa`), la evidencia se
  * decide al resolverla: en lugar de la decisión se explica y se enlaza a la
  * ficha de la asignación, que lleva a la disputa.
+ *
+ * Se decide sobre la versión que muestra la hoja (`enviadaAt`). Si el medio
+ * la cambió mientras tanto (hint `evidencia_cambiada`), no se decide nada: la
+ * hoja lo explica y ofrece revisar la versión nueva, que ya trae la cola.
  */
 function RevisionEvidencia({
   evidencia,
@@ -243,6 +254,13 @@ function RevisionEvidencia({
   const [enDisputa, setEnDisputa] = useState(() =>
     evidenciaEnDisputa(evidencia.estadoAsignacion)
   )
+  // La BD respondió que el medio la cambió: se revisa la versión nueva.
+  const [cambiada, setCambiada] = useState(false)
+  // El botón que la reemplaza a Aprobar (destino del foco).
+  const idVersion = useId()
+  const vigente = cambiada ? revisor.vigenteDe(evidencia.publicacionId) : null
+  const nueva =
+    vigente && vigente.enviadaAt !== evidencia.enviadaAt ? vigente : null
   const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
   const firmas = useFirmas(evidencia.asignacionId, evidencia.conImagen)
   const imagen =
@@ -278,12 +296,21 @@ function RevisionEvidencia({
       const resultado = await validarEvidencia({
         aprobar: true,
         ...formulario.getValues(),
+        enviadaAt: evidencia.enviadaAt,
       })
       if (!resultado.ok) {
         if (esperaDisputa(resultado, "evidencia")) {
           // El botón que se pulsó desaparece: el foco va al título de la hoja.
           setEnDisputa(true)
           requestAnimationFrame(() => revisor.focoTrasDialogo()?.focus())
+          return
+        }
+        if (elementoCambiado(resultado, "evidencia")) {
+          // En lugar de Aprobar, «Revisar la versión nueva» (o volver a la cola).
+          setCambiada(true)
+          requestAnimationFrame(() =>
+            document.getElementById(idVersion)?.focus()
+          )
           return
         }
         aplicarErroresServidor(formulario.setError, resultado, CAMPOS_EVIDENCIA)
@@ -359,10 +386,15 @@ function RevisionEvidencia({
               }}
               className="text-sm"
             />
+          ) : cambiada ? (
+            <AvisoVersionCambiada
+              mensaje={MENSAJES_VALIDACION.evidenciaCambiada}
+              conVersionNueva={nueva !== null}
+            />
           ) : (
             <Comprobaciones puntos={COMPROBACIONES_EVIDENCIA} />
           )}
-          {enDisputa ? null : (
+          {enDisputa || cambiada ? null : (
             <form
               id={idFormulario}
               noValidate
@@ -463,6 +495,24 @@ function RevisionEvidencia({
           >
             Ver la asignación
           </EnlaceBoton>
+        ) : cambiada ? (
+          // Un solo botón: si la lista se refresca después, conserva el foco.
+          <Button
+            id={idVersion}
+            type="button"
+            variant={nueva ? "default" : "outline"}
+            size="lg"
+            onClick={() => (nueva ? revisor.reabrir(nueva) : revisor.cerrar())}
+          >
+            {nueva ? (
+              <>
+                <RefreshCw data-icon="inline-start" aria-hidden />
+                Revisar la versión nueva
+              </>
+            ) : (
+              "Volver a la cola"
+            )}
+          </Button>
         ) : (
           <>
             <Button
@@ -507,7 +557,7 @@ function RevisionEvidencia({
             <strong>{evidencia.medio.nombre}</strong> recibe un aviso con tus
             observaciones y tiene al menos {formatearNumero(plazoRecargaHoras)}{" "}
             {plazoRecargaHoras === 1 ? "hora" : "horas"} para cargar una
-            evidencia nueva. La asignación vuelve a «Contenido entregado».
+            evidencia nueva. {TEXTO_VUELVE_TRAS_RECHAZO_EVIDENCIA}
           </>
         }
         etiqueta="Observaciones para el medio"
@@ -515,15 +565,20 @@ function RevisionEvidencia({
         ayuda="El medio las verá tal cual; quedan en la bitácora."
         sugerencias={SUGERENCIAS_RECHAZO_EVIDENCIA}
         textoConfirmar="Rechazar evidencia"
-        focoAlCerrar={revisor.focoTrasDialogo}
+        focoAlCerrar={() =>
+          document.getElementById(idVersion) ?? revisor.focoTrasDialogo()
+        }
         onConfirmar={async (observaciones) => {
           const proximo = revisor.proximoDe(evidencia.publicacionId)
           const resultado = await validarEvidencia({
             aprobar: false,
             publicacionId: evidencia.publicacionId,
             observaciones,
+            enviadaAt: evidencia.enviadaAt,
           })
           if (esperaDisputa(resultado, "evidencia")) setEnDisputa(true)
+          // El diálogo muestra el porqué; al cerrarlo, la hoja ofrece la versión nueva.
+          if (elementoCambiado(resultado, "evidencia")) setCambiada(true)
           if (resultado.ok) {
             const plazo = resultado.datos.fechaLimitePublicacion
             toast.success("Evidencia rechazada", {
@@ -577,8 +632,9 @@ export function RevisorEvidencias({
         focoAlCerrar={revisor.focoAlCerrar}
       >
         {actual ? (
+          // Con la versión: la nueva (el medio la cambió) se revisa desde cero.
           <RevisionEvidencia
-            key={actual.publicacionId}
+            key={`${actual.publicacionId}-${actual.enviadaAt}`}
             evidencia={actual}
             plazoRecargaHoras={plazoRecargaHoras}
             revisor={revisor}

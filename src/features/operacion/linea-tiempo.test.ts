@@ -156,6 +156,80 @@ describe("construirLineaTiempo", () => {
     )
   })
 
+  it("la constancia de una aprobación y el motivo de una corrección salen de la bitácora, no de las observaciones", () => {
+    const metrica = {
+      id: "m1",
+      numero: 1,
+      corte: "H24" as const,
+      creadaAt: "2026-09-05T15:00:00Z",
+      estado: "APROBADA" as const,
+      validadaAt: "2026-09-06T15:00:00Z",
+      // Una aprobación ya no deja nada en `observaciones`.
+      observaciones: null,
+      conAlerta: true,
+    }
+    const sinBitacora = construirLineaTiempo({
+      marcas: marcas({ estado: "EVIDENCIA_VALIDADA" }),
+      metricas: [metrica],
+    })
+    expect(
+      sinBitacora.filter((evento) => evento.categoria === "metrica")
+    ).toHaveLength(1)
+
+    const eventos = construirLineaTiempo({
+      marcas: marcas({ estado: "EVIDENCIA_VALIDADA" }),
+      metricas: [metrica],
+      revisionesMetricas: [
+        {
+          id: 30,
+          at: "2026-09-06T15:00:00Z",
+          metricaId: "m1",
+          tipo: "aprobacion",
+          actor: "op***@amo.test",
+          actorRol: "OPERACIONES",
+          motivo: "Comparé el alcance con la captura y coincide.",
+        },
+        {
+          id: 31,
+          at: "2026-09-07T15:00:00Z",
+          metricaId: "m1",
+          tipo: "correccion",
+          actor: "ad***@amo.test",
+          actorRol: "ADMIN",
+          motivo: "El medio digitó un cero de más.",
+        },
+        // De otra asignación: no se muestra.
+        {
+          id: 32,
+          at: "2026-09-07T16:00:00Z",
+          metricaId: "otra",
+          tipo: "aprobacion",
+          actor: null,
+          actorRol: null,
+          motivo: null,
+        },
+      ],
+    })
+    const deMetricas = eventos.filter(
+      (evento) => evento.categoria === "metrica"
+    )
+    expect(deMetricas.map((evento) => evento.titulo)).toEqual([
+      "Métricas de 24 horas cargadas",
+      "Métricas de 24 horas aprobadas",
+      "Métricas de 24 horas corregidas por AMO",
+    ])
+    expect(deMetricas[1]).toMatchObject({
+      detalle: "Comparé el alcance con la captura y coincide.",
+      actor: "op***@amo.test · OPERACIONES",
+      tono: "exito",
+      fuente: "bitacora",
+    })
+    expect(deMetricas[2]).toMatchObject({
+      detalle: "El medio digitó un cero de más.",
+      tono: "aviso",
+    })
+  })
+
   it("cuenta una sola vez la apertura de una disputa (disputa + cambio de estado)", () => {
     const eventos = construirLineaTiempo({
       marcas: marcas({

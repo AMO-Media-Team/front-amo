@@ -666,7 +666,11 @@ export function FormularioDisputa({
             {errorGeneral}
           </p>
         ) : null}
-        <p role="status" className="text-sm text-muted-foreground empty:hidden">
+        {/* Vacía sigue en el árbol de accesibilidad: se anuncia el primer estado. */}
+        <p
+          role="status"
+          className="text-sm text-muted-foreground empty:sr-only"
+        >
           {estadoEnvio}
         </p>
       </section>

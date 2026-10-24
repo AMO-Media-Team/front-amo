@@ -45,7 +45,7 @@ update public.plantillas_notificacion
 -- ADM-007: decidir sobre una publicación y mover la asignación en la misma transacción (aprobar la última →
 -- EVIDENCIA_VALIDADA; rechazar → CONTENIDO_ENTREGADO con plazo de recarga).
 create function public.validar_evidencia_srv(p_publicacion_id uuid, p_aprobar boolean, p_etiqueta_verificada boolean,
-  p_observaciones text, p_actor_id uuid, p_session_id uuid) returns jsonb
+  p_observaciones text, p_actor_id uuid, p_session_id uuid, p_enviada_at timestamptz default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_tipo public.rol_tipo; v_asig uuid; a public.asignaciones; v_obs text := left(nullif(btrim(p_observaciones), ''), 1000);
 begin
@@ -60,6 +60,17 @@ begin
   perform set_config('lock_timeout', '3s', true);
   perform private.bloquear_transicion('asignaciones', v_asig,
                                       case when p_aprobar then 'EVIDENCIA_VALIDADA' else 'CONTENIDO_ENTREGADO' end);
+  if (select p.estado_validacion from public.publicaciones p where p.id = p_publicacion_id) <> 'PENDIENTE' then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Esta evidencia ya se decidió: vuelve a la cola para ver lo pendiente.', hint = 'ya_decidida';
+  end if;
+  -- Se decide sobre la versión que vio el validador: si el medio la reemplazó mientras tanto, se vuelve a revisar.
+  if p_enviada_at is not null
+     and (select p.updated_at from public.publicaciones p where p.id = p_publicacion_id for update) is distinct from p_enviada_at then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El medio cambió esta evidencia mientras la revisabas: vuelve a abrirla para revisar la versión actual.',
+      hint = 'evidencia_cambiada';
+  end if;
   -- Durante una disputa la evidencia se decide al resolverla (aprobarla no movería la asignación).
   if (select x.estado from public.asignaciones x where x.id = v_asig) = 'EN_DISPUTA' then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
@@ -97,14 +108,15 @@ begin
   select * into a from public.asignaciones x where x.id = v_asig;
   return jsonb_build_object('asignacion_id', a.id, 'estado', a.estado, 'fecha_limite_publicacion', a.fecha_limite_publicacion);
 end $$;
-revoke all on function public.validar_evidencia_srv(uuid, boolean, boolean, text, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.validar_evidencia_srv(uuid, boolean, boolean, text, uuid, uuid) to service_role;
+revoke all on function public.validar_evidencia_srv(uuid, boolean, boolean, text, uuid, uuid, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.validar_evidencia_srv(uuid, boolean, boolean, text, uuid, uuid, timestamptz) to service_role;
 
 
 -- ADM-008: aprobar o rechazar una métrica; al rechazar, la asignación que ya tenía todo cargado vuelve a
 -- EVIDENCIA_VALIDADA en la misma transacción (D10: METRICAS_CARGADAS nunca convive con una métrica rechazada).
 create function public.validar_metrica_srv(p_metrica_id uuid, p_aprobar boolean, p_observaciones text, p_actor_id uuid,
-  p_session_id uuid) returns jsonb
+  p_session_id uuid, p_enviada_at timestamptz default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_tipo public.rol_tipo; v_asig uuid; v_obs text := left(nullif(btrim(p_observaciones), ''), 1000); v_estado text;
 begin
@@ -118,9 +130,19 @@ begin
   end if;
   perform set_config('lock_timeout', '3s', true);
   perform private.bloquear_transicion('asignaciones', v_asig, 'EVIDENCIA_VALIDADA');
+  if (select m.estado_validacion from public.metricas m where m.id = p_metrica_id) <> 'PENDIENTE' then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Esta métrica ya se decidió: vuelve a la cola para ver lo pendiente.', hint = 'ya_decidida';
+  end if;
+  -- Se decide sobre las cifras que vio el validador: si el medio las cambió mientras tanto, se vuelve a revisar.
+  if p_enviada_at is not null
+     and (select m.updated_at from public.metricas m where m.id = p_metrica_id for update) is distinct from p_enviada_at then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El medio cambió esta métrica mientras la revisabas: vuelve a abrirla para revisar las cifras actuales.',
+      hint = 'metrica_cambiada';
+  end if;
   if p_aprobar then
-    perform public.transicionar_srv('metricas', p_metrica_id, 'APROBADA', p_actor_id, p_session_id, v_obs,
-                                    jsonb_build_object('observaciones', v_obs));
+    perform public.transicionar_srv('metricas', p_metrica_id, 'APROBADA', p_actor_id, p_session_id, v_obs, '{}');
   else
     if v_obs is null then
       raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO', detail = 'Indica qué debe corregir el medio.';
@@ -141,8 +163,8 @@ begin
   select x.estado::text into v_estado from public.asignaciones x where x.id = v_asig;
   return jsonb_build_object('asignacion_id', v_asig, 'estado', v_estado);
 end $$;
-revoke all on function public.validar_metrica_srv(uuid, boolean, text, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.validar_metrica_srv(uuid, boolean, text, uuid, uuid) to service_role;
+revoke all on function public.validar_metrica_srv(uuid, boolean, text, uuid, uuid, timestamptz) from public, anon, authenticated;
+grant execute on function public.validar_metrica_srv(uuid, boolean, text, uuid, uuid, timestamptz) to service_role;
 
 
 -- ADM-008 c2: corrección auditada de una métrica APROBADA (motivo obligatorio; la bitácora guarda actor y motivo).
@@ -182,9 +204,8 @@ begin
          me_gusta = v_nueva.me_gusta, comentarios = v_nueva.comentarios, compartidos = v_nueva.compartidos,
          guardados = v_nueva.guardados, clics_enlace = v_nueva.clics_enlace, visitas_perfil = v_nueva.visitas_perfil,
          tiempo_promedio_visualizacion_s = v_nueva.tiempo_promedio_visualizacion_s,
-         porcentaje_reproduccion_completa = v_nueva.porcentaje_reproduccion_completa,
-         observaciones = left(coalesce(x.observaciones || ' · ', '') || 'Corrección: ' || v_motivo, 1000)
-   where x.id = m.id;
+         porcentaje_reproduccion_completa = v_nueva.porcentaje_reproduccion_completa
+   where x.id = m.id;                                     -- el motivo queda en la bitácora, no a la vista de las partes
   perform set_config('amo.motivo', '', true);
   return m.id;
 end $$;
@@ -764,6 +785,11 @@ begin
       raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
         detail = 'Una asignación vencida solo la reclama el medio y dentro del plazo.';
     end if;
+    if exists (select 1 from public.disputas d where d.asignacion_id = a.id
+                 and d.estado_asignacion_origen = 'VENCIDA_SIN_PUBLICAR' and d.created_at >= a.vencida_at) then
+      raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+        detail = 'Ya reclamaste esta publicación: una vencida admite un solo reclamo.', hint = 'reclamo_previo';
+    end if;
   elsif a.estado not in ('PUBLICADA', 'EVIDENCIA_VALIDADA', 'METRICAS_CARGADAS', 'VERIFICADA') then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = 'La asignación no se puede disputar en su estado actual.';
@@ -774,7 +800,7 @@ begin
   returning id into v_id;
   perform set_config('amo.motivo', coalesce(v_prev_motivo, ''), true);
   perform private.aplicar_transicion('asignaciones', a.id, 'EN_DISPUTA', v_tipo::text::public.transicion_actor, p_actor_id,
-                                     v_descripcion);
+                                     left(v_descripcion, 1000));      -- asignaciones.motivo admite 1000; la disputa, 4000
   if p_motivo = 'PERMANENCIA' then
     update public.publicaciones p set retirada_detectada_at = coalesce(p.retirada_detectada_at, private.ahora())
     where p.asignacion_id = a.id;
@@ -900,7 +926,11 @@ AS $function$
                                         -- ADM-011: una vencida aún reclamable mantiene viva la oferta.
                                         or (a.estado = 'VENCIDA_SIN_PUBLICAR'
                                             and a.vencida_at + make_interval(hours => private.config_entero('disputas.plazo_vencida_horas'))
-                                                > private.ahora()))))))
+                                                > private.ahora()
+                                            and not exists (select 1 from public.disputas d
+                                                            where d.asignacion_id = a.id
+                                                              and d.estado_asignacion_origen = 'VENCIDA_SIN_PUBLICAR'
+                                                              and d.created_at >= a.vencida_at)))))))
     when p_entidad = 'ofertas' and p_hacia = 'DEVUELTA' then exists (
       select 1 from public.ofertas o
       where o.id = p_id and o.deleted_at is null and o.estado = 'EN_REVISION'
@@ -1233,7 +1263,8 @@ begin
     from public.asignaciones a
     where a.medio_id = v_me and a.estado = 'VENCIDA_SIN_PUBLICAR'
       and private.ahora() <= a.vencida_at + make_interval(hours => private.config_entero('disputas.plazo_vencida_horas'))
-      and not exists (select 1 from public.disputas d where d.asignacion_id = a.id)
+      and not exists (select 1 from public.disputas d where d.asignacion_id = a.id
+                        and d.estado_asignacion_origen = 'VENCIDA_SIN_PUBLICAR' and d.created_at >= a.vencida_at)
   )
   select ac.id, o.titulo, ac.accion, min(ac.vence), ac.numero, ac.corte, ac.metrica_id
   from acciones ac
@@ -1263,7 +1294,7 @@ begin
     return query select 'MEDIO_' || m.estado::text,
       case m.estado when 'PENDIENTE' then 'Tu medio aún no está verificado: completa el alta y envíalo a verificación.'
                     when 'RECHAZADO' then 'La verificación de tu medio fue rechazada: corrige lo indicado y vuelve a enviarla.'
-                    else 'Tu medio está suspendido' || coalesce(': ' || nullif(btrim(m.motivo_estado), ''), '')
+                    else 'Tu medio está suspendido' || coalesce(': ' || nullif(rtrim(btrim(m.motivo_estado), '. '), ''), '')
                          || '. Mientras tanto no verás ofertas nuevas.' end;
   elsif m.nivel_verificacion < 1 then
     return query select 'NIVEL_0'::text, 'Tu medio aún no tiene un nivel de verificación.'::text;
@@ -1480,4 +1511,340 @@ language sql immutable set search_path = '' as $$
                -- E2 fase 3
                'puedo_ver_archivo_asignacion',
                -- E3 fase 4
-               'alertas_metricas_por_medio']::text[] $$;
+               'alertas_metricas_por_medio', 'puedo_subir_metrica_en_disputa']::text[] $$;
+
+
+-- Avisos robustos: el borrado concurrente de un destinatario no hace fallar la transacción de negocio.
+CREATE OR REPLACE FUNCTION private.notificar(p_usuarios uuid[], p_tipo text, p_datos jsonb, p_entidad text, p_entidad_id text, p_url text, p_prioridad smallint DEFAULT 0)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_plantilla public.plantillas_notificacion;
+  v_datos jsonb := coalesce(p_datos, '{}');
+  v_titulo text;
+  v_mensaje text;
+  v_clave text;
+  v_valor text;
+  v_n integer;
+begin
+  if private.modo_carga() or coalesce(cardinality(p_usuarios), 0) = 0 then return 0; end if;
+  select * into v_plantilla from public.plantillas_notificacion x
+  where x.clave = p_tipo and x.canal = 'APP' and x.activa;
+  if not found then return 0; end if;
+  if v_datos ? 'oferta_id' and not v_datos ? 'oferta' then
+    v_datos := v_datos || jsonb_build_object('oferta',
+      (select o.titulo from public.ofertas o where o.id = (v_datos ->> 'oferta_id')::uuid));
+  end if;
+  v_titulo := v_plantilla.nombre;
+  v_mensaje := v_plantilla.cuerpo;
+  for v_clave, v_valor in select e.key, coalesce(e.value #>> '{}', '—') from jsonb_each(v_datos) e loop
+    v_titulo := replace(v_titulo, '{{' || v_clave || '}}', v_valor);
+    v_mensaje := replace(v_mensaje, '{{' || v_clave || '}}', v_valor);
+  end loop;
+  v_titulo := btrim(regexp_replace(v_titulo, '\{\{[a-z_]+\}\}', '—', 'g'));
+  v_mensaje := btrim(regexp_replace(v_mensaje, '\{\{[a-z_]+\}\}', '—', 'g'));
+  v_titulo := case when char_length(v_titulo) > 120 then left(v_titulo, 119) || '…' else v_titulo end;
+  v_mensaje := case when char_length(v_mensaje) > 500 then left(v_mensaje, 499) || '…' else v_mensaje end;
+
+  -- Un aviso nunca tumba la operación que lo genera: si un destinatario se borró mientras se armaba (la llave foránea
+  -- lo ve borrado aunque la lectura no), se reintenta con los perfiles vigentes.
+  begin
+    insert into public.notificaciones (usuario_id, tipo, titulo, mensaje, entidad, entidad_id, url, prioridad, es_demo)
+    select p.id, p_tipo, v_titulo, v_mensaje, left(p_entidad, 60), left(p_entidad_id, 80),
+           case when p_url ~ '^/[^/]' and char_length(p_url) <= 300 and position('..' in p_url) = 0 then p_url end,
+           least(greatest(coalesce(p_prioridad, 0), 0), 2)::smallint, p.es_demo
+    from public.perfiles p
+    where p.id = any (p_usuarios) and p.estado = 'ACTIVO' and p.deleted_at is null;
+    get diagnostics v_n = row_count;
+  exception when foreign_key_violation then
+    insert into public.notificaciones (usuario_id, tipo, titulo, mensaje, entidad, entidad_id, url, prioridad, es_demo)
+    select p.id, p_tipo, v_titulo, v_mensaje, left(p_entidad, 60), left(p_entidad_id, 80),
+           case when p_url ~ '^/[^/]' and char_length(p_url) <= 300 and position('..' in p_url) = 0 then p_url end,
+           least(greatest(coalesce(p_prioridad, 0), 0), 2)::smallint, p.es_demo
+    from public.perfiles p
+    where p.id = any (p_usuarios) and p.estado = 'ACTIVO' and p.deleted_at is null;
+    get diagnostics v_n = row_count;
+  end;
+  return v_n;
+end $function$;
+
+
+-- Revisión adversarial de la fase: notas de aprobación fuera de la vista de las partes, motivos dentro del límite de la
+-- asignación, capturas de métricas durante la disputa y escritura en disputas solo con `disputas.abrir`.
+CREATE OR REPLACE FUNCTION private.aplicar_transicion(p_entidad text, p_id uuid, p_hacia text, p_actor_tipo transicion_actor, p_actor_id uuid, p_motivo text DEFAULT NULL::text, p_datos jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_col text := private.columna_estado(p_entidad);
+  v_tipo_col text;
+  v_desde text;
+  t private.transiciones_estado;
+  v_motivo text := nullif(btrim(p_motivo), '');
+  v_datos jsonb := coalesce(p_datos, '{}');
+  v_ahora timestamptz := private.ahora();
+  v_sets text[];
+  v_prev_aut text := current_setting('amo.transicion_autorizada', true);
+  v_prev_tipo text := current_setting('amo.actor_tipo', true);
+  v_prev_motivo text := current_setting('amo.motivo', true);
+  v_prev_actor text := current_setting('amo.actor_id', true);
+begin
+  if v_col is null then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'Esta entidad no tiene estados.', hint = coalesce(p_entidad, 'null');
+  end if;
+  execute format('select t.%I::text from public.%I t where t.id = $1 for update', v_col, p_entidad) into v_desde using p_id;
+  if v_desde is null then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA', detail = 'El registro no existe.',
+      hint = p_entidad || ':' || coalesce(p_id::text, 'null');
+  end if;
+  select * into t from private.transiciones_estado x
+  where x.entidad = p_entidad and x.desde = v_desde and x.hacia = p_hacia and x.actor = p_actor_tipo;
+  if not found then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'El registro no puede pasar a ese estado desde el actual.',
+      hint = p_entidad || ':' || v_desde || '→' || coalesce(p_hacia, 'null') || ' (' || p_actor_tipo || ')';
+  end if;
+  if not private.modo_carga() then
+    if t.permiso is not null and not coalesce(private.tiene_permiso_de(p_actor_id, t.permiso), false) then
+      raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+    end if;
+    if t.requiere_motivo and v_motivo is null then
+      raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO', detail = 'Indica el motivo del cambio.';
+    end if;
+  end if;
+
+  select format_type(a.atttypid, a.atttypmod) into v_tipo_col
+  from pg_attribute a where a.attrelid = format('public.%I', p_entidad)::regclass and a.attname = v_col;
+  v_sets := array[format('%I = $1::%s', v_col, v_tipo_col)];
+  if t.columna_at is not null then
+    v_sets := v_sets || case t.modo_at
+      when 'PRIMERA' then format('%1$I = coalesce(%1$I, $2)', t.columna_at)
+      when 'SIEMPRE' then format('%I = $2', t.columna_at)
+      else format('%I = null', t.columna_at) end;
+  end if;
+
+  -- Columnas propias de la entidad y datos permitidos de p_datos (lista blanca por entidad).
+  case p_entidad
+    when 'perfiles' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if p_hacia = 'DESACTIVADO' then v_sets := v_sets || 'deleted_at = $2'::text; end if;
+      if p_hacia = 'INVITADO' then v_sets := v_sets || array['deleted_at = null', 'debe_cambiar_password = true']; end if;
+    when 'anunciantes' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if v_desde = 'PENDIENTE' and p_hacia = 'VERIFICADO' then v_sets := v_sets || 'verificado_por = $5'::text; end if;
+    when 'medios' then
+      v_sets := v_sets || 'motivo_estado = $3'::text;
+      if p_hacia in ('PENDIENTE', 'RECHAZADO') then
+        v_sets := v_sets || 'nivel_verificacion = 0'::text;
+      elsif v_datos ? 'nivel' and p_hacia = 'VERIFICADO' and v_desde in ('PENDIENTE', 'VERIFICADO') then
+        v_sets := v_sets || ($s$nivel_verificacion = ($4 ->> 'nivel')::smallint$s$)::text;
+      end if;
+      if p_hacia = 'VERIFICADO' and v_desde in ('PENDIENTE', 'VERIFICADO') then
+        v_sets := v_sets || 'verificado_por = $5'::text;
+      end if;
+    when 'documentos_medio', 'documentos_anunciante' then
+      if p_hacia in ('APROBADO', 'RECHAZADO') then
+        v_sets := v_sets || array['validado_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      end if;
+      -- MED-003: quien aprueba puede fijar la vigencia del documento (cédula, certificados, seguridad social…).
+      if p_hacia = 'APROBADO' then
+        v_sets := v_sets || ($s$fecha_vencimiento = coalesce(($4 ->> 'fecha_vencimiento')::date, fecha_vencimiento)$s$)::text;
+      end if;
+    when 'verificaciones_cuenta' then
+      v_sets := v_sets || array['validada_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      if p_hacia = 'APROBADA' then
+        v_sets := v_sets || ($s$seguidores_verificados = coalesce(($4 ->> 'seguidores_verificados')::integer, seguidores_verificados, seguidores_reportados)$s$)::text;
+      end if;
+    when 'ofertas' then
+      -- E2d: también la devolución del sistema (fecha límite vencida en revisión) y el rechazo dejan su comentario.
+      if p_hacia = 'DEVUELTA' or (v_desde = 'EN_REVISION' and p_hacia = 'CANCELADA')
+         or (p_actor_tipo = 'ADMIN' and v_datos ? 'comentario_moderacion') then
+        v_sets := v_sets || ($s$comentario_moderacion = coalesce($4 ->> 'comentario_moderacion', $3, comentario_moderacion)$s$)::text;
+      end if;
+      if p_actor_tipo = 'ADMIN' and v_desde = 'EN_REVISION' then v_sets := v_sets || 'moderada_por = $5'::text; end if;
+    when 'asignaciones' then
+      if p_hacia = 'EN_DISPUTA' then
+        v_sets := v_sets || 'estado_previo_disputa = $6::public.asignacion_estado'::text;
+      elsif v_desde = 'EN_DISPUTA' then
+        v_sets := v_sets || 'estado_previo_disputa = null'::text;
+      end if;
+      if v_motivo is not null then v_sets := v_sets || 'motivo = $3'::text; end if;
+      if p_hacia = 'CANCELADA' then
+        if nullif(v_datos ->> 'causa', '') is null and not private.modo_carga() then
+          raise exception using errcode = 'P0001', message = 'AMO_MOTIVO_REQUERIDO',
+            detail = 'Indica la causa de la cancelación.';
+        end if;
+        v_sets := v_sets || ($s$causa_cancelacion = ($4 ->> 'causa')::public.cancelacion_causa$s$)::text;
+      end if;
+    when 'publicaciones' then
+      if p_hacia in ('APROBADA', 'RECHAZADA') then
+        v_sets := v_sets || array['validada_por = $5', $s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$];
+      end if;
+      if p_hacia = 'APROBADA' then
+        v_sets := v_sets || ($s$etiqueta_verificada = coalesce(($4 ->> 'etiqueta_verificada')::boolean, etiqueta_verificada)$s$)::text;
+      end if;
+    when 'metricas' then
+      if p_hacia in ('APROBADA', 'RECHAZADA') then v_sets := v_sets || 'validada_por = $5'::text; end if;
+      -- La nota de un rechazo es para el medio; la constancia de una aprobación (p. ej. de una alerta) solo va a la
+      -- bitácora: las partes leen observaciones de las métricas aprobadas (D67).
+      if p_hacia = 'RECHAZADA' then
+        v_sets := v_sets || ($s$observaciones = coalesce($4 ->> 'observaciones', $3, observaciones)$s$)::text;
+      elsif p_hacia = 'APROBADA' then
+        v_sets := v_sets || 'observaciones = null'::text;
+      end if;
+    when 'liquidaciones' then
+      if p_hacia = 'PAGADA' then
+        v_sets := v_sets || array[$s$fecha_pago = coalesce(($4 ->> 'fecha_pago')::date, fecha_pago)$s$,
+                                  $s$referencia_pago = coalesce($4 ->> 'referencia_pago', referencia_pago)$s$,
+                                  $s$soporte_pago_path = coalesce($4 ->> 'soporte_pago_path', soporte_pago_path)$s$];
+      end if;
+      if p_hacia = 'APROBADA' then v_sets := v_sets || 'aprobada_por = $5'::text; end if;
+    when 'documentos_soporte', 'facturas' then
+      -- Numeración DIAN: solo al emitir y en el mismo UPDATE que el estado (el borrador nunca tiene número).
+      if p_hacia in ('EMITIDO', 'EMITIDA') then
+        v_sets := v_sets || array[$s$resolucion_id = ($4 ->> 'resolucion_id')::uuid$s$, $s$prefijo = $4 ->> 'prefijo'$s$,
+                                  $s$consecutivo = ($4 ->> 'consecutivo')::bigint$s$,
+                                  $s$fecha_emision = ($4 ->> 'fecha_emision')::date$s$];
+        if p_entidad = 'facturas' then
+          v_sets := v_sets || ($s$fecha_vencimiento = coalesce(($4 ->> 'fecha_vencimiento')::date, fecha_vencimiento)$s$)::text;
+        end if;
+      end if;
+    when 'disputas' then
+      if p_hacia in ('RESUELTA', 'DESCARTADA') then
+        v_sets := v_sets || array['resuelta_por = $5', $s$resolucion = coalesce($4 ->> 'resolucion', $3, resolucion)$s$,
+          $s$estado_asignacion_resultante = coalesce(($4 ->> 'estado_asignacion_resultante')::public.asignacion_estado, estado_asignacion_resultante)$s$];
+      end if;
+    else
+      null;
+  end case;
+
+  perform set_config('amo.transicion_autorizada', 'on', true);
+  perform set_config('amo.actor_tipo', p_actor_tipo::text, true);
+  perform set_config('amo.motivo', coalesce(v_motivo, ''), true);
+  if p_actor_id is not null then perform set_config('amo.actor_id', p_actor_id::text, true); end if;
+  execute format('update public.%I set %s where id = $7', p_entidad, array_to_string(v_sets, ', '))
+    using p_hacia, v_ahora, v_motivo, v_datos, p_actor_id, v_desde, p_id;
+  perform set_config('amo.transicion_autorizada', coalesce(v_prev_aut, ''), true);
+  perform set_config('amo.actor_tipo', coalesce(v_prev_tipo, ''), true);
+  perform set_config('amo.motivo', coalesce(v_prev_motivo, ''), true);
+  perform set_config('amo.actor_id', coalesce(v_prev_actor, ''), true);
+
+  return jsonb_build_object('entidad', p_entidad, 'id', p_id, 'desde', v_desde, 'hacia', p_hacia, 'at', v_ahora);
+end $function$;
+
+CREATE OR REPLACE FUNCTION private.ejecutar_transicion(p_entidad text, p_id uuid, p_desde text, p_hacia text, p_actor_tipo transicion_actor, p_actor_id uuid, p_motivo text, p_datos jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_datos jsonb := coalesce(p_datos, '{}');
+  v_previo public.asignacion_estado;
+  v_desde_cupo boolean;
+  v_hacia_cupo boolean;
+  v_res jsonb;
+  r record;
+  v_asig uuid;
+  v_dest text;
+begin
+  if p_entidad = 'asignaciones' then
+    select a.estado_previo_disputa into v_previo from public.asignaciones a where a.id = p_id;
+    v_desde_cupo := private.consume_cupo(p_desde::public.asignacion_estado, v_previo);
+    v_hacia_cupo := private.consume_cupo(p_hacia::public.asignacion_estado,
+                                         case when p_hacia = 'EN_DISPUTA' then p_desde::public.asignacion_estado end);
+    if not v_desde_cupo and v_hacia_cupo then
+      perform private.reconsumir_cupo(p_id);          -- reapertura de una vencida: antes de aplicar (§5.2 paso 6)
+    end if;
+  elsif p_entidad = 'disputas' then
+    select d.asignacion_id, a.estado_previo_disputa into v_asig, v_previo
+    from public.disputas d join public.asignaciones a on a.id = d.asignacion_id where d.id = p_id;
+    if p_hacia = 'DESCARTADA' then
+      v_datos := v_datos || jsonb_build_object('estado_asignacion_resultante', v_previo);
+    end if;
+  end if;
+
+  v_res := private.aplicar_transicion(p_entidad, p_id, p_hacia, p_actor_tipo, p_actor_id, p_motivo, v_datos);
+
+  if p_entidad = 'asignaciones' then
+    if v_desde_cupo and not v_hacia_cupo then
+      perform private.liberar_cupo_efecto(p_id);
+    end if;
+    if p_desde = 'PUBLICADA' and p_hacia = 'EVIDENCIA_VALIDADA' then
+      perform private.evaluar_metricas_cargadas(p_id);
+    end if;
+    if p_hacia = 'VERIFICADA' and (p_desde = 'METRICAS_CARGADAS' or v_previo = 'METRICAS_CARGADAS') then
+      update public.publicaciones p set permanencia_verificada_at = coalesce(p.permanencia_verificada_at, private.ahora())
+      where p.asignacion_id = p_id;
+    end if;
+  elsif p_entidad = 'campanas' and p_hacia = 'CANCELADA' then
+    for r in select o.id from public.ofertas o
+             where o.campana_id = p_id and o.estado in ('BORRADOR', 'EN_REVISION', 'DEVUELTA', 'PUBLICADA', 'EN_EJECUCION')
+               -- Las que tienen obligaciones (cumplidas) se cierran solas con el cron.
+               and not exists (select 1 from public.asignaciones a
+                               where a.oferta_id = o.id and private.consume_cupo(a.estado, a.estado_previo_disputa))
+             order by o.id loop
+      perform private.aplicar_transicion('ofertas', r.id, 'CANCELADA', 'SISTEMA', null,
+                                         coalesce(p_motivo, 'Cancelación de la campaña'));
+    end loop;
+  elsif p_entidad = 'liquidaciones' and p_hacia = 'PAGADA' then
+    for r in select a.id from public.asignaciones a where a.liquidacion_id = p_id and a.estado = 'LIQUIDADA' order by a.id loop
+      perform private.aplicar_transicion('asignaciones', r.id, 'PAGADA', 'ADMIN', p_actor_id);
+    end loop;
+  elsif p_entidad = 'liquidaciones' and p_hacia = 'ANULADA' then
+    for r in select a.id from public.asignaciones a where a.liquidacion_id = p_id order by a.id loop
+      perform private.aplicar_transicion('asignaciones', r.id, 'VERIFICADA', 'ADMIN', p_actor_id,
+                                         coalesce(p_motivo, 'Anulación de la liquidación'));
+      update public.asignaciones a set liquidacion_id = null where a.id = r.id;
+      update public.asignacion_montos m set retenciones_aplicadas = null, monto_retenciones = null, monto_neto = null
+      where m.asignacion_id = r.id;
+    end loop;
+    for r in select d.id from public.documentos_soporte d
+             where d.liquidacion_id = p_id and d.estado in ('BORRADOR', 'EMITIDO') order by d.id loop
+      perform private.aplicar_transicion('documentos_soporte', r.id, 'ANULADO', 'SISTEMA', null,
+                                         coalesce(p_motivo, 'Anulación de la liquidación'));
+    end loop;
+  elsif p_entidad = 'disputas' and p_hacia in ('RESUELTA', 'DESCARTADA') then
+    v_dest := case when p_hacia = 'RESUELTA' then v_datos ->> 'estado_asignacion_resultante' else v_previo::text end;
+    perform private.ejecutar_transicion('asignaciones', v_asig, 'EN_DISPUTA', v_dest, 'ADMIN', p_actor_id,
+                                        left(p_motivo, 1000), v_datos);  -- asignaciones.motivo admite 1000
+  end if;
+  return v_res;
+end $function$;
+
+-- D72: durante una disputa el medio sigue subiendo las capturas de sus cortes (solo la carpeta de métricas: la evidencia
+-- se decide al resolver).
+create function private.puedo_subir_metrica_en_disputa(p_asignacion_id uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select (select private.tiene_permiso('asignaciones.ejecutar'))
+     and exists (select 1 from public.asignaciones a
+                 where a.id = p_asignacion_id and a.medio_id = (select private.mi_medio_id()) and a.estado = 'EN_DISPUTA'
+                   and a.estado_previo_disputa in ('PUBLICADA', 'EVIDENCIA_VALIDADA', 'METRICAS_CARGADAS')) $$;
+revoke all on function private.puedo_subir_metrica_en_disputa(uuid) from public, anon;
+grant execute on function private.puedo_subir_metrica_en_disputa(uuid) to authenticated;
+
+drop policy "disputa_mensajes: insert partes o resolutor" on public.disputa_mensajes;
+create policy "disputa_mensajes: insert partes o resolutor" on public.disputa_mensajes for insert to authenticated
+  with check (autor_id = (select auth.uid())
+              and ((select private.tiene_permiso('disputas.resolver'))
+                   or ((select private.tiene_permiso('disputas.abrir')) and not interno
+                       and private.soy_parte_disputa(disputa_id, true))));
+drop policy "storage: evidencias insert" on storage.objects;
+create policy "storage: evidencias insert" on storage.objects for insert to authenticated
+  with check (bucket_id = 'evidencias'
+              and ((private.seg(name, 1) = 'asignacion' and private.seg(name, 3) in ('publicacion', 'metrica')
+                    and private.puedo_subir_evidencia(private.seg_uuid(name, 2)))
+                   or (private.seg(name, 1) = 'asignacion' and private.seg(name, 3) = 'metrica'
+                       and private.puedo_subir_metrica_en_disputa(private.seg_uuid(name, 2)))
+                   or (private.seg(name, 1) = 'disputa'
+                       and ((private.seg(name, 3) is distinct from 'interno'
+                             and (select private.tiene_permiso('disputas.abrir'))
+                             and private.soy_parte_disputa(private.seg_uuid(name, 2), true))
+                            or ((select private.tiene_permiso('disputas.resolver'))
+                                and exists (select 1 from public.disputas d where d.id = private.seg_uuid(name, 2)))))));

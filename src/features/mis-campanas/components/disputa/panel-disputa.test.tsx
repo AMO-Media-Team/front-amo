@@ -317,6 +317,24 @@ describe("PanelDisputa · reportar un problema", () => {
     expect(enviar("problema")).toBeEnabled()
   })
 
+  it("la descripción admite 4.000 caracteres y el estado del envío se anuncia desde el primero (C1, U3)", async () => {
+    const usuario = userEvent.setup()
+    render(<Pagina apertura={PROBLEMA} abierta={null} />)
+    await usuario.click(screen.getByRole("radio", { name: "Métricas" }))
+    // La BD guarda la descripción entera; solo recorta la copia de la asignación.
+    expect(screen.getByRole("textbox", { name: "Qué pasó" })).toHaveAttribute(
+      "maxLength",
+      "4000"
+    )
+    // Vacía sigue en el árbol de accesibilidad (`sr-only`, no `hidden`).
+    const estadoEnvio = enviar("problema")
+      .closest("form")
+      ?.querySelector('p[role="status"]')
+    expect(estadoEnvio).toBeEmptyDOMElement()
+    expect(estadoEnvio).toHaveClass("empty:sr-only")
+    expect(estadoEnvio).not.toHaveClass("empty:hidden")
+  })
+
   it("un error de campo de la acción vuelve a su campo", async () => {
     const usuario = userEvent.setup()
     acciones.abrirDisputa.mockResolvedValueOnce(

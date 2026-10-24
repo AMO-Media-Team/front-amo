@@ -445,6 +445,12 @@ export interface PublicacionEvidencia {
   retiradaDetectadaAt: string | null
   /** Hay imagen que firmar (la ruta no viaja al navegador). */
   conImagen: boolean
+  /**
+   * `updated_at` tal cual lo entrega la BD: la versión que se ve. Validarla
+   * decide sobre esta versión (`p_enviada_at`) y firmar de nuevo la captura
+   * depende de ella.
+   */
+  actualizadaAt: string
   cortes: CorteMetrica[]
 }
 

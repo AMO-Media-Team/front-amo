@@ -61,7 +61,7 @@ describe("TablaDisputas", () => {
     expect(enlace).toHaveAttribute("href", `/operacion/disputas/${ABIERTA.id}`)
     const [, fila, cerrada] = within(tabla).getAllByRole("row")
     expect(fila).toHaveTextContent("Otro motivo")
-    expect(fila).toHaveTextContent("La abrió: medio")
+    expect(fila).toHaveTextContent("La abrió el medio")
     expect(fila).toHaveTextContent("Abierta")
     expect(fila).toHaveTextContent("anteayer")
     // Cerrada: el efecto, y la asignación sin datos visibles para el rol.

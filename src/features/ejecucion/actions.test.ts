@@ -120,6 +120,7 @@ const { MENSAJES_EJECUCION } = await import("./errores")
 const ASIGNACION: AsignacionEjecucion = {
   id: ASIGNACION_ID,
   estado: "CONTENIDO_ENTREGADO",
+  estadoPrevioDisputa: null,
   plataforma: "INSTAGRAM",
   formatoClave: "REEL",
   formatoNombre: "Reel",
@@ -542,6 +543,51 @@ describe("guardarMetricas (MED-014)", () => {
       captura_path: captura("metrica").ruta,
       miniatura_path: captura("metrica").rutaMiniatura,
     })
+  })
+
+  it("durante una disputa carga el corte con el estado previo (D72)", async () => {
+    simulados.contextoMetricas.mockResolvedValue(
+      contextoMetricas({
+        asignacion: {
+          ...ASIGNACION,
+          estado: "EN_DISPUTA",
+          estadoPrevioDisputa: "EVIDENCIA_VALIDADA",
+        },
+      })
+    )
+    simulados.estadoActualAsignacion.mockResolvedValue("EN_DISPUTA")
+    const resultado = await guardarMetricas({
+      ...METRICAS,
+      captura: captura("metrica"),
+    })
+    expect(resultado).toEqual({
+      ok: true,
+      datos: { metricaId: "nueva", estadoAsignacion: "EN_DISPUTA" },
+    })
+    expect(estado.llamadas).toEqual([
+      expect.objectContaining({ tabla: "metricas", operacion: "insert" }),
+    ])
+  })
+
+  it("en disputa sobre una verificada ya no recibe cortes", async () => {
+    simulados.contextoMetricas.mockResolvedValue(
+      contextoMetricas({
+        asignacion: {
+          ...ASIGNACION,
+          estado: "EN_DISPUTA",
+          estadoPrevioDisputa: "VERIFICADA",
+        },
+      })
+    )
+    const resultado = await guardarMetricas({
+      ...METRICAS,
+      captura: captura("metrica"),
+    })
+    expect(resultado).toEqual({
+      ok: false,
+      error: MENSAJES_EJECUCION.metricaCerrada,
+    })
+    expect(estado.llamadas).toEqual([])
   })
 
   it("INT-005: valida la coherencia con los otros cortes antes de escribir", async () => {

@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { MENSAJES_DISPUTA } from "./errores"
+import { LONGITUD_MAXIMA_DESCRIPCION } from "./schemas"
 
 const DISPUTA = "0192f3a4-5b6c-7d8e-9f01-0000000000d1"
 const ASIGNACION = "0192f3a4-5b6c-7d8e-9f01-0000000000a1"
@@ -226,6 +227,52 @@ describe("abrirDisputa", () => {
     })
     expect(estado.refrescos).toBe(0)
   })
+
+  it("una descripción de 4.000 caracteres llega entera: la BD solo recorta la copia de la asignación (C1)", async () => {
+    const descripcion = "x".repeat(LONGITUD_MAXIMA_DESCRIPCION)
+    const resultado = await acciones.abrirDisputa({
+      asignacionId: ASIGNACION,
+      motivo: "METRICAS",
+      descripcion,
+    })
+    expect(resultado.ok).toBe(true)
+    expect(estado.rpc[0]?.argumentos).toMatchObject({
+      p_descripcion: descripcion,
+    })
+    // Una base sin el recorte: el error va junto a la descripción, no genérico.
+    estado.errorRpc = {
+      code: "23514",
+      message:
+        'new row for relation "asignaciones" violates check constraint "asignaciones_motivo_chk"',
+    }
+    expect(
+      await acciones.abrirDisputa({
+        asignacionId: ASIGNACION,
+        motivo: "METRICAS",
+        descripcion,
+      })
+    ).toMatchObject({
+      ok: false,
+      erroresCampo: { descripcion: [expect.stringMatching(/1\.000/)] },
+    })
+  })
+
+  it("un segundo reclamo de la misma vencida se explica (R4)", async () => {
+    estado.errorRpc = {
+      code: "P0001",
+      message: "AMO_TRANSICION_INVALIDA",
+      details:
+        "Ya reclamaste esta publicación: una vencida admite un solo reclamo.",
+      hint: "reclamo_previo",
+    }
+    expect(
+      await acciones.abrirDisputa({
+        asignacionId: ASIGNACION,
+        motivo: "OTRO",
+        descripcion: "Sí publiqué y no se registró",
+      })
+    ).toEqual({ ok: false, error: MENSAJES_DISPUTA.reclamoPrevio })
+  })
 })
 
 describe("enviarMensajeDisputa", () => {
@@ -409,7 +456,9 @@ describe("adjuntos", () => {
       mensajeId: 9,
       descargar: true,
     })
-    expect(estado.orden.at(-1)).toBe("dal:disputas.ver|disputas.abrir|asignaciones.ver_propias")
+    expect(estado.orden.at(-1)).toBe(
+      "dal:disputas.ver|disputas.abrir|asignaciones.ver_propias"
+    )
     expect(estado.firmadas).toEqual([
       expect.objectContaining({
         bucket: "evidencias",

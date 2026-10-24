@@ -1,6 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { Button } from "@/components/ui/button"
 import { formatearNumero } from "@/lib/format"
 
@@ -9,11 +8,13 @@ import {
   rutaCola,
   TAMANO_PAGINA_VALIDACION,
 } from "../colas"
+import { EnlacePaginaCola } from "./foco-paginacion"
 
 /**
  * Anterior / siguiente de una cola de validación (conserva el filtro de
  * alertas). Las colas se atienden de la más antigua a la más reciente: casi
- * siempre basta la primera página.
+ * siempre basta la primera página. Al cambiar de página el foco va al título
+ * de la cola (`FocoTrasPaginar`, montado con la lista).
  */
 export function PaginacionValidacion({
   cola,
@@ -44,15 +45,14 @@ export function PaginacionValidacion({
       </p>
       <div className="flex gap-2">
         {pagina > 1 ? (
-          <EnlaceBoton
+          <EnlacePaginaCola
             href={rutaCola(cola, { pagina: pagina - 1, soloAlertas })}
             variant="outline"
             size="lg"
-            scroll={false}
           >
             <ChevronLeft data-icon="inline-start" aria-hidden />
             Anteriores
-          </EnlaceBoton>
+          </EnlacePaginaCola>
         ) : (
           <Button variant="outline" size="lg" disabled>
             <ChevronLeft data-icon="inline-start" aria-hidden />
@@ -60,15 +60,14 @@ export function PaginacionValidacion({
           </Button>
         )}
         {pagina < ultima ? (
-          <EnlaceBoton
+          <EnlacePaginaCola
             href={rutaCola(cola, { pagina: pagina + 1, soloAlertas })}
             variant="outline"
             size="lg"
-            scroll={false}
           >
             Siguientes
             <ChevronRight data-icon="inline-end" aria-hidden />
-          </EnlaceBoton>
+          </EnlacePaginaCola>
         ) : (
           <Button variant="outline" size="lg" disabled>
             Siguientes

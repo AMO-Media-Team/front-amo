@@ -16,7 +16,7 @@ import {
 } from "@/features/operacion/rutas"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 
-import { ETIQUETAS_PARTE, MOTIVOS } from "../presentacion"
+import { MOTIVOS, quienAbrio } from "../presentacion"
 import {
   decisionesDisputa,
   opcionesResolucion,
@@ -146,7 +146,7 @@ export function FichaDisputa({
             />
             <InsigniaTono
               tono="neutro"
-              etiqueta={`La abrió: ${ETIQUETAS_PARTE[disputa.parte].toLocaleLowerCase("es-CO")}`}
+              etiqueta={quienAbrio(disputa.parte, "interno")}
             />
           </>
         }

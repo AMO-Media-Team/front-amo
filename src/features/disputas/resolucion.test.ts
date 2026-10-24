@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  BLOQUEO_METRICAS,
   BLOQUEO_OFERTA_CERRADA,
+  BLOQUEO_PENDIENTES,
   type ContextoResolucion,
   decisionesDisputa,
   opcionesResolucion,
@@ -171,12 +173,18 @@ describe("opcionesResolucion", () => {
       verificar({
         verificacion: { ...SIN_BLOQUEOS, faltanMetricas: true },
       })?.bloqueo
-    ).toMatch(/^Faltan métricas por aprobar/)
+    ).toBe(BLOQUEO_METRICAS)
     expect(
       verificar({
         verificacion: { ...SIN_BLOQUEOS, metricasPendientes: true },
       })?.bloqueo
-    ).toMatch(/^Hay métricas pendientes de revisión/)
+    ).toBe(BLOQUEO_PENDIENTES)
+    // En disputa no salen en la cola ni se rechazan: se aprueban desde la
+    // ficha de la asignación (R5).
+    for (const bloqueo of [BLOQUEO_METRICAS, BLOQUEO_PENDIENTES]) {
+      expect(bloqueo).toMatch(/desde la ficha de la asignación/)
+      expect(bloqueo).not.toMatch(/cola de validación|apruébalas o recházalas/)
+    }
     expect(
       verificar({
         verificacion: {

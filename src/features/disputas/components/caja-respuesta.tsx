@@ -386,7 +386,9 @@ export function CajaRespuesta({
           {interno ? "Guardar nota" : "Enviar"}
         </Button>
       </div>
-      <p role="status" className="text-xs text-success empty:hidden">
+      {/* Vacía sigue en el árbol de accesibilidad (`sr-only`, no `hidden`):
+          así se anuncia lo que llegue después. */}
+      <p role="status" className="text-xs text-success empty:sr-only">
         {anuncio}
       </p>
     </form>
