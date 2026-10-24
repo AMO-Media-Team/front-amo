@@ -1,7 +1,7 @@
 "use client"
 
 import { Eye, FileJson, FileSpreadsheet, UserSearch } from "lucide-react"
-import { useId, useState, useTransition } from "react"
+import { useId, useRef, useState, useTransition } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -108,6 +108,8 @@ export function VerDatosTitular({
     }
   }
 
+  const boton = useRef<HTMLButtonElement>(null)
+
   return (
     <TarjetaFicha
       titulo="Datos del titular"
@@ -115,6 +117,7 @@ export function VerDatosTitular({
       descripcion="Lo que AMO trata de esta persona, para atender su solicitud. Queda en la bitácora."
     >
       <Button
+        ref={boton}
         type="button"
         variant="outline"
         size="lg"
@@ -152,7 +155,12 @@ export function VerDatosTitular({
           if (!abrir) setDatos(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+          // Se abre al llegar los datos (el botón estuvo deshabilitado mientras
+          // cargaba y perdió el foco): al cerrar, el foco vuelve al botón.
+          finalFocus={boton}
+        >
           <DialogHeader>
             <DialogTitle>Datos del titular</DialogTitle>
             <DialogDescription>
