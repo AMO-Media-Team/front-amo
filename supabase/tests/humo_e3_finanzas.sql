@@ -306,6 +306,13 @@ begin
   r := r || jsonb_build_object('c3_quien_genera_no_aprueba', pg_temp.es(v_e, 'AMO_NO_AUTORIZADO'));
   perform pg_temp.srv(format('select public.transicionar_srv(''liquidaciones'', %L, ''APROBADA'', %L, %L)', liq_f, u_fin, s_fin));
   perform pg_temp.srv(format('select public.transicionar_srv(''liquidaciones'', %L, ''APROBADA'', %L, %L)', liq_x, u_fin, s_fin));
+  v_j := pg_temp.como(c_fin, 'authenticated', format(
+    'select jsonb_object_agg(id, jsonb_build_object(''doc'', documento_listo, ''pago'', datos_pago_listos))
+       from public.liquidaciones_por_pagar(500, 0) where id in (%L, %L, %L)', liq_s, liq_f, liq_x));
+  v_n := pg_temp.como(c_ms, 'authenticated', 'select count(*) from public.liquidaciones_por_pagar(500, 0)');
+  r := r || jsonb_build_object('c5_por_pagar_con_lo_que_falta',
+    pg_temp.ok(v_j -> liq_s::text = '{"doc": false, "pago": true}'::jsonb and v_j -> liq_f::text = '{"doc": false, "pago": true}'::jsonb
+               and v_j -> liq_x::text = '{"doc": false, "pago": false}'::jsonb and v_n = 0, v_j));
   v_e := pg_temp.srv_falla(format('select public.datos_dispersion_srv(array[%L]::uuid[], %L, %L)', liq_s, u_fin, s_fin));
   r := r || jsonb_build_object('c4_sin_documento_soporte_no_se_dispersa',
     pg_temp.es(v_e, 'AMO_DOCUMENTO_SOPORTE_REQUERIDO', null, 'documento_soporte_requerido'));
@@ -486,6 +493,12 @@ begin
   update public.configuracion set valor = 'true' where clave = 'comision.visible_para_medio';
 
   -- ── (i) Facturas al anunciante (LIQ-008, ANU-013, D16/D37 del RF) ───────────────────────────────────────────────
+  v_j := pg_temp.como(c_fin, 'authenticated', format(
+    'select to_jsonb(x) from public.pendientes_facturacion(%L) x where x.anunciante_id = %L', v_hoy, an_v));
+  v_n := pg_temp.como(c_an, 'authenticated', format('select count(*) from public.pendientes_facturacion(%L)', v_hoy));
+  r := r || jsonb_build_object('i0_por_facturar',
+    pg_temp.ok((v_j ->> 'asignaciones')::integer = 4 and (v_j ->> 'monto_bruto')::numeric = 12000000
+               and (v_j ->> 'campana_id')::uuid = c_v and v_n = 0, v_j));
   f1 := pg_temp.srv(format('select public.generar_factura_srv(%L, null, %L, %L, %L, %L)', an_v, v_hoy - 30, v_hoy, u_fin, s_fin)) #>> '{}';
   r := r || jsonb_build_object('i1_borrador_desde_las_asignaciones',
     pg_temp.ok((select estado = 'BORRADOR' and subtotal = 12000000 and iva = 2280000 and total = 14280000 and saldo = 14280000

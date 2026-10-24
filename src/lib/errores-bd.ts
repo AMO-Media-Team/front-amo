@@ -93,11 +93,11 @@ export const MENSAJES_NEGOCIO: Readonly<Record<string, string>> = {
   AMO_METRICA_NIVEL_INVALIDO:
     "Esa métrica no está disponible para este nivel del mapa.",
   AMO_SEG_SOCIAL_PENDIENTE:
-    "El medio necesita la seguridad social aprobada para recibir este pago.",
+    "Seguridad social pendiente: el medio necesita la seguridad social aprobada para recibir este pago.",
   AMO_DOCUMENTO_SOPORTE_REQUERIDO:
-    "Falta el documento soporte o la factura del medio para registrar el pago.",
+    "Documento soporte requerido: falta el documento soporte o la factura del medio para registrar el pago.",
   AMO_RESOLUCION_AGOTADA:
-    "No hay una resolución de numeración DIAN vigente con consecutivos disponibles.",
+    "Resolución agotada: no hay una resolución de numeración DIAN vigente con consecutivos disponibles.",
   AMO_LIMITE_SOLICITUDES:
     "Recibimos varias solicitudes seguidas. Intenta de nuevo más tarde.",
   AMO_IDEMPOTENCIA_INVALIDA:
@@ -106,6 +106,26 @@ export const MENSAJES_NEGOCIO: Readonly<Record<string, string>> = {
     "Las cifras no cuadran con la publicación o con los otros cortes. Revísalas.",
   AMO_CAPTURA_REQUERIDA:
     "Carga la captura del panel de estadísticas (una imagen) antes de enviar.",
+}
+
+/**
+ * Rótulos que exigen los criterios de aceptación (LIQ-004, LIQ-006, LIQ-007): el mensaje empieza con ellos
+ * aunque la BD traiga su propio detalle («Seguridad social pendiente: el medio supera…»).
+ */
+export const ROTULOS_NEGOCIO: Readonly<Record<string, string>> = {
+  AMO_SEG_SOCIAL_PENDIENTE: "Seguridad social pendiente",
+  AMO_DOCUMENTO_SOPORTE_REQUERIDO: "Documento soporte requerido",
+  AMO_RESOLUCION_AGOTADA: "Resolución agotada",
+}
+
+function conRotulo(codigo: string, mensaje: string): string {
+  const rotulo = ROTULOS_NEGOCIO[codigo]
+  if (!rotulo || mensaje.startsWith(rotulo)) return mensaje
+  // «El medio supera…» → «…: el medio supera…» (respeta siglas y nombres: «DIAN», «Medio X»).
+  const cuerpo = /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]/.test(mensaje)
+    ? mensaje.charAt(0).toLowerCase() + mensaje.slice(1)
+    : mensaje
+  return `${rotulo}: ${cuerpo}`
 }
 
 /**
@@ -138,6 +158,13 @@ const RESTRICCIONES_COMUNES: Restricciones = {
     "El enlace no corresponde a una publicación de esa red social.",
   metricas_corte_key: "Ese corte de métricas ya está registrado.",
   disputas_abierta_key: "Ya hay una disputa abierta para esta asignación.",
+  documentos_soporte_cuds_key:
+    "Ese CUDS ya está registrado en otro documento soporte.",
+  facturas_cufe_key: "Ese CUFE ya está registrado en otra factura.",
+  notas_credito_numero_key: "Esa nota crédito ya está registrada.",
+  notas_credito_cude_key: "Ese CUDE ya está registrado en otra nota crédito.",
+  retenciones_config_vigencia_excl:
+    "Ya hay una retención vigente de ese tipo para esa condición de declarante en esas fechas: cierra la vigente antes de crear otra.",
 }
 
 /**
@@ -225,8 +252,10 @@ export function interpretarErrorBd(
     return {
       codigo,
       esperado: true,
-      mensaje:
-        error.details?.trim() || MENSAJES_NEGOCIO[codigo] || MENSAJE_INESPERADO,
+      mensaje: conRotulo(
+        codigo,
+        error.details?.trim() || MENSAJES_NEGOCIO[codigo] || MENSAJE_INESPERADO
+      ),
     }
   }
   const restriccion = restriccionConocida(error, restriccionesExtra)

@@ -821,6 +821,34 @@ end $$;
 revoke all on function public.registrar_dispersion_srv(uuid, uuid[], text, uuid, uuid, boolean) from public, anon, authenticated;
 grant execute on function public.registrar_dispersion_srv(uuid, uuid[], text, uuid, uuid, boolean) to service_role;
 
+-- LIQ-005/006: liquidaciones aprobadas con lo que falta para pagarlas (sin datos reservados: Finanzas no lee
+-- medios_privado; los datos de pago se revelan solo al generar el archivo).
+create function public.liquidaciones_por_pagar(p_limite integer default 100, p_desplazamiento integer default 0)
+returns table (id uuid, medio_id uuid, medio text, periodo_inicio date, periodo_fin date, cantidad_asignaciones integer,
+               monto_neto numeric, aprobada_at timestamptz, requiere_documento_soporte boolean, documento_listo boolean,
+               datos_pago_listos boolean, metodo_pago public.metodo_pago, dispersion_id uuid, dispersada_at timestamptz,
+               total bigint)
+language sql stable security definer set search_path = '' as $$
+  select l.id, l.medio_id, m.nombre, l.periodo_inicio, l.periodo_fin, l.cantidad_asignaciones, l.monto_neto, l.aprobada_at,
+         l.requiere_documento_soporte,
+         case when l.requiere_documento_soporte
+              then exists (select 1 from public.documentos_soporte d where d.liquidacion_id = l.id and d.estado = 'EMITIDO')
+              else l.numero_factura_medio is not null and l.factura_medio_path is not null end,
+         private.datos_pago_listos(l.medio_id), mp.metodo_pago, l.dispersion_id, dp.created_at,
+         count(*) over ()
+  from public.liquidaciones l
+  join public.medios m on m.id = l.medio_id
+  left join public.medios_privado mp on mp.medio_id = l.medio_id
+  left join public.dispersiones dp on dp.id = l.dispersion_id
+  where (select private.acceso_valido())
+    and ((select private.tiene_permiso('liquidaciones.registrar_pago')) or (select private.tiene_permiso('liquidaciones.ver')))
+    and l.estado = 'APROBADA'
+  order by l.dispersion_id is not null, l.aprobada_at, l.id
+  limit least(greatest(coalesce(p_limite, 100), 1), 500) offset greatest(coalesce(p_desplazamiento, 0), 0)
+$$;
+revoke all on function public.liquidaciones_por_pagar(integer, integer) from public, anon;
+grant execute on function public.liquidaciones_por_pagar(integer, integer) to authenticated;
+
 -- LIQ-004: el medio que factura aporta el número y el archivo de su factura (también puede hacerlo Finanzas).
 create function private.puedo_subir_factura_medio(p_liquidacion_id uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
@@ -1140,6 +1168,25 @@ create trigger trg_notas_credito_a_solo_plataforma before insert on public.notas
   for each row execute function private.fn_solo_plataforma();
 create trigger trg_notas_credito_z_auditar after insert on public.notas_credito
   for each row execute function private.fn_auditar('id');
+
+-- LIQ-008: qué hay por facturar, por anunciante y campaña (verificadas, liquidadas o pagadas sin factura).
+create function public.pendientes_facturacion(p_hasta date default null)
+returns table (anunciante_id uuid, anunciante text, campana_id uuid, campana text, asignaciones integer,
+               monto_bruto numeric, primera_verificada timestamptz, ultima_verificada timestamptz)
+language sql stable security definer set search_path = '' as $$
+  select a.anunciante_id, an.nombre_comercial, a.campana_id, c.nombre, count(*)::integer, sum(a.monto_bruto),
+         min(a.verificada_at), max(a.verificada_at)
+  from public.asignaciones a
+  join public.anunciantes an on an.id = a.anunciante_id
+  join public.campanas c on c.id = a.campana_id
+  where (select private.acceso_valido()) and (select private.tiene_permiso('facturas.ver'))
+    and a.estado in ('VERIFICADA', 'LIQUIDADA', 'PAGADA') and a.factura_id is null
+    and (p_hasta is null or a.verificada_at < private.inicio_dia(p_hasta + 1))
+  group by a.anunciante_id, an.nombre_comercial, a.campana_id, c.nombre
+  order by an.nombre_comercial, c.nombre
+$$;
+revoke all on function public.pendientes_facturacion(date) from public, anon;
+grant execute on function public.pendientes_facturacion(date) to authenticated;
 
 drop function public.emitir_factura_srv(uuid, uuid, uuid);
 

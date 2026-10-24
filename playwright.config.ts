@@ -8,6 +8,7 @@ import {
   PROYECTO_ALTA_MEDIO,
   PROYECTO_ANUNCIANTE,
   PROYECTO_ESCRITORIO,
+  PROYECTO_FINANZAS,
   PROYECTO_MOVIL,
   PROYECTO_PAUTA_MEDIO,
   PROYECTO_PREPARACION,
@@ -15,6 +16,7 @@ import {
   PROYECTO_VALIDACION,
   SPECS_ALTA_MEDIO,
   SPECS_ANUNCIANTE,
+  SPECS_FINANZAS,
   SPECS_PAUTA_MEDIO,
   SPECS_VALIDACION,
 } from "./e2e/utilidades/proyectos"
@@ -142,6 +144,25 @@ export default defineConfig({
         PROYECTO_ANUNCIANTE,
       ],
       testMatch: SPECS_VALIDACION,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // Finanzas (liquidaciones, documento soporte, pagos, facturas) y lo que ven
+      // el medio y el anunciante, en serie y al final: los cortes por periodo no
+      // admiten traslapes y las fábricas comparten la campaña de la fase.
+      name: PROYECTO_FINANZAS,
+      dependencies: [
+        PROYECTO_PREPARACION,
+        PROYECTO_PAUTA_MEDIO,
+        PROYECTO_ANUNCIANTE,
+        PROYECTO_VALIDACION,
+      ],
+      testMatch: SPECS_FINANZAS,
       workers: 1,
       use: {
         ...devices["Desktop Chrome"],

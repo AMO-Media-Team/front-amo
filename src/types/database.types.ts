@@ -4378,6 +4378,26 @@ export type Database = {
           verificada_at: string
         }[]
       }
+      liquidaciones_por_pagar: {
+        Args: { p_desplazamiento?: number; p_limite?: number }
+        Returns: {
+          aprobada_at: string
+          cantidad_asignaciones: number
+          datos_pago_listos: boolean
+          dispersada_at: string
+          dispersion_id: string
+          documento_listo: boolean
+          id: string
+          medio: string
+          medio_id: string
+          metodo_pago: Database["public"]["Enums"]["metodo_pago"]
+          monto_neto: number
+          periodo_fin: string
+          periodo_inicio: string
+          requiere_documento_soporte: boolean
+          total: number
+        }[]
+      }
       listar_usuarios: {
         Args: {
           p_busqueda?: string
@@ -4738,6 +4758,19 @@ export type Database = {
           titulo: string
           ventana_fin: string
           ventana_inicio: string
+        }[]
+      }
+      pendientes_facturacion: {
+        Args: { p_hasta?: string }
+        Returns: {
+          anunciante: string
+          anunciante_id: string
+          asignaciones: number
+          campana: string
+          campana_id: string
+          monto_bruto: number
+          primera_verificada: string
+          ultima_verificada: string
         }[]
       }
       pendientes_liquidacion: {

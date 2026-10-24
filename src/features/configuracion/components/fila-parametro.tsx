@@ -86,6 +86,7 @@ export function FilaParametro({
     Record<string, string>
   >({})
   const etiquetas = {
+    ...ficha?.etiquetas,
     ...(contexto.etiquetas ??
       Object.fromEntries(
         (contexto.opcionesLista ?? []).map((o) => [o.valor, o.etiqueta])

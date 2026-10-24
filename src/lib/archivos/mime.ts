@@ -21,6 +21,7 @@ export const FORMATOS = {
   "video/mp4": { etiqueta: "MP4", extensiones: ["mp4", "m4v"] },
   "video/quicktime": { etiqueta: "MOV", extensiones: ["mov", "qt"] },
   "text/csv": { etiqueta: "CSV", extensiones: ["csv"] },
+  "application/json": { etiqueta: "JSON", extensiones: ["json"] },
 } as const satisfies Record<string, Formato>
 
 export type MimeConocido = keyof typeof FORMATOS

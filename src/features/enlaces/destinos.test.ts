@@ -41,6 +41,22 @@ describe("destinoDe · equipo AMO", () => {
     )
   })
 
+  it("Finanzas abre la liquidación o la factura en su sección", () => {
+    expect(
+      destinoDe("liquidaciones", ID, interno(["liquidaciones.ver"]), {
+        medioId: PADRE,
+      })
+    ).toBe(`/finanzas/liquidaciones/${ID}`)
+    expect(destinoDe("liquidaciones", ID, interno(), { medioId: PADRE })).toBe(
+      `/operacion/medios/${PADRE}`
+    )
+    expect(
+      destinoDe("facturas", ID, interno(["facturas.ver"]), {
+        anuncianteId: PADRE,
+      })
+    ).toBe(`/finanzas/facturas/${ID}`)
+  })
+
   it("quien verifica abre el expediente del medio", () => {
     expect(destinoDe("medios", ID, interno(["medios.verificar"]))).toBe(
       `/operacion/medios/${ID}?pestana=verificacion`
@@ -96,7 +112,7 @@ describe("destinoDe · portales externos", () => {
       `/mis-campanas/${PADRE}`
     )
     expect(destinoDe("ofertas", ID, medio)).toBe(`/ofertas/${ID}`)
-    expect(destinoDe("liquidaciones", ID, medio)).toBe("/inicio")
+    expect(destinoDe("liquidaciones", ID, medio)).toBe(`/ganancias/${ID}`)
   })
 
   it("el seguimiento del anunciante abre la asignación en su campaña", () => {
@@ -142,7 +158,7 @@ describe("destinoDe · portales externos", () => {
       `/campanas/${PADRE}/ofertas/${ID}`
     )
     expect(destinoDe("ofertas", ID, anunciante)).toBe("/campanas")
-    expect(destinoDe("facturas", ID, anunciante)).toBe("/inicio")
+    expect(destinoDe("facturas", ID, anunciante)).toBe(`/facturas/${ID}`)
   })
 
   it("nunca manda a un externo a una ruta de operación", () => {
@@ -167,6 +183,10 @@ describe("enlaceNotificacion", () => {
     expect(enlaceNotificacion("ofertas", ID)).toBe(`/ir/ofertas/${ID}`)
     expect(enlaceNotificacion("tabla_rara", ID)).toBeNull()
     expect(enlaceNotificacion("ofertas", null)).toBeNull()
+    // Aviso de lote sin fila: la vista que lo resuelve.
+    expect(enlaceNotificacion("liquidaciones", null)).toBe(
+      "/finanzas/liquidaciones?vista=borrador"
+    )
     expect(enlaceNotificacion(null, ID)).toBeNull()
   })
 

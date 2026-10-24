@@ -10,7 +10,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
-| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ⬜     |
+| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | 🔧     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
 
 ## Requisitos
@@ -217,3 +217,10 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   Storage con `disputas.abrir` y capturas en disputa, configuración de prueba intacta, 3 superadministradores, secreto de Vault;
   advisors sin ERROR (WARN nuevos esperados: `alertas_metricas`, `cola_metricas`, `cola_verificacion` y `mensajes_disputa`,
   definer con permiso comprobado por dentro).
+- 2026-10-23 · **Fase 5 en curso.** Mapeo (4 lectores) y migración `20261024024312_e3_finanzas` en local: liquidaciones
+  con periodo cerrado y corte por lote, seguridad social al aprobar, documento soporte protegido con archivos, CUDS, nota
+  de ajuste y numeración de la plataforma o del proveedor, dispersión en dos pasos, pago con soporte cargado, factura del
+  medio, lecturas del medio por RPC, facturas desde las asignaciones expedidas en el software de AMO, notas crédito,
+  retenciones del anunciante y esquema del IVA. Suite `humo_e3_finanzas` 60/60 y las 22 suites en verde. Preparación:
+  navegación, `/ir`, rutas, contratos, `subirComoServicio`, logo para PDF del servidor, rótulos de error, configuración,
+  proyecto E2E `finanzas` y brief `fase-5.md`.
