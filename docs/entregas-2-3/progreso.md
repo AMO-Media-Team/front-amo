@@ -206,3 +206,8 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   sin alto máximo en el celular, regiones vivas vacías, foco tras paginar y pie fijo vacío. `cola_verificacion` pasó de
   ~0,9 s a ~2 ms y `private.notificar` reintenta si un destinatario se borra a mitad del aviso. Local: 21 suites SQL
   (`humo_e3_validacion` 148/148), 5.689 Vitest.
+- 2026-10-23 · Fase 4 verificada en local: 21 suites SQL (`humo_e3_validacion` 148/148), 5.689 Vitest y E2E completo con
+  412 en verde (0 fallas; proyecto `validacion` incluido). Último arreglo: el foco llega al aviso del estado tras cancelar o
+  abrir una disputa (Base UI enfocaba su enlace o lo perdía con el refresco). Respaldo
+  `context/respaldos/produccion-2026-10-23-antes-e3a-*`; la simulación contra producción solo aplica
+  `20261023171316_e3_validacion`.
