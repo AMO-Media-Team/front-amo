@@ -127,6 +127,10 @@ export default async function PaginaAsignacion({
         asignacion={asignacion}
         verDisputas={enlaces.disputas}
         validacion={validacion}
+        finanzas={{
+          liquidaciones: tieneAlgunPermiso(usuario, ["liquidaciones.ver"]),
+          facturas: tieneAlgunPermiso(usuario, ["facturas.ver"]),
+        }}
       />
       <AccionesAsignacion
         key={asignacion.id}

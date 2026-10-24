@@ -92,6 +92,7 @@ function asignacion(
     cortesRequeridos: ["H24"],
     disputas: [],
     liquidacion: null,
+    factura: null,
     ...cambios,
   }
 }

@@ -474,6 +474,14 @@ export interface LiquidacionResumen {
   fechaPago: string | null
 }
 
+/** La factura al anunciante que incluye la asignación (`null` si no está facturada o no se ve). */
+export interface FacturaDeAsignacion {
+  id: string
+  /** Prefijo y consecutivo; `null` en un borrador. */
+  numero: string | null
+  estado: EstadoFactura
+}
+
 export interface AsignacionDetalle {
   id: string
   estado: EstadoAsignacion
@@ -509,4 +517,5 @@ export interface AsignacionDetalle {
   cortesRequeridos: Corte[]
   disputas: DisputaResumen[]
   liquidacion: LiquidacionResumen | null
+  factura: FacturaDeAsignacion | null
 }

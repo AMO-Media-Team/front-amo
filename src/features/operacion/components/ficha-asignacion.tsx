@@ -12,6 +12,7 @@ import {
   Scale,
   TimerOff,
 } from "lucide-react"
+import Link from "next/link"
 import type { ComponentProps, ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
@@ -19,6 +20,8 @@ import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { InsigniaEstadoDisputa } from "@/features/disputas/components/estado-disputa"
 import { MOTIVOS, nombreParte } from "@/features/disputas/presentacion"
 import { rutaDisputaInterna } from "@/features/disputas/rutas"
+import { rutaFactura } from "@/features/facturacion/rutas"
+import { rutaLiquidacion } from "@/features/liquidaciones/rutas"
 import {
   formatearCOP,
   formatearFecha,
@@ -32,6 +35,7 @@ import { alertaRevisable } from "../alertas"
 import {
   CORTES,
   ESTADOS_ASIGNACION,
+  ESTADOS_FACTURA,
   ESTADOS_LIQUIDACION,
   ESTADOS_TERMINALES_CAIDA,
   type EstadoAsignacion,
@@ -659,15 +663,76 @@ export function DisputasAsignacion({
   )
 }
 
+/** Qué fichas de Finanzas puede abrir quien mira la asignación. */
+export interface EnlacesFinanzas {
+  /** `liquidaciones.ver` */
+  liquidaciones: boolean
+  /** `facturas.ver` */
+  facturas: boolean
+}
+
 export function LiquidacionAsignacion({
   asignacion,
+  finanzas = { liquidaciones: false, facturas: false },
 }: {
   asignacion: AsignacionDetalle
+  finanzas?: EnlacesFinanzas
 }) {
-  const { liquidacion } = asignacion
-  if (!liquidacion) return null
+  const { liquidacion, factura } = asignacion
+  if (!liquidacion && !factura) return null
   return (
-    <TarjetaFicha titulo="Liquidación al medio" icono={Landmark}>
+    <TarjetaFicha
+      titulo={liquidacion ? "Liquidación al medio" : "Facturación"}
+      icono={Landmark}
+    >
+      {liquidacion ? (
+        <LiquidacionDatos
+          liquidacion={liquidacion}
+          enlace={finanzas.liquidaciones}
+        />
+      ) : null}
+      {factura ? (
+        <ListaDatos
+          className="sm:grid-cols-1 xl:grid-cols-2"
+          datos={[
+            {
+              etiqueta: "Factura al anunciante",
+              valor: finanzas.facturas ? (
+                <Link
+                  href={rutaFactura(factura.id)}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {factura.numero ?? "Borrador"}
+                </Link>
+              ) : (
+                (factura.numero ?? "Borrador")
+              ),
+            },
+            {
+              etiqueta: "Estado de la factura",
+              valor: (
+                <InsigniaEstado
+                  catalogo={ESTADOS_FACTURA}
+                  estado={factura.estado}
+                />
+              ),
+            },
+          ]}
+        />
+      ) : null}
+    </TarjetaFicha>
+  )
+}
+
+function LiquidacionDatos({
+  liquidacion,
+  enlace,
+}: {
+  liquidacion: NonNullable<AsignacionDetalle["liquidacion"]>
+  enlace: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-3">
       <ListaDatos
         className="sm:grid-cols-1 xl:grid-cols-2"
         datos={[
@@ -697,7 +762,17 @@ export function LiquidacionAsignacion({
           },
         ]}
       />
-    </TarjetaFicha>
+      {enlace ? (
+        <EnlaceBoton
+          href={rutaLiquidacion(liquidacion.id)}
+          variant="outline"
+          size="sm"
+          className="self-start"
+        >
+          Ver la liquidación
+        </EnlaceBoton>
+      ) : null}
+    </div>
   )
 }
 
@@ -836,12 +911,15 @@ export function CuerpoAsignacion({
   asignacion,
   verDisputas,
   validacion,
+  finanzas,
 }: {
   asignacion: AsignacionDetalle
   /** `disputas.ver`: cada disputa enlaza a su ficha interna. */
   verDisputas: boolean
   /** Decisiones de la validación sobre la evidencia y los cortes (ADM-007/008). */
   validacion?: ValidacionFicha
+  /** Fichas de Finanzas que se pueden abrir (liquidación y factura). */
+  finanzas?: EnlacesFinanzas
 }) {
   const sinCupo = asignacion.aceptadaAt === null
   return (
@@ -865,7 +943,7 @@ export function CuerpoAsignacion({
           </>
         )}
         <DisputasAsignacion asignacion={asignacion} verDisputas={verDisputas} />
-        <LiquidacionAsignacion asignacion={asignacion} />
+        <LiquidacionAsignacion asignacion={asignacion} finanzas={finanzas} />
       </div>
     </div>
   )

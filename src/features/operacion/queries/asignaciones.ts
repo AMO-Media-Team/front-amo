@@ -322,7 +322,8 @@ const SELECCION_FICHA = `
   montos:asignacion_montos (
     porcentaje_comision, comision_origen, monto_comision, monto_medio, monto_retenciones, monto_neto
   ),
-  liquidacion:liquidaciones ( id, estado, periodo_inicio, periodo_fin, fecha_pago )
+  liquidacion:liquidaciones ( id, estado, periodo_inicio, periodo_fin, fecha_pago ),
+  factura:facturas ( id, numero, estado )
 ` as const
 
 function marcasDe(fila: {
@@ -673,6 +674,13 @@ export const obtenerAsignacion = cache(
             periodoInicio: fila.liquidacion.periodo_inicio,
             periodoFin: fila.liquidacion.periodo_fin,
             fechaPago: fila.liquidacion.fecha_pago,
+          }
+        : null,
+      factura: fila.factura
+        ? {
+            id: fila.factura.id,
+            numero: fila.factura.numero,
+            estado: fila.factura.estado,
           }
         : null,
     }
