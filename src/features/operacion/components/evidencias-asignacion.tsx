@@ -2,26 +2,41 @@
 
 import {
   BadgeCheck,
-  CircleAlert,
   ExternalLink,
-  ImageOff,
-  RefreshCw,
+  History,
   ScanEye,
   TriangleAlert,
-  X,
 } from "lucide-react"
-import Image from "next/image"
-import { useCallback, useEffect, useState, useTransition } from "react"
+import { useId, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { rutaDisputaInterna } from "@/features/disputas/rutas"
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  type CapturaAbierta,
+  ErrorFirmas,
+  Miniatura,
+  urlCaptura,
+  useFirmas,
+  versionCapturas,
+  VisorCaptura,
+} from "@/features/validacion/components/capturas"
+import { HojaCorreccion } from "@/features/validacion/components/correccion-metrica"
+import {
+  DecisionCorte,
+  DecisionEvidencia,
+  idCorte,
+  idPublicacion,
+} from "@/features/validacion/components/decisiones-ficha"
+import { EsperaDisputa } from "@/features/validacion/components/piezas"
+import {
+  type AccionesCorte,
+  accionesCorte,
+  DETALLE_EVIDENCIA_EN_DISPUTA,
+  DETALLE_RECHAZO_EN_DISPUTA,
+  evidenciaEsperaDisputa,
+  puedeValidarEvidencia,
+} from "@/features/validacion/decision"
+import type { ValidacionEnFicha } from "@/features/validacion/tipos"
 import {
   formatearFecha,
   formatearNumero,
@@ -29,7 +44,6 @@ import {
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-import { firmarEvidencias, type ImagenesEvidencia } from "../actions"
 import {
   CORTES,
   type Corte,
@@ -41,116 +55,11 @@ import {
   formatearDiaMes,
   formatearFechaHoraFija,
 } from "../formato"
-import {
-  type CorteMetrica,
-  describirAlertas,
-  engagement,
-  nombresColumnas,
-  tieneAlerta,
-} from "../metricas"
+import { alertaRevisable, tieneAlerta } from "../alertas"
+import { type CorteMetrica, engagement, nombresColumnas } from "../metricas"
 import type { PublicacionEvidencia } from "../tipos"
 import { InsigniaEstado } from "./distintivos"
-
-/** Las URL firmadas se vuelven a pedir al consumir esta parte de su vigencia. */
-const FRACCION_RENOVACION = 0.8
-
-/** Qué captura muestra el visor: la URL se resuelve con las firmas vigentes. */
-interface ImagenAbierta {
-  origen: "publicaciones" | "metricas"
-  id: string
-  titulo: string
-  descripcion: string
-}
-
-type EstadoFirmas =
-  | { tipo: "cargando" }
-  | { tipo: "listo"; imagenes: ImagenesEvidencia; firmadoEn: number }
-  | { tipo: "error"; mensaje: string }
-
-/** Firma las capturas de la asignación al montar y bajo demanda. */
-function useFirmas(asignacionId: string, conImagenes: boolean) {
-  const [estado, setEstado] = useState<EstadoFirmas>({ tipo: "cargando" })
-  const [, iniciar] = useTransition()
-
-  const firmar = useCallback(() => {
-    iniciar(async () => {
-      setEstado({ tipo: "cargando" })
-      const resultado = await firmarEvidencias({ asignacionId })
-      setEstado(
-        resultado.ok
-          ? { tipo: "listo", imagenes: resultado.datos, firmadoEn: Date.now() }
-          : { tipo: "error", mensaje: resultado.error }
-      )
-    })
-  }, [asignacionId])
-
-  useEffect(() => {
-    if (conImagenes) firmar()
-  }, [conImagenes, firmar])
-
-  /** Vuelve a firmar si las URL están por caducar (se llama al abrir el visor). */
-  const asegurarVigentes = useCallback(() => {
-    const caducan =
-      estado.tipo !== "listo" ||
-      Date.now() - estado.firmadoEn >=
-        estado.imagenes.vigenciaSegundos * 1000 * FRACCION_RENOVACION
-    if (caducan) firmar()
-  }, [estado, firmar])
-
-  return { estado, firmar, asegurarVigentes }
-}
-
-function Miniatura({
-  url,
-  cargando,
-  etiqueta,
-  onAbrir,
-}: {
-  url: string | null
-  cargando: boolean
-  etiqueta: string
-  onAbrir: () => void
-}) {
-  if (cargando) {
-    return (
-      <div
-        role="status"
-        aria-label="Cargando captura"
-        className="aspect-[4/5] w-full animate-pulse rounded-lg bg-muted motion-reduce:animate-none"
-      />
-    )
-  }
-  if (!url) {
-    return (
-      <div className="grid aspect-[4/5] w-full place-items-center rounded-lg border border-dashed bg-muted/30 text-muted-foreground">
-        <span className="flex flex-col items-center gap-1.5 px-3 text-center text-xs">
-          <ImageOff aria-hidden className="size-5" />
-          Captura no disponible
-        </span>
-      </div>
-    )
-  }
-  return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      className="group/miniatura relative block aspect-[4/5] w-full overflow-hidden rounded-lg border bg-muted focus-visible:anillo-foco"
-    >
-      <Image
-        src={url}
-        alt={etiqueta}
-        fill
-        unoptimized
-        sizes="(min-width: 1024px) 12rem, 40vw"
-        className="object-cover transition-transform duration-500 ease-suave group-hover/miniatura:scale-[1.03] motion-reduce:transition-none"
-      />
-      <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 text-xs font-medium text-white opacity-0 transition-opacity group-hover/miniatura:opacity-100 group-focus-visible/miniatura:opacity-100">
-        <ScanEye aria-hidden className="size-3.5" />
-        Ampliar
-      </span>
-    </button>
-  )
-}
+import { PorqueAlerta } from "./porque-alerta"
 
 /** Cifra exacta: quien valida compara contra la captura del panel. */
 function Cifra({ valor }: { valor: number | null }) {
@@ -164,32 +73,59 @@ function Cifra({ valor }: { valor: number | null }) {
 const CELDA_CIFRA = "px-3 py-2.5 text-right whitespace-nowrap cifras"
 const COLUMNAS_TABLA = 6
 
+/** Lo que espera a la disputa enlaza a ella (con `disputas.ver`). */
+function enlaceDisputa(validacion: ValidacionEnFicha | undefined) {
+  return validacion?.disputaId
+    ? {
+        href: rutaDisputaInterna(validacion.disputaId),
+        etiqueta: "Ver la disputa",
+      }
+    : null
+}
+
 function FilaCorte({
   corte,
+  plataforma,
+  acciones,
+  validacion,
   onVerCaptura,
+  onCorregir,
 }: {
   corte: CorteMetrica
+  plataforma: Plataforma
+  acciones: AccionesCorte
+  validacion: ValidacionEnFicha | undefined
   onVerCaptura: (() => void) | null
+  onCorregir: () => void
 }) {
-  const alerta = tieneAlerta(corte)
-  const motivos = alerta ? describirAlertas(corte) : []
+  const idBloqueo = useId()
+  // También la que tuvo alerta antes de corregirse: pide constancia igual.
+  const alerta = alertaRevisable(corte.alerta)
   const tasa = engagement(corte.interacciones, corte.alcance)
+  const conAcciones = acciones.validar || acciones.corregir
+  const nombre = CORTES[corte.corte].etiqueta
   return (
     <>
       <tr className={cn("align-top", alerta && "bg-warning/6")}>
         <th
           scope="row"
-          className="py-2.5 pr-3 pl-4 text-left font-medium whitespace-nowrap sm:pl-5"
+          id={idCorte(corte.id)}
+          tabIndex={-1}
+          className="py-2.5 pr-3 pl-4 text-left font-medium whitespace-nowrap outline-none focus-visible:anillo-foco sm:pl-5"
         >
           <span className="flex items-center gap-1.5">
             {alerta ? (
               <TriangleAlert
                 role="img"
-                aria-label="Con alerta de integridad"
+                aria-label={
+                  tieneAlerta(corte.alerta)
+                    ? "Con alerta de integridad"
+                    : "Tuvo alerta antes de corregirse"
+                }
                 className="size-3.5 shrink-0 text-warning"
               />
             ) : null}
-            {CORTES[corte.corte].etiqueta}
+            {nombre}
             <time
               dateTime={corte.fechaCorte}
               title={formatearFecha(corte.fechaCorte)}
@@ -211,7 +147,7 @@ function FilaCorte({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Ver la captura del corte de ${CORTES[corte.corte].etiqueta}`}
+                aria-label={`Ver la captura del corte de ${nombre}`}
                 title="Ver la captura del panel"
                 onClick={onVerCaptura}
               >
@@ -240,25 +176,51 @@ function FilaCorte({
           )}
         </td>
       </tr>
-      {motivos.length > 0 || corte.observaciones ? (
+      {alerta || corte.observaciones || conAcciones ? (
         <tr className={cn(alerta && "bg-warning/6")}>
           <td colSpan={COLUMNAS_TABLA} className="px-4 pb-2.5 sm:px-5">
             {/* Fijo al borde visible y con su ancho (`cqw` de la región): el texto
-                se lee completo aunque la tabla se desplace en pantallas angostas. */}
-            <div className="sticky left-4 w-[calc(100cqw-2rem)] text-xs text-pretty text-muted-foreground sm:left-5 sm:w-[calc(100cqw-2.5rem)]">
-              {motivos.map((motivo) => (
-                <span key={motivo} className="flex gap-1.5 text-warning">
-                  <CircleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
-                  {motivo}
-                </span>
-              ))}
+                y los botones se leen completos aunque la tabla se desplace en
+                pantallas angostas. */}
+            <div className="sticky left-4 flex w-[calc(100cqw-2rem)] flex-col gap-2 text-xs text-pretty text-muted-foreground sm:left-5 sm:w-[calc(100cqw-2.5rem)]">
+              {alerta ? (
+                <PorqueAlerta
+                  alerta={corte.alerta}
+                  plataforma={plataforma}
+                  nivelTitulo={4}
+                  className="bg-card text-foreground"
+                />
+              ) : null}
               {corte.observaciones ? (
-                <span className="mt-1 block">
+                // Solo la nota de un rechazo: la constancia de una aprobación
+                // y el motivo de una corrección quedan en la bitácora.
+                <p>
                   <span className="font-medium text-foreground/80">
-                    Observaciones:
+                    {corte.estado === "PENDIENTE"
+                      ? "Revisión anterior:"
+                      : "Observaciones:"}
                   </span>{" "}
                   {corte.observaciones}
-                </span>
+                </p>
+              ) : null}
+              {acciones.bloqueoAprobar ? (
+                <p id={idBloqueo}>{acciones.bloqueoAprobar}</p>
+              ) : null}
+              {acciones.rechazoEnDisputa ? (
+                <EsperaDisputa
+                  detalle={DETALLE_RECHAZO_EN_DISPUTA}
+                  enlace={enlaceDisputa(validacion)}
+                  className="w-fit max-w-full text-foreground"
+                />
+              ) : null}
+              {conAcciones ? (
+                <DecisionCorte
+                  corte={corte}
+                  plataforma={plataforma}
+                  acciones={acciones}
+                  idBloqueo={idBloqueo}
+                  onCorregir={onCorregir}
+                />
               ) : null}
             </div>
           </td>
@@ -272,17 +234,22 @@ function TablaCortes({
   publicacion,
   plataforma,
   cortesRequeridos,
+  validacion,
   capturaDe,
+  onCorregir,
 }: {
   publicacion: PublicacionEvidencia
   plataforma: Plataforma
   cortesRequeridos: readonly Corte[]
+  validacion: ValidacionEnFicha | undefined
   capturaDe: (corte: CorteMetrica) => (() => void) | null
+  onCorregir: (corte: CorteMetrica) => void
 }) {
   const columnas = nombresColumnas(plataforma)
   const presentes = new Set(publicacion.cortes.map((corte) => corte.corte))
   const faltantes = cortesRequeridos.filter((corte) => !presentes.has(corte))
   if (publicacion.cortes.length === 0 && faltantes.length === 0) return null
+  const evidenciaAprobada = publicacion.estado === "APROBADA"
   const cabecera = "px-3 py-2 text-right font-medium whitespace-nowrap"
   return (
     <div
@@ -325,7 +292,11 @@ function TablaCortes({
             <FilaCorte
               key={corte.id}
               corte={corte}
+              plataforma={plataforma}
+              acciones={accionesCorte(corte, evidenciaAprobada, validacion)}
+              validacion={validacion}
               onVerCaptura={capturaDe(corte)}
+              onCorregir={() => onCorregir(corte)}
             />
           ))}
           {faltantes.map((corte) => (
@@ -405,36 +376,51 @@ function DatosPublicacion({
 
 /**
  * Evidencia de la asignación: cada publicación con su captura (miniatura con
- * URL firmada de corta duración, nunca la ruta), su validación y sus métricas por
- * corte con las alertas de integridad explicadas.
+ * URL firmada de corta duración, nunca la ruta), su validación y sus métricas
+ * por corte con las alertas de integridad explicadas (`PorqueAlerta`, la
+ * misma explicación que la cola), también la que tuvo antes de corregirse.
+ *
+ * Con `validacion` (permisos de quien la ve y estado de la asignación), ofrece
+ * las mismas decisiones que la cola de validación (ADM-007, ADM-008): aprobar
+ * o rechazar la evidencia de cada publicación y cada corte pendiente, y, con
+ * `metricas.editar_validadas`, «Corregir» un corte aprobado (formulario con
+ * motivo obligatorio). En disputa, lo que la BD no deja decidir (la
+ * evidencia; rechazar un corte si entró con todo cargado) se explica y enlaza
+ * a la disputa. Sin `validacion`, solo se consulta.
  */
 export function EvidenciasAsignacion({
   asignacionId,
   plataforma,
   publicaciones,
   cortesRequeridos,
+  validacion,
 }: {
   asignacionId: string
   plataforma: Plataforma
   publicaciones: readonly PublicacionEvidencia[]
   cortesRequeridos: readonly Corte[]
+  /** Decisiones de la validación; sin ella la evidencia es de solo lectura. */
+  validacion?: ValidacionEnFicha
 }) {
   const conImagenes = publicaciones.some(
     (publicacion) =>
       publicacion.conImagen ||
       publicacion.cortes.some((corte) => corte.conImagen)
   )
+  // Un refresco con otra captura (o un corte nuevo) vuelve a firmar.
   const { estado, firmar, asegurarVigentes } = useFirmas(
     asignacionId,
-    conImagenes
+    conImagenes,
+    versionCapturas(publicaciones)
   )
-  const [abierta, setAbierta] = useState<ImagenAbierta | null>(null)
+  const [abierta, setAbierta] = useState<CapturaAbierta | null>(null)
+  const [correccion, setCorreccion] = useState<{
+    corte: CorteMetrica
+    abierta: boolean
+  } | null>(null)
   const imagenes = estado.tipo === "listo" ? estado.imagenes : null
-  const urlAbierta = abierta
-    ? (imagenes?.[abierta.origen][abierta.id]?.captura ?? null)
-    : null
 
-  function abrir(imagen: ImagenAbierta) {
+  function abrir(imagen: CapturaAbierta) {
     asegurarVigentes()
     setAbierta(imagen)
   }
@@ -450,19 +436,17 @@ export function EvidenciasAsignacion({
       })
   }
 
+  function corregir(corte: CorteMetrica) {
+    asegurarVigentes()
+    setCorreccion({ corte, abierta: true })
+  }
+
+  const corteCorregido = correccion?.corte ?? null
+
   return (
     <div className="flex flex-col gap-5">
       {estado.tipo === "error" ? (
-        <p className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/6 px-3 py-2 text-sm">
-          <span className="flex items-center gap-2">
-            <CircleAlert aria-hidden className="size-4 text-destructive" />
-            {estado.mensaje}
-          </span>
-          <Button variant="outline" size="sm" onClick={firmar}>
-            <RefreshCw data-icon="inline-start" aria-hidden />
-            Reintentar
-          </Button>
-        </p>
+        <ErrorFirmas mensaje={estado.mensaje} onReintentar={firmar} />
       ) : null}
 
       {publicaciones.map((publicacion) => {
@@ -495,7 +479,11 @@ export function EvidenciasAsignacion({
               </div>
               <div className="flex min-w-0 flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-semibold">
+                  <h3
+                    id={idPublicacion(publicacion.id)}
+                    tabIndex={-1}
+                    className="font-semibold outline-none focus-visible:anillo-foco"
+                  >
                     {publicaciones.length > 1
                       ? `Publicación ${publicacion.numero}`
                       : "Publicación"}
@@ -537,12 +525,31 @@ export function EvidenciasAsignacion({
                   </p>
                 ) : null}
                 {publicacion.observaciones ? (
-                  <p className="text-xs text-pretty text-muted-foreground">
-                    <span className="font-medium text-foreground/80">
-                      Observaciones:
-                    </span>{" "}
-                    {publicacion.observaciones}
+                  <p className="flex gap-1.5 text-xs text-pretty text-muted-foreground">
+                    {publicacion.estado === "PENDIENTE" ? (
+                      <History
+                        aria-hidden
+                        className="mt-0.5 size-3.5 shrink-0"
+                      />
+                    ) : null}
+                    <span>
+                      <span className="font-medium text-foreground/80">
+                        {publicacion.estado === "PENDIENTE"
+                          ? "Revisión anterior:"
+                          : "Observaciones:"}
+                      </span>{" "}
+                      {publicacion.observaciones}
+                    </span>
                   </p>
+                ) : null}
+                {puedeValidarEvidencia(publicacion.estado, validacion) ? (
+                  <DecisionEvidencia publicacion={publicacion} />
+                ) : evidenciaEsperaDisputa(publicacion.estado, validacion) ? (
+                  <EsperaDisputa
+                    detalle={DETALLE_EVIDENCIA_EN_DISPUTA}
+                    enlace={enlaceDisputa(validacion)}
+                    className="w-fit max-w-full"
+                  />
                 ) : null}
               </div>
             </div>
@@ -550,64 +557,39 @@ export function EvidenciasAsignacion({
               publicacion={publicacion}
               plataforma={plataforma}
               cortesRequeridos={cortesRequeridos}
+              validacion={validacion}
               capturaDe={capturaDe}
+              onCorregir={corregir}
             />
           </article>
         )
       })}
 
-      <Dialog
-        open={abierta !== null}
-        onOpenChange={(abrirDialogo) => !abrirDialogo && setAbierta(null)}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className="max-h-[92vh] gap-3 overflow-hidden sm:max-w-2xl"
-        >
-          <DialogClose
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute top-2 right-2"
-                aria-label="Cerrar"
-              />
-            }
-          >
-            <X aria-hidden />
-          </DialogClose>
-          <DialogHeader className="pr-8">
-            <DialogTitle>{abierta?.titulo}</DialogTitle>
-            <DialogDescription>
-              {abierta?.descripcion} El enlace de la imagen caduca en pocos
-              minutos.
-            </DialogDescription>
-          </DialogHeader>
-          {abierta ? (
-            <div
-              className={cn(
-                "relative h-[70vh] w-full overflow-hidden rounded-lg bg-muted",
-                !urlAbierta && "animate-pulse motion-reduce:animate-none"
-              )}
-            >
-              {urlAbierta ? (
-                <Image
-                  src={urlAbierta}
-                  alt={abierta.titulo}
-                  fill
-                  unoptimized
-                  sizes="(min-width: 640px) 42rem, 100vw"
-                  className="object-contain"
-                />
-              ) : (
-                <span className="sr-only" role="status">
-                  Cargando la captura…
-                </span>
-              )}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <VisorCaptura
+        abierta={abierta}
+        url={urlCaptura(estado, abierta)}
+        onCerrar={() => setAbierta(null)}
+      />
+      {corteCorregido && validacion?.corregir ? (
+        <HojaCorreccion
+          key={corteCorregido.id}
+          metricaId={corteCorregido.id}
+          corteNombre={CORTES[corteCorregido.corte].etiqueta}
+          captura={{
+            url: imagenes?.metricas[corteCorregido.id]?.captura ?? null,
+            cargando: corteCorregido.conImagen && estado.tipo === "cargando",
+          }}
+          abierta={correccion?.abierta === true}
+          onAbiertaChange={(valor) =>
+            setCorreccion((actual) =>
+              actual ? { ...actual, abierta: valor } : actual
+            )
+          }
+          focoAlCerrar={() =>
+            document.getElementById(idCorte(corteCorregido.id))
+          }
+        />
+      ) : null}
     </div>
   )
 }

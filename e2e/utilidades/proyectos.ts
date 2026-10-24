@@ -41,6 +41,25 @@ export const SPECS_ANUNCIANTE = /anunciante-.*\.spec\.ts/
 export const PROYECTO_PAUTA_MEDIO = "pauta-medio"
 export const SPECS_PAUTA_MEDIO = /[\\/]pauta-medio-[^\\/]*\.spec\.ts$/
 
+/**
+ * Specs del equipo AMO que escriben (`validacion-*`, `disputas-*`): colas de
+ * validación, verificación, cancelación, suspensión y disputas sobre asignaciones
+ * de las fábricas. En serie y después de `pauta-medio` y `anunciante`, que
+ * comparten el «Medio E2E».
+ */
+export const PROYECTO_VALIDACION = "validacion"
+export const SPECS_VALIDACION =
+  /[\\/](?:validacion|disputas)-[^\\/]*\.spec\.ts$/
+
+/**
+ * Specs de Finanzas (`finanzas-*`): liquidaciones, documento soporte, archivo de
+ * pagos, facturas y notas crédito con los medios y la campaña de las fábricas de
+ * la fase 5, y lo que ven el medio (Ganancias) y el anunciante (Facturas). En
+ * serie y al final: generan cortes por periodo que no admiten traslapes.
+ */
+export const PROYECTO_FINANZAS = "finanzas"
+export const SPECS_FINANZAS = /[\\/]finanzas-[^\\/]*\.spec\.ts$/
+
 /** Tablet y móvil emulan pantalla táctil (`hasTouch`). */
 export function esTactil(proyecto: string): boolean {
   return proyecto === PROYECTO_TABLET || proyecto === PROYECTO_MOVIL

@@ -12,6 +12,7 @@ import { CORTES } from "@/features/operacion/estados"
 import { TarjetaFicha } from "@/features/usuarios/components/tarjeta-ficha"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
 
+import { estadoDeTrabajo } from "../estados"
 import {
   admiteMetricas,
   cortesObligatorios,
@@ -29,6 +30,16 @@ import type {
 } from "../tipos"
 
 type CorteObligatorio = Exclude<Corte, "PERSONALIZADO">
+
+/**
+ * Lo que la tarjeta lee de la asignación. Con una disputa abierta cuenta el
+ * estado que tenía al abrirla: los cortes siguen corriendo y se cargan (D72).
+ */
+type AsignacionPublicaciones = Pick<
+  AsignacionMedio,
+  "id" | "estado" | "publicaciones" | "cortesRequeridos"
+> &
+  Partial<Pick<AsignacionMedio, "estadoPrevioDisputa">>
 
 /** Un corte que aún no se cumple no es urgente: siempre en tono neutro. */
 const SIN_URGENCIA = { criticaHoras: 0, prontoHoras: 0 }
@@ -230,10 +241,7 @@ function Publicacion({
   ahoraServidor,
   puedeEjecutar,
 }: {
-  asignacion: Pick<
-    AsignacionMedio,
-    "id" | "estado" | "publicaciones" | "cortesRequeridos"
-  >
+  asignacion: AsignacionPublicaciones
   numero: number
   publicacion: PublicacionMedio | null
   metricas: readonly MetricaMedio[]
@@ -244,7 +252,8 @@ function Publicacion({
 }) {
   const varias = asignacion.publicaciones > 1
   const titulo = varias ? `Publicación ${numero}` : "Tu publicación"
-  const antesDePublicar = asignacion.estado === "CONTENIDO_ENTREGADO"
+  const estado = estadoDeTrabajo(asignacion)
+  const antesDePublicar = estado === "CONTENIDO_ENTREGADO"
   const cortes = cortesObligatorios(asignacion.cortesRequeridos)
   const personalizados = publicacion
     ? metricas.filter(
@@ -253,7 +262,7 @@ function Publicacion({
           metrica.corte === "PERSONALIZADO"
       )
     : []
-  const admite = admiteMetricas(asignacion.estado, publicacion)
+  const admite = admiteMetricas(estado, publicacion)
 
   return (
     <li className="flex flex-col gap-3 rounded-xl border bg-background/40 p-3.5 sm:p-4">
@@ -342,7 +351,7 @@ function Publicacion({
               <FilaCorte
                 key={corte}
                 asignacionId={asignacion.id}
-                estado={asignacion.estado}
+                estado={estado}
                 corte={corte as CorteObligatorio}
                 publicacion={publicacion}
                 numero={numero}
@@ -412,10 +421,7 @@ export function PublicacionesAsignacion({
   ahoraServidor,
   puedeEjecutar,
 }: {
-  asignacion: Pick<
-    AsignacionMedio,
-    "id" | "estado" | "publicaciones" | "cortesRequeridos"
-  >
+  asignacion: AsignacionPublicaciones
   ejecucion: Pick<EjecucionAsignacion, "publicaciones" | "metricas">
   plazoCargaHoras: number
   ahoraServidor: number

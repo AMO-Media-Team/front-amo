@@ -40,6 +40,11 @@ interface CabeceraFichaProps {
   lateral?: ReactNode
   /** Botones de gestión (editar, invitar…), arriba de la columna derecha. */
   acciones?: ReactNode
+  /**
+   * Las acciones van en fila y solo desde `sm`: en el celular la página las
+   * repite en un pie fijo (`PieAcciones`), al alcance del pulgar.
+   */
+  accionesEnPieMovil?: boolean
   /** Aviso de estado bajo la cabecera (suspendido, rechazado…). */
   aviso?: ReactNode
 }
@@ -58,6 +63,7 @@ export function CabeceraFicha({
   visual,
   lateral,
   acciones,
+  accionesEnPieMovil = false,
   aviso,
 }: CabeceraFichaProps) {
   return (
@@ -105,7 +111,13 @@ export function CabeceraFicha({
             <div className="flex min-w-0 shrink-0 flex-col gap-1.5 text-xs text-muted-foreground lg:items-end lg:text-right">
               {acciones ? (
                 // `text-foreground`: los botones outline heredarían el tono atenuado.
-                <div className="mb-1 text-sm text-foreground empty:hidden">
+                <div
+                  className={cn(
+                    "mb-1 text-sm text-foreground empty:hidden",
+                    accionesEnPieMovil &&
+                      "flex flex-wrap items-center gap-2 max-sm:hidden lg:justify-end"
+                  )}
+                >
                   {acciones}
                 </div>
               ) : null}
@@ -149,6 +161,65 @@ export function AvisoFicha({
       <AlertTitle>{titulo}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}
     </Alert>
+  )
+}
+
+/**
+ * Aviso del estado de una ficha como región con nombre (su título) y
+ * enfocable: tras un cambio de estado confirmado en un diálogo recibe el foco
+ * —el botón que lo abrió ya no existe— y así se anuncia el estado nuevo. A
+ * diferencia de `AvisoFicha` no es una alerta: no interrumpe al lector de
+ * pantalla al cargar la página. Uno por página (`id` fijo).
+ */
+export function AvisoEstadoFicha({
+  id,
+  tono,
+  icono: Icono,
+  titulo,
+  children,
+  accion,
+}: {
+  id: string
+  tono: Tono
+  icono: LucideIcon
+  titulo: ReactNode
+  children?: ReactNode
+  /** Enlace o botón para atenderlo (p. ej. «Ver la disputa»). */
+  accion?: ReactNode
+}) {
+  const clases = CLASES_AVISO[tono]
+  const idTitulo = `${id}-titulo`
+  return (
+    <section
+      id={id}
+      tabIndex={-1}
+      aria-labelledby={idTitulo}
+      className={cn(
+        "flex scroll-mt-20 gap-3 rounded-xl border bg-card p-4 outline-none focus-visible:anillo-foco",
+        clases.alerta
+      )}
+    >
+      <Icono
+        aria-hidden
+        className={cn("mt-0.5 size-5 shrink-0", clases.icono)}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
+          <h2
+            id={idTitulo}
+            className="text-[0.9375rem] font-semibold text-pretty"
+          >
+            {titulo}
+          </h2>
+          {children ? (
+            <div className="text-sm text-pretty text-muted-foreground">
+              {children}
+            </div>
+          ) : null}
+        </div>
+        {accion ? <div className="flex flex-wrap gap-2">{accion}</div> : null}
+      </div>
+    </section>
   )
 }
 

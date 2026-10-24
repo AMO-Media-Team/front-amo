@@ -6,6 +6,7 @@ import {
   cortesComparables,
   diaDe,
   metricaDelCorte,
+  notaDeRechazo,
   periodoPersonalizado,
   situacionMetricas,
 } from "./metricas"
@@ -150,12 +151,69 @@ describe("situacionMetricas", () => {
     }
   })
 
+  it("en disputa, los cortes siguen con el estado previo (D72)", () => {
+    const enDisputa = (estadoPrevioDisputa: EstadoAsignacion) => ({
+      ...asignacion("EN_DISPUTA"),
+      estadoPrevioDisputa,
+    })
+    expect(
+      situacionMetricas(
+        enDisputa("EVIDENCIA_VALIDADA"),
+        publicacion("APROBADA"),
+        "H24",
+        null,
+        AHORA
+      )
+    ).toEqual({ tipo: "cargar" })
+    expect(
+      situacionMetricas(
+        enDisputa("METRICAS_CARGADAS"),
+        publicacion("APROBADA"),
+        "H24",
+        metrica({ estado: "RECHAZADA", observaciones: "Falta la fecha." }),
+        AHORA
+      )
+    ).toEqual({ tipo: "corregir", observaciones: "Falta la fecha." })
+    // Como `puedo_cargar_metricas`: una verificada o una vencida no reciben cortes.
+    for (const previo of ["VERIFICADA", "VENCIDA_SIN_PUBLICAR"] as const) {
+      expect(
+        situacionMetricas(
+          enDisputa(previo),
+          publicacion("APROBADA"),
+          "H24",
+          null,
+          AHORA
+        )
+      ).toEqual({ tipo: "cerrada" })
+    }
+    // La evidencia no se carga en disputa: una rechazada no se manda a corregir.
+    expect(
+      situacionMetricas(
+        enDisputa("PUBLICADA"),
+        publicacion("RECHAZADA"),
+        "H24",
+        null,
+        AHORA
+      )
+    ).toEqual({ tipo: "cerrada" })
+  })
+
   it("admiteGuardar en cargar, corregir y en revisión", () => {
     expect(admiteGuardar({ tipo: "cargar" })).toBe(true)
     expect(admiteGuardar({ tipo: "en-revision" })).toBe(true)
     expect(admiteGuardar({ tipo: "corregir", observaciones: null })).toBe(true)
     expect(admiteGuardar({ tipo: "aprobada" })).toBe(false)
     expect(admiteGuardar({ tipo: "bloqueada", desde: "" })).toBe(false)
+  })
+})
+
+describe("notaDeRechazo", () => {
+  it("solo la nota de un rechazo llega al medio (D67)", () => {
+    expect(notaDeRechazo("RECHAZADA", "Falta la fecha.")).toBe(
+      "Falta la fecha."
+    )
+    expect(notaDeRechazo("APROBADA", "Alcance atípico revisado.")).toBeNull()
+    expect(notaDeRechazo("PENDIENTE", "Falta la fecha.")).toBeNull()
   })
 })
 

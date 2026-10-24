@@ -64,6 +64,29 @@ describe("HeroGanancias", () => {
     expect(screen.getAllByRole("definition")[2]).toHaveTextContent("—")
   })
 
+  it("enlaza a «Ganancias» solo si el rol puede abrirla", () => {
+    const { unmount } = render(
+      <HeroGanancias
+        {...props}
+        ganado={undefined}
+        pendiente={0}
+        pagado={0}
+        enlaceGanancias={"/ganancias" as Route}
+      />
+    )
+    expect(screen.getByRole("link", { name: "Ver ganancias" })).toHaveAttribute(
+      "href",
+      "/ganancias"
+    )
+    unmount()
+    render(
+      <HeroGanancias {...props} ganado={undefined} pendiente={0} pagado={0} />
+    )
+    expect(
+      screen.queryByRole("link", { name: "Ver ganancias" })
+    ).not.toBeInTheDocument()
+  })
+
   it("desde cien millones abrevia: la cifra exacta ya no cabe", () => {
     render(
       <HeroGanancias

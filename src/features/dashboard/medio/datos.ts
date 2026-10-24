@@ -266,8 +266,11 @@ export interface NegocioEnCurso extends AsignacionEnCurso {
   handle?: string | null
   /** Publicaciones que pide la oferta. */
   publicaciones?: number
+  /** En disputa: el estado que tenía al abrirla (sigue su recorrido, D72). */
+  estadoPrevioDisputa?: string | null
 }
 
+/** Los pasos del recorrido de una asignación en curso (la barra de avance). */
 export const ESTADOS_EN_CURSO = [
   "ACEPTADA",
   "CONTENIDO_ENTREGADO",
@@ -278,6 +281,31 @@ export const ESTADOS_EN_CURSO = [
 
 export type EstadoEnCurso = (typeof ESTADOS_EN_CURSO)[number]
 
+/**
+ * Lo que se consulta como «en curso»: los pasos del recorrido y las que están
+ * en disputa (el medio las sigue cumpliendo: carga sus cortes mientras tanto).
+ */
+export const ESTADOS_CONSULTA_EN_CURSO = [
+  ...ESTADOS_EN_CURSO,
+  "EN_DISPUTA",
+] as const
+
+/**
+ * ¿Es un negocio en curso? Una disputa sí, salvo el reclamo de una vencida:
+ * esa campaña no sigue mientras no se le dé la razón al medio.
+ */
+export function esNegocioEnCurso(
+  estado: string,
+  estadoPrevioDisputa: string | null = null
+): boolean {
+  if (estado === "EN_DISPUTA") {
+    return (ESTADOS_EN_CURSO as readonly string[]).includes(
+      estadoPrevioDisputa ?? ""
+    )
+  }
+  return (ESTADOS_EN_CURSO as readonly string[]).includes(estado)
+}
+
 /** El estado en voz del medio (la misma de «Mis campañas»). */
 export function etiquetaEstado(estado: string): string {
   return (
@@ -286,9 +314,19 @@ export function etiquetaEstado(estado: string): string {
   )
 }
 
-/** Paso del recorrido (1–5) para la barra de avance de cada asignación. */
-export function pasoEstado(estado: string): number {
-  return (ESTADOS_EN_CURSO as readonly string[]).indexOf(estado) + 1
+/**
+ * Paso del recorrido (1–5) para la barra de avance de cada asignación; en
+ * disputa, el del estado que tenía al abrirla.
+ */
+export function pasoEstado(
+  estado: string,
+  estadoPrevioDisputa: string | null = null
+): number {
+  const efectivo =
+    estado === "EN_DISPUTA" && estadoPrevioDisputa
+      ? estadoPrevioDisputa
+      : estado
+  return (ESTADOS_EN_CURSO as readonly string[]).indexOf(efectivo) + 1
 }
 
 /** Publicaciones que pide cada asignación, para nombrar la de cada acción. */

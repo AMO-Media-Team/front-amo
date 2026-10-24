@@ -1,25 +1,18 @@
 /**
  * Métricas por corte de una publicación (módulo puro): nombres de las
  * columnas según la plataforma (TikTok no reporta alcance ni impresiones),
- * engagement y la explicación en lenguaje llano de las alertas de integridad
- * que calcula la BD (`trg_metricas_b_alertas`, docs/modelo-datos.md §3.6).
+ * engagement y orden de los cortes. Las alertas de integridad de cada corte
+ * (y su explicación) viven en `alertas.ts`: medio y anunciante no las ven; el
+ * equipo AMO las lee con `alertas_metricas` (las columnas ya no se leen por
+ * PostgREST).
  */
-import { formatearNumero } from "@/lib/format"
-
+import type { AlertaMetrica } from "./alertas"
 import {
   CORTES,
   type Corte,
   type EstadoValidacion,
   type Plataforma,
 } from "./estados"
-
-export interface DetalleAlertas {
-  medianaHistorica: number | null
-  nHistorial: number | null
-  factor: number | null
-  seguidores: number | null
-  multiplo: number | null
-}
 
 export interface CorteMetrica {
   id: string
@@ -33,13 +26,14 @@ export interface CorteMetrica {
   interacciones: number | null
   clics: number | null
   estado: EstadoValidacion
-  alertaDesviacion: boolean
-  alertaMultiplo: boolean
-  detalleAlertas: DetalleAlertas
+  /** Alerta de integridad (INT-003/004), con la previa a una corrección. */
+  alerta: AlertaMetrica
   observaciones: string | null
   validadaAt: string | null
   /** Hay captura que firmar (la ruta no viaja al navegador). */
   conImagen: boolean
+  /** `updated_at` tal cual lo entrega la BD: la versión que se ve y se valida. */
+  actualizadaAt: string
 }
 
 export interface NombresColumnas {
@@ -71,66 +65,4 @@ export function ordenarCortes<
       CORTES[a.corte].orden - CORTES[b.corte].orden ||
       a.fechaCorte.localeCompare(b.fechaCorte)
   )
-}
-
-function numeroDe(valor: unknown): number | null {
-  if (typeof valor === "number" && Number.isFinite(valor)) return valor
-  if (typeof valor === "string" && valor.trim() !== "") {
-    const numero = Number(valor)
-    return Number.isFinite(numero) ? numero : null
-  }
-  return null
-}
-
-/** `metricas.detalle_alertas` (jsonb) → objeto tipado y tolerante a faltantes. */
-export function leerDetalleAlertas(valor: unknown): DetalleAlertas {
-  const objeto =
-    valor && typeof valor === "object" && !Array.isArray(valor)
-      ? (valor as Record<string, unknown>)
-      : {}
-  return {
-    medianaHistorica: numeroDe(objeto.mediana_historica),
-    nHistorial: numeroDe(objeto.n_historial),
-    factor: numeroDe(objeto.factor),
-    seguidores: numeroDe(objeto.seguidores),
-    multiplo: numeroDe(objeto.multiplo),
-  }
-}
-
-/** Por qué se marcó el corte, para quien valida. */
-export function describirAlertas(
-  corte: Pick<
-    CorteMetrica,
-    "alertaDesviacion" | "alertaMultiplo" | "detalleAlertas" | "alcance"
-  >
-): string[] {
-  const { detalleAlertas: detalle } = corte
-  const motivos: string[] = []
-  if (corte.alertaMultiplo) {
-    const limite =
-      detalle.multiplo !== null && detalle.seguidores !== null
-        ? ` (límite: ${formatearNumero(detalle.multiplo, 1)} × ${formatearNumero(detalle.seguidores)} seguidores)`
-        : ""
-    motivos.push(
-      `El alcance reportado supera lo esperable para sus seguidores${limite}.`
-    )
-  }
-  if (corte.alertaDesviacion) {
-    const referencia =
-      detalle.medianaHistorica !== null
-        ? ` (mediana de sus publicaciones aprobadas: ${formatearNumero(detalle.medianaHistorica)}${
-            detalle.factor !== null
-              ? `; se alerta fuera de ${formatearNumero(detalle.factor, 1)} ×`
-              : ""
-          })`
-        : ""
-    motivos.push(`Se desvía del histórico del medio${referencia}.`)
-  }
-  return motivos
-}
-
-export function tieneAlerta(
-  corte: Pick<CorteMetrica, "alertaDesviacion" | "alertaMultiplo">
-): boolean {
-  return corte.alertaDesviacion || corte.alertaMultiplo
 }

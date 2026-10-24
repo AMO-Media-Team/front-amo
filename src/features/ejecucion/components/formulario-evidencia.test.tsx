@@ -48,6 +48,7 @@ const AHORA = new Date("2026-10-23T20:00:00.000Z")
 const ASIGNACION: AsignacionEjecucion = {
   id: ID,
   estado: "CONTENIDO_ENTREGADO",
+  estadoPrevioDisputa: null,
   plataforma: "INSTAGRAM",
   formatoClave: "REEL",
   formatoNombre: "Reel",

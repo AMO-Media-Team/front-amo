@@ -13,7 +13,12 @@ const acciones = vi.hoisted(() => ({
 }))
 vi.mock("../actions", () => acciones)
 
-import { asignacionPrueba, cortePrueba, publicacionPrueba } from "../fixtures"
+import {
+  asignacionPrueba,
+  CAMPANA_PRUEBA,
+  cortePrueba,
+  publicacionPrueba,
+} from "../fixtures"
 import type { AsignacionSeguimiento } from "../tipos"
 import { TarjetaAsignacion } from "./tarjeta-asignacion"
 
@@ -230,5 +235,110 @@ describe("TarjetaAsignacion", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Sin captura")).toBeInTheDocument()
     await waitFor(() => expect(acciones.firmarCaptura).not.toHaveBeenCalled())
+  })
+})
+
+describe("TarjetaAsignacion · disputas (ADM-011)", () => {
+  function pintarConDisputa(
+    asignacion: AsignacionSeguimiento,
+    puedeDisputar = true
+  ) {
+    return render(
+      <TarjetaAsignacion
+        asignacion={asignacion}
+        abierta={false}
+        onAbiertaChange={() => {}}
+        destacada={false}
+        novedad={null}
+        ahoraServidor={AHORA}
+        campanaId={CAMPANA_PRUEBA}
+        puedeDisputar={puedeDisputar}
+      />
+    )
+  }
+
+  it("en un estado disputable ofrece reportar un problema con su página", () => {
+    const asignacion = asignacionPrueba({
+      estado: "METRICAS_CARGADAS",
+      disputa: null,
+    })
+    pintarConDisputa(asignacion)
+    expect(
+      screen.getByRole("link", {
+        name: "Reportar un problema de Comunidad Sincelejo",
+      })
+    ).toHaveAttribute(
+      "href",
+      `/campanas/${CAMPANA_PRUEBA}/asignaciones/${asignacion.id}/disputa`
+    )
+  })
+
+  it("en disputa: la insignia y «Ver la disputa», no otro reporte", () => {
+    pintarConDisputa(
+      asignacionPrueba({
+        estado: "EN_DISPUTA",
+        estadoPrevioDisputa: "PUBLICADA",
+        disputa: {
+          id: "0199f3a0-0000-7000-8000-0000000000d1",
+          estado: "ABIERTA",
+          estadoOrigen: "PUBLICADA",
+        },
+      })
+    )
+    expect(screen.getByText("En disputa")).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /^Ver la disputa/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: /^Reportar un problema/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("cerrada y sin otra posible, enlaza su resultado; sin disputa, nada", () => {
+    const { unmount } = pintarConDisputa(
+      asignacionPrueba({
+        estado: "CANCELADA",
+        disputa: {
+          id: "0199f3a0-0000-7000-8000-0000000000d1",
+          estado: "RESUELTA",
+          estadoOrigen: "PUBLICADA",
+        },
+      })
+    )
+    expect(
+      screen.getByRole("link", { name: /^Ver la disputa/ })
+    ).toBeInTheDocument()
+    unmount()
+    pintarConDisputa(asignacionPrueba({ estado: "ACEPTADA", disputa: null }))
+    expect(
+      screen.queryByRole("link", { name: /disputa|problema/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("sin permiso para disputar no ofrece reportar, pero sí ver la que haya", () => {
+    const { unmount } = pintarConDisputa(
+      asignacionPrueba({ estado: "PUBLICADA", disputa: null }),
+      false
+    )
+    expect(
+      screen.queryByRole("link", { name: /disputa|problema/ })
+    ).not.toBeInTheDocument()
+    unmount()
+    const enDisputa = asignacionPrueba({
+      estado: "EN_DISPUTA",
+      estadoPrevioDisputa: "PUBLICADA",
+      disputa: {
+        id: "0199f3a0-0000-7000-8000-0000000000d1",
+        estado: "ABIERTA",
+        estadoOrigen: "PUBLICADA",
+      },
+    })
+    pintarConDisputa(enDisputa, false)
+    expect(
+      screen.getByRole("link", { name: /^Ver la disputa/ })
+    ).toHaveAttribute(
+      "href",
+      `/campanas/${CAMPANA_PRUEBA}/asignaciones/${enDisputa.id}/disputa`
+    )
   })
 })

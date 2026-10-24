@@ -154,7 +154,9 @@ async function carteraPorAnunciante(
     const filas = await leerTodo("calcular la cartera", (desde, hasta) =>
       supabase
         .from("facturas")
-        .select("id, anunciante_id, estado, total, pagado, fecha_vencimiento")
+        .select(
+          "id, anunciante_id, estado, total, pagado, valor_notas_credito, fecha_vencimiento"
+        )
         .in("anunciante_id", lote)
         .in("estado", [...FACTURAS_CON_SALDO])
         .order("id")
@@ -164,7 +166,8 @@ async function carteraPorAnunciante(
       const lista = facturas.get(fila.anunciante_id) ?? []
       lista.push({
         estado: fila.estado,
-        total: fila.total,
+        // Neto de notas crédito parciales, como la ficha y `reporte_cartera`.
+        total: (fila.total ?? 0) - fila.valor_notas_credito,
         pagado: fila.pagado,
         fechaVencimiento: fila.fecha_vencimiento,
       })
@@ -438,7 +441,7 @@ export const carteraDelAnunciante = cache(
     const { data, error } = await supabase
       .from("facturas")
       .select(
-        "id, numero, estado, fecha_emision, fecha_vencimiento, total, pagado, saldo, campana:campanas ( nombre )"
+        "id, numero, estado, fecha_emision, fecha_vencimiento, total, pagado, saldo, valor_notas_credito, campana:campanas ( nombre )"
       )
       .eq("anunciante_id", anuncianteId)
       .order("fecha_emision", { ascending: false, nullsFirst: true })
@@ -448,7 +451,8 @@ export const carteraDelAnunciante = cache(
       resumen: resumirCartera(
         data.map((fila) => ({
           estado: fila.estado,
-          total: fila.total,
+          // Lo facturado neto de notas crédito parciales (como `reporte_cartera`): el saldo cuadra.
+          total: (fila.total ?? 0) - fila.valor_notas_credito,
           pagado: fila.pagado,
           fechaVencimiento: fila.fecha_vencimiento,
         }))

@@ -47,12 +47,22 @@ describe("CarteraAnunciante", () => {
     expect(filas[0]).toHaveTextContent(/^Factura\s*Venció el/)
     expect(filas[1]).toHaveTextContent("Factura FE1018")
     expect(filas[1]).toHaveTextContent("Vence el 5 de oct de 2026")
+    // Cada factura abre su ficha y el pie lleva a todas (ANU-013).
+    expect(
+      within(filas[1]).getByRole("link", { name: "Factura FE1018" })
+    ).toHaveAttribute("href", "/facturas/f2")
+    expect(
+      screen.getByRole("link", { name: "Ver todas tus facturas" })
+    ).toHaveAttribute("href", "/facturas")
   })
 
   it("sin saldo pendiente lo dice en positivo", () => {
     render(<CarteraAnunciante cartera={resumenCartera([], "2026-10-05")} />)
     expect(screen.getByText("Estás al día")).toBeInTheDocument()
     expect(screen.queryByRole("list")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "Ver tus facturas" })
+    ).toHaveAttribute("href", "/facturas")
   })
 })
 

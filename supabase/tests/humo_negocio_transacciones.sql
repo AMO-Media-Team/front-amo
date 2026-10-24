@@ -21,6 +21,7 @@ declare
   v_rec record;
   v_det text;
   v_ok boolean;
+  v_total numeric;
   -- usuarios y sesiones
   u_adm constant uuid := '00000000-0000-4000-a000-000000000081';   -- ADMIN
   u_fin constant uuid := '00000000-0000-4000-a000-000000000082';   -- FINANZAS
@@ -133,7 +134,7 @@ begin
   c_med := jsonb_build_object('sub', u_med, 'role', 'authenticated', 'aal', 'aal1', 'session_id', s_med)::text;
   perform set_config('amo.ctx_confiable', 'no', true);
 
-  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 145 from private.transiciones_estado));
+  r := r || jsonb_build_object('s0_semilla_transiciones', (select count(*) = 146 from private.transiciones_estado));
 
   -- ── (a) Perfiles: la regla de M3 sigue en el transicionar_srv definitivo ─────────────────────────────
   perform set_config('amo.actor_id', u_adm::text, true);
@@ -725,8 +726,8 @@ begin
   begin
     perform public.transicionar_srv('publicaciones', p1, 'APROBADA', u_adm, s_adm);
     r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', 'NO FALLÓ');
-  exception when check_violation then
-    r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', true);
+  exception when others then                                  -- desde e3_validacion, con su error de negocio
+    r := r || jsonb_build_object('f12_aprobar_exige_etiqueta', sqlerrm = 'AMO_ETIQUETA_REQUERIDA');
   end;
   perform public.transicionar_srv('publicaciones', p1, 'APROBADA', u_adm, s_adm, null, '{"etiqueta_verificada": true}');
   perform public.transicionar_srv('asignaciones', a_a, 'EVIDENCIA_VALIDADA', u_adm, s_adm);
@@ -763,9 +764,10 @@ begin
     and (select estado = 'METRICAS_CARGADAS' from public.asignaciones where id = a_a));
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
-  perform public.transicionar_srv('metricas', m_h24, 'APROBADA', u_adm, s_adm);
-  perform public.transicionar_srv('metricas', m_h72, 'APROBADA', u_adm, s_adm);
-  perform public.transicionar_srv('metricas', m_d7, 'APROBADA', u_adm, s_adm);
+  -- Desde e3_validacion, una métrica que tuvo alerta (aunque el medio la corrigiera) se aprueba con constancia.
+  perform public.transicionar_srv('metricas', m_h24, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
+  perform public.transicionar_srv('metricas', m_h72, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
+  perform public.transicionar_srv('metricas', m_d7, 'APROBADA', u_adm, s_adm, 'Cifras revisadas contra la captura');
   execute 'reset role';
   perform set_config('request.jwt.claims', c_mea, true);
   execute 'set local role authenticated';
@@ -941,6 +943,12 @@ begin
   execute 'set local role service_role';
   liq2 := public.generar_liquidacion_srv(me_a, private.hoy() - 14, private.hoy(), u_adm, s_adm);
   perform public.transicionar_srv('liquidaciones', liq2, 'APROBADA', u_fin, s_fin);
+  execute 'reset role';
+  -- E3 (fase 5): el soporte del pago ya está en Storage cuando se registra.
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('soportes', 'liquidacion/' || liq2 || '/soporte.pdf', '{"mimetype": "application/pdf", "size": 1000}');
+  perform set_config('request.jwt.claims', c_srv, true);
+  execute 'set local role service_role';
   begin
     perform public.registrar_pago_liquidacion_srv(liq2, private.hoy(), 'TRX-1', 'liquidacion/' || liq2 || '/soporte.pdf', u_fin, s_fin);
     r := r || jsonb_build_object('i6_pago_exige_documento_soporte', 'NO FALLÓ');
@@ -976,43 +984,66 @@ begin
     update public.liquidaciones set referencia_pago = 'Cambio' where id = liq2;
     r := r || jsonb_build_object('i10_pagada_no_cambia', 'NO FALLÓ');
   exception when others then
-    r := r || jsonb_build_object('i10_pagada_no_cambia', sqlerrm = 'AMO_TRANSICION_INVALIDA');
+    -- E3 (fase 5): la sesión ya no edita liquidaciones (los datos del pago entran por su procedimiento).
+    r := r || jsonb_build_object('i10_pagada_no_cambia', sqlstate = '42501');
   end;
   execute 'reset role';
 
-  -- ── (j) Facturas: borrador, emisión con consecutivo, pagos parciales y total ───────────────────────
-  perform set_config('request.jwt.claims', c_fin, true);
-  execute 'set local role authenticated';
-  insert into public.facturas (anunciante_id, campana_id, subtotal, iva) values (an_a, c1, 1000000, 190000) returning id into f1;
-  execute 'reset role';
+  -- ── (j) Facturas: borrador desde las asignaciones, factura expedida en el software de AMO, pagos ─────
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
-  v_j := public.emitir_factura_srv(f1, u_fin, s_fin);
+  f1 := public.generar_factura_srv(an_a, c1, private.hoy() - 30, private.hoy(), u_fin, s_fin);
   execute 'reset role';
-  r := r || jsonb_build_object('j1_factura_emitida',
+  select total into v_total from public.facturas where id = f1;
+  r := r || jsonb_build_object('j0_borrador_desde_asignaciones',
+    (select estado = 'BORRADOR' and consecutivo is null and esquema = 'COMPRA_REVENTA' and porcentaje_iva = 0.19
+            and subtotal = (select sum(a.monto_bruto) from public.asignaciones a where a.factura_id = f1)
+            and iva = round(subtotal * 0.19, 2) and valor_terceros = 0 and total = subtotal + iva
+     from public.facturas where id = f1)
+    and (select factura_id = f1 from public.asignaciones where id = a_a));
+  insert into storage.objects (bucket_id, name, metadata)
+  select 'soportes', x.ruta, '{"mimetype": "application/pdf", "size": 1000}'
+  from (values ('factura/' || f1 || '/FH1.pdf'), ('pago/' || f1 || '/r1.pdf'), ('pago/' || f1 || '/r2.pdf'),
+               ('pago/' || f1 || '/r3.pdf')) x (ruta);
+  perform set_config('request.jwt.claims', c_srv, true);
+  execute 'set local role service_role';
+  begin
+    perform public.registrar_factura_expedida_srv(f1, 'FH', 1, repeat('a', 96), private.hoy(), null, v_total + 1,
+                                                  'factura/' || f1 || '/FH1.pdf', u_fin, s_fin);
+    r := r || jsonb_build_object('j1a_total_distinto_no_se_registra', 'NO FALLÓ');
+  exception when others then
+    r := r || jsonb_build_object('j1a_total_distinto_no_se_registra', sqlerrm = 'AMO_CONFIG_INVALIDA');
+  end;
+  v_j := public.registrar_factura_expedida_srv(f1, 'FH', 1, repeat('a', 96), private.hoy(), null, v_total,
+                                               'factura/' || f1 || '/FH1.pdf', u_fin, s_fin);
+  execute 'reset role';
+  r := r || jsonb_build_object('j1_factura_expedida',
     v_j ->> 'numero' = 'FH1'
-    and (select estado = 'EMITIDA' and consecutivo = 1 and fecha_emision = private.hoy()
-                and fecha_vencimiento = private.hoy() + 30 and total = 1190000 from public.facturas where id = f1));
+    and (select estado = 'EMITIDA' and consecutivo = 1 and fecha_emision = private.hoy() and cufe = repeat('a', 96)
+                and fecha_vencimiento = private.hoy() + 30 and archivo_path = 'factura/' || f1 || '/FH1.pdf'
+         from public.facturas where id = f1));
   perform set_config('request.jwt.claims', c_fin, true);
   execute 'set local role authenticated';
   begin
     update public.facturas set subtotal = 2 where id = f1;
     r := r || jsonb_build_object('j2_emitida_no_se_edita', 'NO FALLÓ');
   exception when others then
-    r := r || jsonb_build_object('j2_emitida_no_se_edita', sqlerrm = 'AMO_TRANSICION_INVALIDA');
+    r := r || jsonb_build_object('j2_emitida_no_se_edita', sqlstate = '42501');
   end;
   execute 'reset role';
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
-  perform public.registrar_pago_anunciante_srv(f1, private.hoy(), 500000, 'TRANSFERENCIA', 'R1', null, u_fin, s_fin);
-  v_ok := (select estado = 'PAGADA_PARCIAL' and pagado = 500000 and saldo = 690000 from public.facturas where id = f1);
+  perform public.registrar_pago_anunciante_srv(f1, private.hoy(), 400000, 'TRANSFERENCIA', 'R1', 'pago/' || f1 || '/r1.pdf',
+                                               u_fin, s_fin, 20000);
+  v_ok := (select estado = 'PAGADA_PARCIAL' and pagado = 420000 and saldo = v_total - 420000 from public.facturas where id = f1);
   begin
-    perform public.registrar_pago_anunciante_srv(f1, private.hoy(), 700000, 'PSE', 'R2', null, u_fin, s_fin);
+    perform public.registrar_pago_anunciante_srv(f1, private.hoy(), v_total, 'PSE', 'R2', 'pago/' || f1 || '/r2.pdf', u_fin, s_fin);
     r := r || jsonb_build_object('j4_pago_no_supera_saldo', 'NO FALLÓ');
   exception when others then
     r := r || jsonb_build_object('j4_pago_no_supera_saldo', sqlerrm = 'AMO_TRANSICION_INVALIDA');
   end;
-  perform public.registrar_pago_anunciante_srv(f1, private.hoy(), 690000, 'PSE', 'R3', null, u_fin, s_fin);
+  perform public.registrar_pago_anunciante_srv(f1, private.hoy(), v_total - 420000, 'PSE', 'R3', 'pago/' || f1 || '/r3.pdf',
+                                               u_fin, s_fin);
   begin
     perform public.transicionar_srv('facturas', f1, 'ANULADA', u_fin, s_fin, 'Ya está pagada');
     r := r || jsonb_build_object('j6_pagada_no_se_anula', 'NO FALLÓ');
@@ -1020,7 +1051,7 @@ begin
     r := r || jsonb_build_object('j6_pagada_no_se_anula', sqlerrm = 'AMO_TRANSICION_INVALIDA');
   end;
   execute 'reset role';
-  r := r || jsonb_build_object('j3_pago_parcial', v_ok);
+  r := r || jsonb_build_object('j3_pago_parcial_con_retenciones', v_ok);
   r := r || jsonb_build_object('j5_pagada', (select estado = 'PAGADA' and saldo = 0 and pagada_at is not null from public.facturas where id = f1));
 
   -- ── (k) Cancelación de campaña en cascada ──────────────────────────────────────────────────────────
@@ -1070,8 +1101,13 @@ begin
   select count(*) into v_n from public.asignacion_montos;              r := r || jsonb_build_object('l7_medio_sin_montos', v_n = 0);
   select count(*) into v_n from public.publicaciones;                  r := r || jsonb_build_object('l8_medio_sus_publicaciones', v_n = 1);
   select count(*) into v_n from public.metricas;                       r := r || jsonb_build_object('l8_medio_sus_metricas', v_n = 3);
-  select count(*) into v_n from public.liquidaciones;                  r := r || jsonb_build_object('l8_medio_sus_liquidaciones', v_n = 2);
-  select count(*) into v_n from public.documentos_soporte;             r := r || jsonb_build_object('l8_medio_sus_documentos_soporte', v_n = 2);
+  -- E3 (fase 5): el medio lee sus liquidaciones y documentos por RPC (la anulada no se lista), no las tablas.
+  select count(*) into v_n from public.liquidaciones;
+  r := r || jsonb_build_object('l8_medio_sus_liquidaciones',
+    v_n = 0 and (select count(*) = 1 and bool_and(id = liq2) from public.mis_liquidaciones_medio()));
+  select count(*) into v_n from public.documentos_soporte;
+  r := r || jsonb_build_object('l8_medio_sus_documentos_soporte',
+    v_n = 0 and (select documento_estado = 'EMITIDO' and documento_numero = 'DSH1' from public.mis_liquidaciones_medio() where id = liq2));
   select count(*) into v_n from public.creativos where oferta_id = o1; r := r || jsonb_build_object('l8_medio_ve_creativo_activo', v_n = 1);
   select * into v_rec from public.mis_asignaciones_medio();
   r := r || jsonb_build_object('l9_mis_asignaciones_medio',
@@ -1270,7 +1306,8 @@ begin
   execute 'reset role';
   perform set_config('request.jwt.claims', c_adm, true);
   execute 'set local role authenticated';
-  update public.metricas set alcance = 170 where id = m2;                 get diagnostics v_n = row_count; r := r || jsonb_build_object('p12_admin_edita_metrica', v_n = 1);
+  -- Desde e3_validacion el equipo AMO no reescribe cifras por la sesión: corrige con corregir_metrica_srv (motivo).
+  update public.metricas set alcance = 170 where id = m2;                 get diagnostics v_n = row_count; r := r || jsonb_build_object('p12_admin_no_edita_metrica_por_sesion', v_n = 0);
   update public.ofertas set titulo = 'Pol borrador moderado' where id = o1; get diagnostics v_n = row_count; r := r || jsonb_build_object('p13_admin_edita_oferta', v_n = 1);
   update public.campanas set objetivo = 'Objetivo admin' where id = c1;   get diagnostics v_n = row_count; r := r || jsonb_build_object('p13b_admin_edita_campana', v_n = 1);
   execute 'reset role';

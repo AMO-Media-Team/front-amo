@@ -22,7 +22,10 @@ type Regla = [
   opciones?: string[],
 ]
 
-/** Las 53 claves sembradas (docs/modelo-datos.md §7) con sus reglas reales. */
+/**
+ * Las 53 claves sembradas (docs/modelo-datos.md §7) y las que suman la fase 4
+ * (e3_validacion) y la fase 5 (e3_finanzas), con sus reglas reales.
+ */
 const SEMILLA: readonly Regla[] = [
   ["comision.porcentaje_global", "PORCENTAJE", 0, 0.5],
   ["comision.visible_para_medio", "BOOLEANO", null, null],
@@ -44,6 +47,8 @@ const SEMILLA: readonly Regla[] = [
     ["H24", "H72", "D7"],
   ],
   ["metricas.plazo_carga_horas", "ENTERO", 1, 336],
+  ["evidencias.plazo_recarga_horas", "ENTERO", 1, 168],
+  ["soporte.correo", "TEXTO", null, null],
   ["metricas.factor_desviacion", "DECIMAL", 1.5, 10],
   ["metricas.minimo_historial", "ENTERO", 1, 50],
   [
@@ -73,6 +78,7 @@ const SEMILLA: readonly Regla[] = [
   ["liquidaciones.dias_pago", "ENTERO", 0, 90],
   ["facturacion.dias_vencimiento", "ENTERO", 0, 120],
   ["facturacion.iva", "PORCENTAJE", 0, 0.5],
+  ["facturacion.esquema", "TEXTO", null, null, ["COMPRA_REVENTA", "MANDATO"]],
   [
     "tributario.reteica_municipio_base",
     "TEXTO",
@@ -88,6 +94,17 @@ const SEMILLA: readonly Regla[] = [
     null,
     ["ALERTA", "BLOQUEAR"],
   ],
+  [
+    "tributario.numeracion_documento_soporte",
+    "TEXTO",
+    null,
+    null,
+    ["PLATAFORMA", "PROVEEDOR"],
+  ],
+  ["tributario.adquiriente_razon_social", "TEXTO", null, null],
+  ["tributario.adquiriente_nit", "TEXTO", null, null],
+  ["tributario.adquiriente_dv", "TEXTO", null, null],
+  ["tributario.adquiriente_direccion", "TEXTO", null, null],
   ["analitica.n_minimo_tasas", "ENTERO", 1, 1000],
   ["analitica.umbral_variacion", "PORCENTAJE", 0.01, 1],
   ["seguridad.inactividad_minutos_admin", "ENTERO", 5, 480],
@@ -120,8 +137,8 @@ function reglas([
 }
 
 describe("catálogo de parámetros", () => {
-  it("cubre exactamente las 53 claves sembradas", () => {
-    expect(SEMILLA).toHaveLength(53)
+  it("cubre exactamente las 61 claves con ficha", () => {
+    expect(SEMILLA).toHaveLength(61)
     expect(Object.keys(FICHAS).sort()).toEqual(SEMILLA.map(([c]) => c).sort())
   })
 

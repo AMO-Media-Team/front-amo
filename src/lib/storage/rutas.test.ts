@@ -73,6 +73,12 @@ describe("carpetas por bucket (§8)", () => {
       bucket: "soportes",
       carpeta: `documento_soporte/${A}`,
     })
+    expect(carpetaSoporte("liquidacion", A, "factura").carpeta).toBe(
+      `liquidacion/${A}/factura`
+    )
+    expect(carpetaSoporte("liquidacion", A, "pago").carpeta).toBe(
+      `liquidacion/${A}/pago`
+    )
     expect(carpetaLogo("medio", A)).toEqual({
       bucket: "avatares",
       carpeta: `medio/${A}`,
@@ -92,6 +98,10 @@ describe("carpetas por bucket (§8)", () => {
     expect(() => carpetaDocumentoMedio(A, "PASAPORTE" as "RUT")).toThrow(/tipo/)
     expect(() => carpetaEvidencia(A, "interno" as "metrica")).toThrow(/tipo/)
     expect(() => carpetaSoporte("otro" as "pago", A)).toThrow(/tipo/)
+    expect(() => carpetaSoporte("factura", A, "pago")).toThrow(/subcarpetas/)
+    expect(() => carpetaSoporte("liquidacion", A, "otra" as "pago")).toThrow(
+      /subcarpeta/
+    )
   })
 })
 
@@ -112,6 +122,10 @@ describe("nuevaRuta", () => {
     expect(nuevaRuta(carpetaSoporte("dispersion", A), "text/csv", U).ruta).toBe(
       `dispersion/${A}/${U}.csv`
     )
+    expect(
+      nuevaRuta(carpetaSoporte("documento_soporte", A), "application/json", U)
+        .ruta
+    ).toBe(`documento_soporte/${A}/${U}.json`)
   })
 
   it("genera uno distinto en cada llamada", () => {

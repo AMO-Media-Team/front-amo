@@ -208,7 +208,10 @@ test.describe("administración de usuarios", () => {
 
     await test.step("suspender y reactivar desde la ficha", async () => {
       await buscar(page, temporal.email)
-      await page.getByRole("link", { name: temporal.nombre }).click()
+      // Exacto: las fábricas de otros proyectos crean «Operador temporal E2E».
+      await page
+        .getByRole("link", { name: temporal.nombre, exact: true })
+        .click()
       await expect(
         page.getByRole("heading", { level: 1, name: temporal.nombre })
       ).toBeVisible()

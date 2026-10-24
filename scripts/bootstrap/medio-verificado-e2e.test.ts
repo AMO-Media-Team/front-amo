@@ -11,15 +11,22 @@ import {
   LARGO_MAXIMO_RESUMEN,
 } from "../../src/lib/cifrado"
 import {
+  certificacionPosteriorAlPago,
+  certificadoDe,
   type CifradorPago,
   CUENTA_PAGO_E2E,
   cuentaAlDia,
+  cuentaPagoDe,
   datosPagoE2E,
   describirPaso,
   documentosExigidos,
   type EstadoMedioVerificado,
   type FilaPagoMedio,
   formatoDocumento,
+  MEDIO_FACTURA_VERIFICADO_E2E,
+  MEDIO_FINANZAS_VERIFICADO_E2E,
+  MEDIO_SUSPENSION_VERIFICADO_E2E,
+  MEDIO_VERIFICADO_E2E,
   PAGO_MEDIO_E2E,
   pagoAlDia,
   type PasoMedio,
@@ -427,5 +434,250 @@ describe("describirPaso", () => {
       expect(texto).not.toContain(PAGO_MEDIO_E2E.numeroCuenta)
       expect(texto).not.toContain(PAGO_MEDIO_E2E.numeroDocumento)
     }
+  })
+})
+
+describe("Medio Suspensión E2E", () => {
+  const medio = MEDIO_SUSPENSION_VERIFICADO_E2E
+
+  it("es otro medio, con su cuenta y su documento (las huellas no chocan)", () => {
+    expect(medio.datos.id).not.toBe(MEDIO_VERIFICADO_E2E.datos.id)
+    expect(medio.cuenta.handle).not.toBe(MEDIO_VERIFICADO_E2E.cuenta.handle)
+    expect(medio.datos.municipioPreferido).not.toBe(
+      MEDIO_VERIFICADO_E2E.datos.municipioPreferido
+    )
+    const propia = datosPagoE2E(medio.datos.id, CIFRADOR, medio.pago)
+    const delMedioE2E = datosPagoE2E(MEDIO_E2E_ID, CIFRADOR)
+    expect(propia.numero_documento_hash).not.toBe(
+      delMedioE2E.numero_documento_hash
+    )
+    expect(
+      leerCuentaPago(
+        CIFRADOR.descifrar(
+          propia.datos_pago_cifrados,
+          contextoCifrado(medio.datos.id, "datos_pago_cifrados")
+        )
+      )
+    ).toEqual(cuentaPagoDe(medio.pago))
+  })
+
+  it("su pago al día no se confunde con el del Medio E2E", () => {
+    const fila = filaGuardada(
+      datosPagoE2E(medio.datos.id, CIFRADOR, medio.pago)
+    )
+    expect(pagoAlDia(fila, medio.datos.id, CIFRADOR, medio.pago)).toBe(true)
+    expect(pagoAlDia(fila, medio.datos.id, CIFRADOR)).toBe(false)
+  })
+
+  it("se reverifica con sus seguidores y se describe con su cuenta", () => {
+    const conSeguidoresDelOtro: EstadoMedioVerificado = {
+      ...LISTO,
+      cuenta: {
+        alDia: true,
+        seguidores: CUENTA_INSTAGRAM_E2E.seguidores,
+        verificacionPendienteId: null,
+      },
+    }
+    expect(planMedioVerificado(conSeguidoresDelOtro, medio)).toEqual<
+      PasoMedio[]
+    >([{ paso: "VERIFICAR_CUENTA" }])
+    expect(
+      planMedioVerificado(
+        {
+          ...LISTO,
+          cuenta: {
+            alDia: true,
+            seguidores: medio.cuenta.seguidores,
+            verificacionPendienteId: null,
+          },
+        },
+        medio
+      )
+    ).toEqual([])
+    expect(describirPaso({ paso: "REGISTRAR_CUENTA" }, medio.cuenta)).toBe(
+      "cuenta de Instagram @medio.suspension.e2e.amo"
+    )
+    expect(describirPaso({ paso: "VERIFICAR_CUENTA" }, medio.cuenta)).toBe(
+      "verificar la cuenta con 45000 seguidores"
+    )
+  })
+
+  it("si quedó suspendido, el plan lo reactiva", () => {
+    expect(
+      planMedioVerificado(
+        {
+          ...LISTO,
+          estado: "SUSPENDIDO",
+          cuenta: {
+            alDia: true,
+            seguidores: medio.cuenta.seguidores,
+            verificacionPendienteId: null,
+          },
+        },
+        medio
+      )
+    ).toEqual<PasoMedio[]>([{ paso: "REACTIVAR" }])
+  })
+})
+
+describe("medios de Finanzas", () => {
+  const finanzas = MEDIO_FINANZAS_VERIFICADO_E2E
+  const factura = MEDIO_FACTURA_VERIFICADO_E2E
+  const listoDe = (
+    medio: typeof finanzas,
+    extra: Partial<EstadoMedioVerificado> = {}
+  ): EstadoMedioVerificado => ({
+    ...LISTO,
+    cuenta: {
+      alDia: true,
+      seguidores: medio.cuenta.seguidores,
+      verificacionPendienteId: null,
+    },
+    certificacionPosteriorAlPago: true,
+    ...extra,
+  })
+
+  it("son medios distintos de los demás (cuentas y documentos propios) en Bogotá", () => {
+    const medios = [
+      MEDIO_VERIFICADO_E2E,
+      MEDIO_SUSPENSION_VERIFICADO_E2E,
+      finanzas,
+      factura,
+    ]
+    const unicos = (valores: string[]) => new Set(valores).size
+    expect(unicos(medios.map((m) => m.datos.id))).toBe(medios.length)
+    expect(unicos(medios.map((m) => m.cuenta.handle))).toBe(medios.length)
+    expect(unicos(medios.map((m) => m.pago.numeroDocumento))).toBe(
+      medios.length
+    )
+    expect(finanzas.datos.municipioPreferido).toBe("11001")
+    expect(factura.datos.municipioPreferido).toBe("11001")
+    for (const medio of [finanzas, factura]) {
+      expect(medio.cuenta.seguidores).toBeGreaterThanOrEqual(30_000)
+      expect(medio.cuenta.seguidores).toBeLessThanOrEqual(60_000)
+      expect(medio.certificacionPosteriorAlPago).toBe(true)
+    }
+  })
+
+  it("guardan su condición tributaria: uno sin obligaciones y otro declarante que factura", () => {
+    expect(
+      datosPagoE2E(finanzas.datos.id, CIFRADOR, finanzas.pago)
+    ).toMatchObject({
+      es_declarante: false,
+      obligado_facturar: false,
+      responsable_iva: false,
+    })
+    const datosFactura = datosPagoE2E(factura.datos.id, CIFRADOR, factura.pago)
+    expect(datosFactura).toMatchObject({
+      es_declarante: true,
+      obligado_facturar: true,
+      responsable_iva: false,
+    })
+    expect(datosFactura.datos_pago_resumen).toBe("Davivienda •••• 2349")
+    // El Medio E2E sigue sin obligaciones (su pago no declara condición).
+    expect(datosPagoE2E(MEDIO_E2E_ID, CIFRADOR)).toMatchObject({
+      es_declarante: false,
+      obligado_facturar: false,
+    })
+  })
+
+  it("un cambio de condición tributaria obliga a volver a guardar el pago", () => {
+    const fila = filaGuardada(
+      datosPagoE2E(factura.datos.id, CIFRADOR, finanzas.pago)
+    )
+    expect(pagoAlDia(fila, factura.datos.id, CIFRADOR, factura.pago)).toBe(
+      false
+    )
+  })
+
+  it("la certificación cuenta si es la de su medio de pago, vigente y cargada después del último cambio", () => {
+    const certificado = {
+      tipo: "CERT_BANCARIA" as const,
+      fecha_vencimiento: "2027-10-23",
+      created_at: "2026-10-24T00:10:13Z",
+    }
+    const contexto = {
+      metodo: "BANCARIO" as const,
+      cambiadoAt: "2026-10-24T00:10:12Z",
+      hoy: "2026-10-23",
+    }
+    expect(certificadoDe("BANCARIO")).toBe("CERT_BANCARIA")
+    expect(certificadoDe("BILLETERA")).toBe("CERT_BILLETERA")
+    expect(certificacionPosteriorAlPago([certificado], contexto)).toBe(true)
+    expect(
+      certificacionPosteriorAlPago([certificado], {
+        ...contexto,
+        cambiadoAt: "2026-10-24T00:11:00Z",
+      })
+    ).toBe(false)
+    expect(
+      certificacionPosteriorAlPago(
+        [{ ...certificado, fecha_vencimiento: "2026-10-22" }],
+        contexto
+      )
+    ).toBe(false)
+    expect(
+      certificacionPosteriorAlPago(
+        [{ ...certificado, tipo: "CERT_BILLETERA" }],
+        contexto
+      )
+    ).toBe(false)
+    expect(
+      certificacionPosteriorAlPago([certificado], {
+        ...contexto,
+        cambiadoAt: null,
+      })
+    ).toBe(true)
+    expect(certificacionPosteriorAlPago([], contexto)).toBe(false)
+  })
+
+  it("si se vuelve a guardar el pago, aprueba otra certificación después", () => {
+    expect(planMedioVerificado(listoDe(finanzas), finanzas)).toEqual([])
+    expect(
+      planMedioVerificado(listoDe(finanzas, { pagoAlDia: false }), finanzas)
+    ).toEqual<PasoMedio[]>([
+      { paso: "GUARDAR_PAGO" },
+      { paso: "APROBAR_DOCUMENTO", documento: "CERT_BANCARIA" },
+    ])
+  })
+
+  it("si la certificación quedó antes del último cambio, aprueba otra sin tocar el pago", () => {
+    expect(
+      planMedioVerificado(
+        listoDe(factura, { certificacionPosteriorAlPago: false }),
+        factura
+      )
+    ).toEqual<PasoMedio[]>([
+      { paso: "APROBAR_DOCUMENTO", documento: "CERT_BANCARIA" },
+    ])
+  })
+
+  it("no la repite si la certificación ya va en el plan (vencida o desde cero)", () => {
+    expect(
+      planMedioVerificado(
+        listoDe(finanzas, {
+          pagoAlDia: false,
+          documentosVigentes: [
+            "CEDULA_FRENTE",
+            "CEDULA_REVERSO",
+            "PRUEBA_VIDA",
+          ],
+        }),
+        finanzas
+      )
+    ).toEqual<PasoMedio[]>([
+      { paso: "GUARDAR_PAGO" },
+      { paso: "APROBAR_DOCUMENTO", documento: "CERT_BANCARIA" },
+    ])
+  })
+
+  it("los medios que no la exigen siguen como antes", () => {
+    expect(
+      planMedioVerificado({
+        ...LISTO,
+        pagoAlDia: false,
+        certificacionPosteriorAlPago: false,
+      })
+    ).toEqual([{ paso: "GUARDAR_PAGO" }])
   })
 })

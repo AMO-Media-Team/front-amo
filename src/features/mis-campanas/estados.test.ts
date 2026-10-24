@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest"
 import { ESTADOS_ASIGNACION } from "@/features/operacion/estados"
 
 import {
+  consecuenciaCancelacion,
   contarPorSegmento,
   ESTADOS_PARA_MEDIO,
   ESTADOS_POR_SEGMENTO,
   SEGMENTOS,
   SEGMENTOS_ACTIVOS,
   SEGMENTOS_MIS_CAMPANAS,
+  estadoDeTrabajo,
+  estaEnCurso,
   segmentoDe,
   segmentoInicial,
 } from "./estados"
@@ -102,5 +105,50 @@ describe("segmentos del tablero", () => {
     })
     expect(segmentoInicial(conteo)).toBe("pendiente_metricas")
     expect(segmentoInicial(contarPorSegmento([]))).toBe("por_publicar")
+  })
+})
+
+describe("cancelación, suspensión y disputa", () => {
+  it("una cancelación por fraude o incumplimiento no se paga", () => {
+    expect(consecuenciaCancelacion("FRAUDE")).toBe(
+      "Según los términos que aceptaste, esta publicación no se paga."
+    )
+    expect(consecuenciaCancelacion("INCUMPLIMIENTO_MEDIO")).toMatch(
+      /no se paga y cuenta en tu cumplimiento/
+    )
+    for (const causa of [
+      "ADMINISTRATIVA",
+      "ACUERDO",
+      null,
+      undefined,
+    ] as const) {
+      expect(consecuenciaCancelacion(causa)).toMatch(
+        /Ya no tienes que publicar ni cargar nada más/
+      )
+    }
+  })
+
+  it("en curso: lo que el medio sigue cumpliendo, también en disputa (D73)", () => {
+    expect(TODOS.filter(estaEnCurso)).toEqual([
+      "ACEPTADA",
+      "CONTENIDO_ENTREGADO",
+      "PUBLICADA",
+      "EVIDENCIA_VALIDADA",
+      "METRICAS_CARGADAS",
+      "EN_DISPUTA",
+    ])
+  })
+
+  it("en disputa se trabaja con el estado que tenía al abrirla (D72)", () => {
+    expect(
+      estadoDeTrabajo({
+        estado: "EN_DISPUTA",
+        estadoPrevioDisputa: "EVIDENCIA_VALIDADA",
+      })
+    ).toBe("EVIDENCIA_VALIDADA")
+    expect(estadoDeTrabajo({ estado: "EN_DISPUTA" })).toBe("EN_DISPUTA")
+    expect(
+      estadoDeTrabajo({ estado: "PUBLICADA", estadoPrevioDisputa: "ACEPTADA" })
+    ).toBe("PUBLICADA")
   })
 })

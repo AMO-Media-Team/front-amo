@@ -2,17 +2,31 @@ import { describe, expect, it } from "vitest"
 
 import {
   contenidoTerminosPrueba,
+  inicioDeAnio,
   leerArgumentos,
   mismoValor,
+  olvidarCreadoFinanzas,
   olvidarParametro,
   PARAMETROS_PRUEBA,
   planAplicar,
+  planResoluciones,
+  planRetenciones,
+  planReteica,
   planRevertir,
+  planRevertirFinanzas,
   planTerminos,
   registrarCambio,
+  registrarCreadoFinanzas,
+  type ResolucionExistente,
+  RESOLUCIONES_PRUEBA,
+  RETEICA_REFERENCIA,
+  RETENCIONES_REFERENCIA,
   respaldoVacio,
+  sumarDias,
   TIPOS_TERMINOS,
+  unAnioDespues,
   VERSION_TERMINOS_PRUEBA,
+  vigenciasSeCruzan,
 } from "./configuracion-pruebas-plan"
 
 const MARCA = "2026-10-21T06:07:15.228176+00:00"
@@ -180,5 +194,211 @@ describe("leerArgumentos", () => {
     })
     expect(() => leerArgumentos(["--aplicar", "--revertir"])).toThrow()
     expect(() => leerArgumentos(["--forzar"])).toThrow(/desconocido/)
+  })
+})
+
+describe("finanzas de prueba", () => {
+  const HOY = "2026-10-23"
+
+  it("las reglas de referencia son las de la fase 5", () => {
+    expect(
+      RETENCIONES_REFERENCIA.map((r) => [
+        r.aplicaDeclarante,
+        r.tarifa,
+        r.baseMinimaUvt,
+      ])
+    ).toEqual([
+      [true, 0.04, 4],
+      [false, 0.06, 4],
+    ])
+    expect(RETEICA_REFERENCIA[0]).toEqual({
+      municipio: "11001",
+      nombre: "Bogotá",
+      tarifaPorMil: 9.66,
+    })
+    expect(RETEICA_REFERENCIA.map((r) => r.tarifaPorMil).slice(1)).toEqual([
+      10, 10, 10,
+    ])
+    for (const resolucion of Object.values(RESOLUCIONES_PRUEBA)) {
+      // CHECK de la BD: prefijo de hasta 4 caracteres en mayúsculas o dígitos.
+      expect(resolucion.prefijo).toMatch(/^[A-Z0-9]{0,4}$/)
+      expect(resolucion.numeroResolucion).toMatch(/^PRUEBA-/)
+      expect([resolucion.rangoDesde, resolucion.rangoHasta]).toEqual([1, 5000])
+    }
+  })
+
+  it("fechas: inicio del año, un año después (también desde un 29 de febrero)", () => {
+    expect(inicioDeAnio(HOY)).toBe("2026-01-01")
+    expect(unAnioDespues(HOY)).toBe("2027-10-23")
+    expect(unAnioDespues("2028-02-29")).toBe("2029-03-01")
+    expect(sumarDias("2026-12-31", 1)).toBe("2027-01-01")
+    expect(() => inicioDeAnio("ayer")).toThrow(RangeError)
+  })
+
+  it("vigencias [desde, hasta) como las EXCLUDE de la BD", () => {
+    const abierta = { desde: "2026-01-01", hasta: null }
+    expect(
+      vigenciasSeCruzan(abierta, { desde: "2025-01-01", hasta: null })
+    ).toBe(true)
+    expect(
+      vigenciasSeCruzan(abierta, { desde: "2025-01-01", hasta: "2026-01-01" })
+    ).toBe(false)
+    expect(
+      vigenciasSeCruzan(abierta, { desde: "2025-01-01", hasta: "2026-01-02" })
+    ).toBe(true)
+  })
+
+  it("crea las retenciones que faltan y respeta las que ya hay vigentes", () => {
+    expect(planRetenciones([], HOY)).toEqual(
+      RETENCIONES_REFERENCIA.map((regla) => ({
+        tipo: "crear",
+        regla,
+        vigenteDesde: "2026-01-01",
+      }))
+    )
+    const plan = planRetenciones(
+      [
+        {
+          id: "r1",
+          tipo: "RETEFUENTE",
+          aplica_declarante: true,
+          vigente_desde: "2025-01-01",
+          vigente_hasta: null,
+        },
+        // Una que ya terminó no impide la de referencia.
+        {
+          id: "r2",
+          tipo: "RETEFUENTE",
+          aplica_declarante: false,
+          vigente_desde: "2024-01-01",
+          vigente_hasta: "2025-01-01",
+        },
+      ],
+      HOY
+    )
+    expect(plan.map((paso) => paso.tipo)).toEqual(["existe", "crear"])
+    expect(plan[0]).toMatchObject({ id: "r1" })
+  })
+
+  it("ReteICA: crea la de las capitales que faltan y omite municipios que la base no tiene", () => {
+    const plan = planReteica(
+      [
+        {
+          id: "i1",
+          municipio_codigo: "11001",
+          vigente_desde: "2025-01-01",
+          vigente_hasta: null,
+        },
+      ],
+      new Set(["11001", "05001", "76001"]),
+      HOY
+    )
+    expect(plan.map((paso) => [paso.regla.municipio, paso.tipo])).toEqual([
+      ["11001", "existe"],
+      ["05001", "crear"],
+      ["76001", "crear"],
+      ["08001", "sin-municipio"],
+    ])
+  })
+
+  const resolucion = (
+    cambios: Partial<ResolucionExistente>
+  ): ResolucionExistente => ({
+    id: "x",
+    tipo: "DOCUMENTO_SOPORTE",
+    prefijo: "DEMO",
+    numero_resolucion: "18764000000002",
+    activa: true,
+    vigente_desde: "2025-06-01",
+    vigente_hasta: "2027-06-01",
+    ...cambios,
+  })
+
+  it("resoluciones: solo hacen falta si no hay una activa y vigente", () => {
+    expect(planResoluciones([], HOY)).toEqual([
+      {
+        tipo: "crear",
+        resolucion: RESOLUCIONES_PRUEBA.DOCUMENTO_SOPORTE,
+        fechaResolucion: HOY,
+        vigenteDesde: HOY,
+        vigenteHasta: "2027-10-23",
+      },
+      {
+        tipo: "crear",
+        resolucion: RESOLUCIONES_PRUEBA.FACTURA_VENTA,
+        fechaResolucion: HOY,
+        vigenteDesde: HOY,
+        vigenteHasta: "2027-10-23",
+      },
+    ])
+    const plan = planResoluciones(
+      [
+        resolucion({ id: "ds" }),
+        resolucion({
+          id: "fe",
+          tipo: "FACTURA_VENTA",
+          prefijo: "PFE",
+          numero_resolucion: "PRUEBA-FE",
+          activa: false,
+        }),
+      ],
+      HOY
+    )
+    expect(plan).toEqual([
+      {
+        tipo: "vigente",
+        resolucion: RESOLUCIONES_PRUEBA.DOCUMENTO_SOPORTE,
+        id: "ds",
+        prefijo: "DEMO",
+      },
+      {
+        tipo: "activar",
+        resolucion: RESOLUCIONES_PRUEBA.FACTURA_VENTA,
+        id: "fe",
+      },
+    ])
+  })
+
+  it("una activa vencida no se reemplaza (una sola activa por tipo)", () => {
+    const plan = planResoluciones(
+      [resolucion({ vigente_hasta: "2026-10-22" })],
+      HOY
+    )
+    expect(plan[0]).toEqual({
+      tipo: "activa-vencida",
+      resolucion: RESOLUCIONES_PRUEBA.DOCUMENTO_SOPORTE,
+      prefijo: "DEMO",
+    })
+  })
+
+  it("el respaldo guarda cada id una vez y la reversión solo quita lo que nadie usó", () => {
+    let creado = registrarCreadoFinanzas(undefined, "retenciones", "r1")
+    creado = registrarCreadoFinanzas(creado, "retenciones", "r1")
+    creado = registrarCreadoFinanzas(creado, "reteica", "i1")
+    creado = registrarCreadoFinanzas(creado, "resoluciones", "s1")
+    expect(creado).toEqual({
+      retenciones: ["r1"],
+      reteica: ["i1"],
+      resoluciones: ["s1"],
+    })
+    expect(
+      planRevertirFinanzas(creado, {
+        existentes: new Set(["r1", "s1"]),
+        usadas: new Set(["s1"]),
+      })
+    ).toEqual([
+      { tipo: "quitar", tabla: "retenciones", id: "r1" },
+      { tipo: "no-existe", tabla: "reteica", id: "i1" },
+      { tipo: "usada", tabla: "resoluciones", id: "s1" },
+    ])
+    expect(
+      planRevertirFinanzas(undefined, {
+        existentes: new Set(),
+        usadas: new Set(),
+      })
+    ).toEqual([])
+    expect(
+      olvidarCreadoFinanzas(creado, "retenciones", "r1").retenciones
+    ).toEqual([])
   })
 })

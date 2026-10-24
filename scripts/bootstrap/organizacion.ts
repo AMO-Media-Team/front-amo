@@ -11,7 +11,8 @@
  */
 export const ANUNCIANTE_E2E_ID = "e2e00000-0000-4000-8000-00000000a001"
 
-export type RolCuentaPrueba = "SUPERADMIN" | "ADMIN" | "ANUNCIANTE" | "MEDIO"
+export type RolCuentaPrueba =
+  "SUPERADMIN" | "ADMIN" | "OPERACIONES" | "FINANZAS" | "ANUNCIANTE" | "MEDIO"
 
 export interface OrganizacionPerfil {
   anunciante_id: string | null
@@ -51,11 +52,13 @@ export function organizacionDe(cuenta: {
       return { anunciante_id: null, medio_id: cuenta.medioId }
     case "SUPERADMIN":
     case "ADMIN":
+    case "OPERACIONES":
+    case "FINANZAS":
       return { anunciante_id: null, medio_id: null }
   }
 }
 
-/** Roles internos: exigen verificación en dos pasos (se enrola un TOTP). */
+/** Roles internos (del equipo AMO): exigen verificación en dos pasos (se enrola un TOTP). */
 export function exigeTotp(rol: RolCuentaPrueba): boolean {
-  return rol === "SUPERADMIN" || rol === "ADMIN"
+  return rol !== "ANUNCIANTE" && rol !== "MEDIO"
 }

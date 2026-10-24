@@ -223,4 +223,40 @@ describe("textoPdf", () => {
       "Bogotá · Nariño © «AMO» 1,15 ×"
     )
   })
+
+  it("conserva los signos de cp1252 que WinAnsi sí dibuja", () => {
+    expect(textoPdf("Café • Bar ™ 20 € ½")).toBe("Café • Bar ™ 20 € ½")
+  })
+
+  it("une los acentos combinados de un texto NFD (pegado desde macOS)", () => {
+    const nfd = "Nariño · Bogotá".normalize("NFD")
+    expect(nfd).not.toBe(nfd.normalize("NFC"))
+    expect(textoPdf(nfd)).toBe("Nariño · Bogotá")
+  })
+
+  it("quita emoji y símbolos fuera de WinAnsi sin dejar espacios dobles", () => {
+    expect(textoPdf("Promo 🔥 Navidad")).toBe("Promo Navidad")
+    expect(textoPdf("★ Destacado ★")).toBe("Destacado")
+    expect(textoPdf("Listo ✓ hoy 🔥 ★ ya")).toBe("Listo hoy ya")
+    expect(textoPdf("Familia 👨‍👩‍👧 feliz 👍🏽")).toBe("Familia feliz")
+    expect(textoPdf("Привет AMO")).toBe("AMO")
+  })
+
+  it("usa la forma de compatibilidad cuando WinAnsi la dibuja", () => {
+    expect(textoPdf("𝐏𝐫𝐨𝐦𝐨 𝐍𝐚𝐯𝐢𝐝𝐚𝐝 🔥")).toBe("Promo Navidad")
+    expect(textoPdf("Oﬁcina Ｎ°１")).toBe("Oficina N°1")
+  })
+
+  it("todo lo que devuelve queda en WinAnsi", () => {
+    const winAnsi = /^[\t\n\r -~ -ÿ€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]*$/u
+    for (const texto of [
+      "Promo 🔥 Navidad",
+      "★✓☆♥ Marca",
+      "Cámara de Comercio",
+      "Ελληνικά · 中文 · עברית",
+      "q́ sin forma compuesta",
+    ]) {
+      expect(textoPdf(texto)).toMatch(winAnsi)
+    }
+  })
 })

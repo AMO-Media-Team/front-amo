@@ -83,6 +83,39 @@ describe("mensajeErrorBd", () => {
     ).toBe(MENSAJES_NEGOCIO.AMO_YA_ACEPTADA)
   })
 
+  it("antepone los rótulos que exigen los criterios de finanzas", () => {
+    expect(
+      mensajeErrorBd({
+        code: "P0001",
+        message: "AMO_SEG_SOCIAL_PENDIENTE",
+        details:
+          "El medio supera el umbral mensual y no tiene la seguridad social aprobada.",
+      })
+    ).toBe(
+      "Seguridad social pendiente: el medio supera el umbral mensual y no tiene la seguridad social aprobada."
+    )
+    expect(
+      mensajeErrorBd({
+        code: "P0001",
+        message: "AMO_DOCUMENTO_SOPORTE_REQUERIDO",
+        details: "Falta el documento soporte o la factura de: Medio Humo X.",
+      })
+    ).toBe(
+      "Documento soporte requerido: falta el documento soporte o la factura de: Medio Humo X."
+    )
+    // Una sigla al inicio se respeta; sin detalle, el catálogo ya trae el rótulo.
+    expect(
+      mensajeErrorBd({
+        code: "P0001",
+        message: "AMO_RESOLUCION_AGOTADA",
+        details: "DIAN: la resolución está vencida.",
+      })
+    ).toBe("Resolución agotada: DIAN: la resolución está vencida.")
+    expect(
+      mensajeErrorBd({ code: "P0001", message: "AMO_RESOLUCION_AGOTADA" })
+    ).toBe(MENSAJES_NEGOCIO.AMO_RESOLUCION_AGOTADA)
+  })
+
   it("los códigos que delatan un defecto no se dan por esperados ni muestran el detalle técnico", () => {
     expect(
       interpretarErrorBd({

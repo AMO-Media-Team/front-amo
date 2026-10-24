@@ -14,15 +14,14 @@ import {
 } from "@playwright/test"
 
 import { generarContrasena } from "../../scripts/bootstrap/contrasena"
+import { codigoTotpNuevo, marcarTotpUsado } from "../../scripts/bootstrap/mfa"
 import {
   asegurarTotp,
-  codigoTotpEstable,
   type CuentaE2E,
   emailDe,
   prepararCuenta,
 } from "../../scripts/bootstrap/provision-e2e"
 import type { ClienteSupabase } from "../../scripts/bootstrap/supabase"
-import { PASO_TOTP_SEGUNDOS } from "../../scripts/bootstrap/totp"
 import { type Credenciales, entorno, ingresar } from "./cuentas"
 import { esperarStreaming } from "./prueba"
 
@@ -31,19 +30,14 @@ export interface CredencialesMfa extends Credenciales {
   secreto: string
 }
 
-const pasoTotp = () => Math.floor(Date.now() / 1000 / PASO_TOTP_SEGUNDOS)
-
-/** Último periodo TOTP gastado con cada secreto (Supabase no acepta repetirlo). */
-const ultimoPaso = new Map<string, number>()
-
-/** Código de un periodo TOTP posterior al último usado con ese secreto. */
+/**
+ * Código de un periodo TOTP posterior al último usado con ese secreto
+ * (Supabase no acepta repetirlo). El registro de periodos gastados es el de
+ * las fábricas (`scripts/bootstrap/mfa.ts`): un ingreso del spec y una
+ * fábrica que entra con la misma cuenta en el mismo proceso no chocan.
+ */
 export async function codigoNuevo(secreto: string): Promise<string> {
-  while (pasoTotp() <= (ultimoPaso.get(secreto) ?? -1)) {
-    await new Promise((resolver) => setTimeout(resolver, 1000))
-  }
-  const codigo = await codigoTotpEstable(secreto)
-  ultimoPaso.set(secreto, pasoTotp())
-  return codigo
+  return codigoTotpNuevo(secreto)
 }
 
 /**
@@ -73,7 +67,7 @@ export async function prepararCuentaMfa(
     undefined
   )
   // Enrolar consume el código del periodo actual.
-  ultimoPaso.set(secreto, pasoTotp())
+  marcarTotpUsado(secreto)
   return { id, email, password, secreto }
 }
 

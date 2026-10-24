@@ -188,19 +188,33 @@ export function carpetaDisputa(
   return ubicacion("evidencias", interno ? [...base, "interno"] : base)
 }
 
-/** `soportes/{liquidacion|factura|pago|documento_soporte|dispersion}/{id}/`. */
+/** Subcarpetas de una liquidación: el soporte del pago y la factura del medio (`storage: soportes insert factura medio`). */
+export type SubcarpetaLiquidacion = "pago" | "factura"
+
+/**
+ * `soportes/{liquidacion|factura|pago|documento_soporte|dispersion}/{id}/`; con subcarpeta (solo
+ * `liquidacion`), `soportes/liquidacion/{id}/{pago|factura}/`.
+ */
 export function carpetaSoporte(
   tipo: TipoSoporte,
-  entidadId: string
+  entidadId: string,
+  subcarpeta?: SubcarpetaLiquidacion
 ): Ubicacion {
-  return ubicacion("soportes", [
+  const segmentos = [
     deLista(
       tipo,
       ["liquidacion", "factura", "pago", "documento_soporte", "dispersion"],
       "tipo"
     ),
     id(entidadId, "id"),
-  ])
+  ]
+  if (subcarpeta) {
+    if (tipo !== "liquidacion") {
+      throw new ErrorRutaStorage("solo una liquidación tiene subcarpetas")
+    }
+    segmentos.push(deLista(subcarpeta, ["pago", "factura"], "subcarpeta"))
+  }
+  return ubicacion("soportes", segmentos)
 }
 
 // ── Nombres de archivo ───────────────────────────────────────────────────────

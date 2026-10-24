@@ -66,6 +66,8 @@ export interface RespaldoConfiguracion {
   parametros: Record<string, CambioParametro>
   /** Versiones legales de prueba creadas (publicadas: solo las borra la limpieza final). */
   terminos: { id: string; tipo: TipoTermino; version: string }[]
+  /** Retenciones, ReteICA y resoluciones de prueba creadas (fase 5; ausente en respaldos anteriores). */
+  finanzas?: CreadoFinanzas
 }
 
 export function respaldoVacio(
@@ -226,6 +228,338 @@ export function planTerminos(
       ? { tipo: "ya-publicada", termino }
       : { tipo: "publicar", termino, id: prueba.id }
   })
+}
+
+// ── Finanzas de prueba (fase 5) ──────────────────────────────────────────────
+
+type Enums = Database["public"]["Enums"]
+export type TipoRetencion = Enums["retencion_tipo"]
+export type TipoResolucion = Enums["documento_electronico_tipo"]
+
+/** Retención de referencia (`retenciones_config`), siempre `pendiente_validacion`. */
+export interface RetencionReferencia {
+  tipo: Extract<TipoRetencion, "RETEFUENTE">
+  concepto: "SERVICIOS"
+  aplicaDeclarante: boolean
+  tarifa: number
+  baseMinimaUvt: number
+}
+
+/**
+ * Retención en la fuente por servicios de referencia (decisión de la fase 5):
+ * 4 % al declarante y 6 % al no declarante, desde 4 UVT. El contador de AMO
+ * la valida o la reemplaza en Configuración › Tributario.
+ */
+export const RETENCIONES_REFERENCIA: readonly RetencionReferencia[] = [
+  {
+    tipo: "RETEFUENTE",
+    concepto: "SERVICIOS",
+    aplicaDeclarante: true,
+    tarifa: 0.04,
+    baseMinimaUvt: 4,
+  },
+  {
+    tipo: "RETEFUENTE",
+    concepto: "SERVICIOS",
+    aplicaDeclarante: false,
+    tarifa: 0.06,
+    baseMinimaUvt: 4,
+  },
+]
+
+/** ReteICA de referencia de una capital (`reteica_municipal`, por mil). */
+export interface ReteicaReferencia {
+  municipio: string
+  nombre: string
+  tarifaPorMil: number
+}
+
+/** Lista corta de capitales con ReteICA de referencia (pendiente de validar por el contador). */
+export const RETEICA_REFERENCIA: readonly ReteicaReferencia[] = [
+  { municipio: "11001", nombre: "Bogotá", tarifaPorMil: 9.66 },
+  { municipio: "05001", nombre: "Medellín", tarifaPorMil: 10 },
+  { municipio: "76001", nombre: "Cali", tarifaPorMil: 10 },
+  { municipio: "08001", nombre: "Barranquilla", tarifaPorMil: 10 },
+]
+
+/** Resolución DIAN «PRUEBA» (sin validez fiscal: el PDF lleva la marca de agua). */
+export interface ResolucionPrueba {
+  tipo: TipoResolucion
+  prefijo: string
+  numeroResolucion: string
+  rangoDesde: number
+  rangoHasta: number
+}
+
+export const RESOLUCIONES_PRUEBA: Readonly<
+  Record<TipoResolucion, ResolucionPrueba>
+> = {
+  DOCUMENTO_SOPORTE: {
+    tipo: "DOCUMENTO_SOPORTE",
+    prefijo: "PDS",
+    numeroResolucion: "PRUEBA-DS",
+    rangoDesde: 1,
+    rangoHasta: 5000,
+  },
+  FACTURA_VENTA: {
+    tipo: "FACTURA_VENTA",
+    prefijo: "PFE",
+    numeroResolucion: "PRUEBA-FE",
+    rangoDesde: 1,
+    rangoHasta: 5000,
+  },
+}
+
+const FECHA_ISO = /^(\d{4})-(\d{2})-(\d{2})$/
+
+function aUtc(fecha: string): number {
+  const partes = FECHA_ISO.exec(fecha)
+  if (!partes) throw new RangeError(`Fecha inválida: ${fecha}`)
+  return Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]))
+}
+
+/** `YYYY-MM-DD` más `dias` (pueden ser negativos), sin zonas horarias. */
+export function sumarDias(fecha: string, dias: number): string {
+  return new Date(aUtc(fecha) + dias * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** 1 de enero del año de `hoy`: la vigencia de las reglas de referencia cubre los periodos del año. */
+export function inicioDeAnio(hoy: string): string {
+  aUtc(hoy)
+  return `${hoy.slice(0, 4)}-01-01`
+}
+
+/** El año siguiente a `hoy` (mismo día): vigencia de las resoluciones de prueba. */
+export function unAnioDespues(hoy: string): string {
+  aUtc(hoy)
+  const siguiente = `${Number(hoy.slice(0, 4)) + 1}${hoy.slice(4)}`
+  // 29 de febrero → 1 de marzo.
+  return FECHA_ISO.test(siguiente) &&
+    new Date(aUtc(siguiente)).toISOString().slice(0, 10) === siguiente
+    ? siguiente
+    : sumarDias(`${Number(hoy.slice(0, 4)) + 1}-02-28`, 1)
+}
+
+/** ¿Se cruzan dos vigencias `[desde, hasta)` (sin `hasta`: abierta)? Como las EXCLUDE de la BD. */
+export function vigenciasSeCruzan(
+  a: { desde: string; hasta: string | null },
+  b: { desde: string; hasta: string | null }
+): boolean {
+  const finA = a.hasta === null ? Number.POSITIVE_INFINITY : aUtc(a.hasta)
+  const finB = b.hasta === null ? Number.POSITIVE_INFINITY : aUtc(b.hasta)
+  return aUtc(a.desde) < finB && aUtc(b.desde) < finA
+}
+
+export interface RetencionExistente {
+  id: string
+  tipo: TipoRetencion
+  aplica_declarante: boolean
+  vigente_desde: string
+  vigente_hasta: string | null
+}
+
+export type PasoRetencion =
+  | { tipo: "crear"; regla: RetencionReferencia; vigenteDesde: string }
+  | { tipo: "existe"; regla: RetencionReferencia; id: string }
+
+/**
+ * Qué hace `--aplicar` con cada retención de referencia: la crea desde el 1 de
+ * enero si no hay otra del mismo tipo y condición de declarante que se cruce
+ * con esa vigencia (la BD admite una sola vigente: dos duplicarían el cálculo).
+ */
+export function planRetenciones(
+  existentes: readonly RetencionExistente[],
+  hoy: string
+): PasoRetencion[] {
+  const vigenteDesde = inicioDeAnio(hoy)
+  return RETENCIONES_REFERENCIA.map((regla) => {
+    const choca = existentes.find(
+      (fila) =>
+        fila.tipo === regla.tipo &&
+        fila.aplica_declarante === regla.aplicaDeclarante &&
+        vigenciasSeCruzan(
+          { desde: fila.vigente_desde, hasta: fila.vigente_hasta },
+          { desde: vigenteDesde, hasta: null }
+        )
+    )
+    return choca
+      ? { tipo: "existe", regla, id: choca.id }
+      : { tipo: "crear", regla, vigenteDesde }
+  })
+}
+
+export interface ReteicaExistente {
+  id: string
+  municipio_codigo: string
+  vigente_desde: string
+  vigente_hasta: string | null
+}
+
+export type PasoReteica =
+  | { tipo: "crear"; regla: ReteicaReferencia; vigenteDesde: string }
+  | { tipo: "existe"; regla: ReteicaReferencia; id: string }
+  /** El municipio no está en el catálogo de esta base (se omite). */
+  | { tipo: "sin-municipio"; regla: ReteicaReferencia }
+
+export function planReteica(
+  existentes: readonly ReteicaExistente[],
+  municipiosDisponibles: ReadonlySet<string>,
+  hoy: string
+): PasoReteica[] {
+  const vigenteDesde = inicioDeAnio(hoy)
+  return RETEICA_REFERENCIA.map((regla) => {
+    if (!municipiosDisponibles.has(regla.municipio)) {
+      return { tipo: "sin-municipio", regla }
+    }
+    const choca = existentes.find(
+      (fila) =>
+        fila.municipio_codigo === regla.municipio &&
+        vigenciasSeCruzan(
+          { desde: fila.vigente_desde, hasta: fila.vigente_hasta },
+          { desde: vigenteDesde, hasta: null }
+        )
+    )
+    return choca
+      ? { tipo: "existe", regla, id: choca.id }
+      : { tipo: "crear", regla, vigenteDesde }
+  })
+}
+
+export interface ResolucionExistente {
+  id: string
+  tipo: TipoResolucion
+  prefijo: string
+  numero_resolucion: string
+  activa: boolean
+  vigente_desde: string
+  vigente_hasta: string | null
+}
+
+export type PasoResolucion =
+  /** Ya hay una activa y vigente hoy: se usa esa (también si es la del cliente). */
+  | {
+      tipo: "vigente"
+      resolucion: ResolucionPrueba
+      id: string
+      prefijo: string
+    }
+  | {
+      tipo: "crear"
+      resolucion: ResolucionPrueba
+      fechaResolucion: string
+      vigenteDesde: string
+      vigenteHasta: string
+    }
+  /** La de prueba existe sin activar y no hay otra activa: se activa. */
+  | { tipo: "activar"; resolucion: ResolucionPrueba; id: string }
+  /** Hay una activa que no está vigente hoy: no se puede activar otra (una activa por tipo). */
+  | { tipo: "activa-vencida"; resolucion: ResolucionPrueba; prefijo: string }
+
+function vigenteEn(fila: ResolucionExistente, hoy: string): boolean {
+  return (
+    fila.vigente_desde <= hoy &&
+    (fila.vigente_hasta === null || fila.vigente_hasta >= hoy)
+  )
+}
+
+/**
+ * Resoluciones «PRUEBA» de documento soporte y de factura: solo hacen falta si
+ * no hay una activa y vigente hoy (la plataforma numera con la activa). La de
+ * prueba, si ya existe, se activa en lugar de crear otra.
+ */
+export function planResoluciones(
+  existentes: readonly ResolucionExistente[],
+  hoy: string
+): PasoResolucion[] {
+  return Object.values(RESOLUCIONES_PRUEBA).map((resolucion) => {
+    const delTipo = existentes.filter((fila) => fila.tipo === resolucion.tipo)
+    const activa = delTipo.find((fila) => fila.activa)
+    if (activa && vigenteEn(activa, hoy)) {
+      return {
+        tipo: "vigente",
+        resolucion,
+        id: activa.id,
+        prefijo: activa.prefijo,
+      }
+    }
+    if (activa) {
+      return { tipo: "activa-vencida", resolucion, prefijo: activa.prefijo }
+    }
+    const prueba = delTipo.find(
+      (fila) =>
+        fila.prefijo === resolucion.prefijo &&
+        fila.numero_resolucion === resolucion.numeroResolucion &&
+        vigenteEn(fila, hoy)
+    )
+    if (prueba) return { tipo: "activar", resolucion, id: prueba.id }
+    return {
+      tipo: "crear",
+      resolucion,
+      fechaResolucion: hoy,
+      vigenteDesde: hoy,
+      vigenteHasta: unAnioDespues(hoy),
+    }
+  })
+}
+
+/** Lo que `--aplicar` creó en las finanzas de prueba (para revertirlo si no se usó). */
+export interface CreadoFinanzas {
+  retenciones: string[]
+  reteica: string[]
+  resoluciones: string[]
+}
+
+export function creadoFinanzasVacio(): CreadoFinanzas {
+  return { retenciones: [], reteica: [], resoluciones: [] }
+}
+
+/** Agrega ids sin repetir (reaplicar no duplica el respaldo). */
+export function registrarCreadoFinanzas(
+  creado: CreadoFinanzas | undefined,
+  tabla: keyof CreadoFinanzas,
+  id: string
+): CreadoFinanzas {
+  const base = creado ?? creadoFinanzasVacio()
+  return base[tabla].includes(id)
+    ? base
+    : { ...base, [tabla]: [...base[tabla], id] }
+}
+
+export type PasoRevertirFinanzas =
+  | { tipo: "quitar"; tabla: keyof CreadoFinanzas; id: string }
+  /** Ya se usó (una liquidación o un documento la referencian): se conserva. */
+  | { tipo: "usada"; tabla: keyof CreadoFinanzas; id: string }
+  /** Ya no existe (alguien la borró): solo se olvida. */
+  | { tipo: "no-existe"; tabla: keyof CreadoFinanzas; id: string }
+
+/** Qué hace `--revertir` con lo creado: quita lo que nadie usó. */
+export function planRevertirFinanzas(
+  creado: CreadoFinanzas | undefined,
+  estado: { existentes: ReadonlySet<string>; usadas: ReadonlySet<string> }
+): PasoRevertirFinanzas[] {
+  if (!creado) return []
+  const tablas: (keyof CreadoFinanzas)[] = [
+    "retenciones",
+    "reteica",
+    "resoluciones",
+  ]
+  return tablas.flatMap((tabla) =>
+    creado[tabla].map((id): PasoRevertirFinanzas => {
+      if (!estado.existentes.has(id)) return { tipo: "no-existe", tabla, id }
+      if (estado.usadas.has(id)) return { tipo: "usada", tabla, id }
+      return { tipo: "quitar", tabla, id }
+    })
+  )
+}
+
+/** Olvida del respaldo un id ya revertido (o que ya no existe). */
+export function olvidarCreadoFinanzas(
+  creado: CreadoFinanzas | undefined,
+  tabla: keyof CreadoFinanzas,
+  id: string
+): CreadoFinanzas {
+  const base = creado ?? creadoFinanzasVacio()
+  return { ...base, [tabla]: base[tabla].filter((otro) => otro !== id) }
 }
 
 // ── Argumentos ───────────────────────────────────────────────────────────────

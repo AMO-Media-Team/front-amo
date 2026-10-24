@@ -80,7 +80,14 @@ export function EsqueletoListadoAsignaciones() {
 }
 
 /** Cabecera de ficha (volver, identidad y lateral) mientras carga. */
-function EsqueletoCabecera({ redonda }: { redonda: boolean }) {
+function EsqueletoCabecera({
+  redonda,
+  conAcciones = false,
+}: {
+  redonda: boolean
+  /** Botones de gestión arriba a la derecha (desde `sm`; en el celular van en el pie). */
+  conAcciones?: boolean
+}) {
   return (
     <div className="flex flex-col gap-4">
       <Esqueleto className="h-7 w-28" />
@@ -103,6 +110,12 @@ function EsqueletoCabecera({ redonda }: { redonda: boolean }) {
           </div>
         </div>
         <div className="flex flex-col gap-2 lg:items-end">
+          {conAcciones ? (
+            <div className="mb-1 flex gap-2 max-sm:hidden">
+              <Esqueleto className="h-9 w-32 rounded-lg" />
+              <Esqueleto className="h-9 w-44 rounded-lg" />
+            </div>
+          ) : null}
           <Esqueleto className="h-3 w-40" />
           <Esqueleto className="h-3 w-32" />
         </div>
@@ -146,7 +159,7 @@ export function EsqueletoFichaAsignacion() {
   return (
     <div role="status" aria-busy="true" className={CONTENEDOR}>
       <span className="sr-only">Cargando la asignación…</span>
-      <EsqueletoCabecera redonda={false} />
+      <EsqueletoCabecera redonda={false} conAcciones />
       <Esqueleto className="h-24 rounded-xl" />
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="flex flex-col gap-4 lg:col-span-3">

@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  type CorteMetrica,
-  describirAlertas,
-  engagement,
-  leerDetalleAlertas,
-  nombresColumnas,
-  ordenarCortes,
-  tieneAlerta,
-} from "./metricas"
-
-const SIN_DETALLE = leerDetalleAlertas(null)
+import { engagement, nombresColumnas, ordenarCortes } from "./metricas"
 
 describe("nombresColumnas", () => {
   it("TikTok habla de espectadores y reproducciones", () => {
@@ -44,58 +34,5 @@ describe("ordenarCortes", () => {
       "PERSONALIZADO@2026-09-01",
       "PERSONALIZADO@2026-09-03",
     ])
-  })
-})
-
-describe("alertas de integridad", () => {
-  it("lee el jsonb tolerando faltantes y textos numéricos", () => {
-    expect(
-      leerDetalleAlertas({
-        mediana_historica: "1200",
-        n_historial: 8,
-        factor: 3,
-        otro: true,
-      })
-    ).toEqual({
-      medianaHistorica: 1_200,
-      nHistorial: 8,
-      factor: 3,
-      seguidores: null,
-      multiplo: null,
-    })
-    expect(leerDetalleAlertas([1, 2])).toEqual(SIN_DETALLE)
-  })
-
-  it("explica cada alerta con sus referencias", () => {
-    const corte: Pick<
-      CorteMetrica,
-      "alertaDesviacion" | "alertaMultiplo" | "detalleAlertas" | "alcance"
-    > = {
-      alertaDesviacion: true,
-      alertaMultiplo: true,
-      alcance: 90_000,
-      detalleAlertas: {
-        medianaHistorica: 12_000,
-        nHistorial: 6,
-        factor: 3,
-        seguidores: 40_000,
-        multiplo: 1.5,
-      },
-    }
-    const [multiplo, desviacion] = describirAlertas(corte)
-    expect(multiplo).toMatch(/supera lo esperable.*1,5 × 40\.000 seguidores/)
-    expect(desviacion).toMatch(/histórico.*12\.000.*3 ×/)
-    expect(tieneAlerta(corte)).toBe(true)
-  })
-
-  it("sin alertas no hay motivos", () => {
-    const corte = {
-      alertaDesviacion: false,
-      alertaMultiplo: false,
-      alcance: 10,
-      detalleAlertas: SIN_DETALLE,
-    }
-    expect(describirAlertas(corte)).toEqual([])
-    expect(tieneAlerta(corte)).toBe(false)
   })
 })

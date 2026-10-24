@@ -39,7 +39,14 @@ describe("presentación de la ejecución", () => {
     expect(
       textoSituacionEvidencia({ tipo: "vencida", reclamoHasta: null })
         ?.descripcion
-    ).toMatch(/escríbele al equipo AMO/)
+    ).toMatch(/revisa en la campaña si aún puedes reclamar/)
+    // Sin canal propio: nunca se le pide «escribirle al equipo AMO» (D74).
+    expect(
+      textoSituacionEvidencia({
+        tipo: "vencida",
+        reclamoHasta: "2026-10-25T17:00:00.000Z",
+      })?.descripcion
+    ).toMatch(/«Reclamar: sí publiqué»/)
   })
 
   it("explica por qué no se puede cargar el corte", () => {
@@ -54,7 +61,7 @@ describe("presentación de la ejecución", () => {
     })
     expect(
       textoSituacionMetricas({ tipo: "aprobada" }, "H24")?.descripcion
-    ).toMatch(/solo el equipo puede corregirlas/)
+    ).toMatch(/solo el equipo puede corregirlas.*«Reportar un problema»/)
     expect(textoSituacionMetricas({ tipo: "cargar" }, "H24")).toBeNull()
   })
 

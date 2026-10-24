@@ -17,6 +17,11 @@ export type EstadoValidacion = Enums["validacion_estado"]
 export interface AsignacionEjecucion {
   id: string
   estado: EstadoAsignacion
+  /**
+   * Con una disputa abierta, el estado que tenía al abrirla (`null` sin
+   * disputa): los cortes de métricas siguen con él (D72).
+   */
+  estadoPrevioDisputa: EstadoAsignacion | null
   plataforma: Plataforma
   /** Clave del formato (`REEL`, `POST_FEED`…); `null` si no se pudo leer. */
   formatoClave: string | null

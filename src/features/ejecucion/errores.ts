@@ -11,9 +11,14 @@ import {
   type Restricciones,
 } from "@/lib/errores-bd"
 
+/*
+ * Nunca se le pide al medio «escribirle al equipo AMO» sin decirle dónde
+ * (D74): el canal de la plataforma son los reclamos y las disputas, y el
+ * correo de soporte solo se ofrece si `soporte.correo` tiene valor.
+ */
 export const MENSAJES_EJECUCION = {
   sinMedio:
-    "Tu usuario no está vinculado a un medio. Escríbele al equipo AMO para revisarlo.",
+    "Tu usuario no está vinculado a un medio: el equipo AMO debe asociarlo antes de que cargues evidencias o métricas.",
   noEncontrada:
     "No encontramos esa campaña entre las tuyas. Actualiza la página e inténtalo de nuevo.",
   capturaAjena:
@@ -92,7 +97,7 @@ const DETALLES: Readonly<Record<string, { mensaje?: string; campo?: string }>> =
     },
     "Venció el plazo para cargar la evidencia.": {
       mensaje:
-        "Venció el plazo para cargar la evidencia. Si crees que es un error, el equipo AMO puede ayudarte.",
+        "Venció el plazo para cargar la evidencia. Si publicaste a tiempo, podrás reclamar desde la campaña cuando aparezca como vencida.",
     },
     "Confirma que la publicación lleva la etiqueta de publicidad.": {
       campo: "etiquetaConfirmada",

@@ -8,12 +8,20 @@
 import type {
   Corte,
   EstadoAsignacion,
+  EstadoDisputa,
   EstadoValidacion,
   Plataforma,
   TipoMedio,
 } from "@/features/operacion/estados"
 
-export type { Corte, EstadoAsignacion, EstadoValidacion, Plataforma, TipoMedio }
+export type {
+  Corte,
+  EstadoAsignacion,
+  EstadoDisputa,
+  EstadoValidacion,
+  Plataforma,
+  TipoMedio,
+}
 
 /** Corte estándar (el personalizado no entra al seguimiento ni al consolidado). */
 export type CorteEstandar = Exclude<Corte, "PERSONALIZADO">
@@ -65,6 +73,18 @@ export interface MedioSeguimiento {
   nivel: number
 }
 
+/**
+ * La disputa más reciente de una asignación (fase 4, ADM-011): basta para
+ * ofrecer «Ver la disputa» o «Reportar un problema»; el hilo vive en su
+ * página.
+ */
+export interface DisputaSeguimiento {
+  id: string
+  estado: EstadoDisputa
+  /** Estado de la asignación al abrirla (`VENCIDA_SIN_PUBLICAR`: un reclamo). */
+  estadoOrigen: EstadoAsignacion
+}
+
 export interface AsignacionSeguimiento {
   id: string
   ofertaId: string
@@ -89,6 +109,11 @@ export interface AsignacionSeguimiento {
   medio: MedioSeguimiento
   cuenta: CuentaSeguimiento
   publicaciones: PublicacionSeguimiento[]
+  /**
+   * Su disputa más reciente. `undefined`: no se consultó (dato de apoyo que
+   * pudo fallar); `null`: nunca tuvo una.
+   */
+  disputa?: DisputaSeguimiento | null
 }
 
 export interface SeguimientoCampana {

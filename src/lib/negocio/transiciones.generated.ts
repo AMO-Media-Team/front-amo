@@ -1,7 +1,7 @@
 /**
  * Máquina de estados de la BD (`private.transiciones_estado`) para la interfaz.
  * GENERADO por `pnpm db:transiciones <entorno>` (scripts/db/transiciones-ts.ts): no editar a mano.
- * 145 transiciones, ordenadas por entidad, origen, destino y actor.
+ * 146 transiciones, ordenadas por entidad, origen, destino y actor.
  */
 import type { TransicionEstado } from "./tipos"
 
@@ -715,7 +715,7 @@ export const TRANSICIONES: readonly TransicionEstado[] = [
     actor: "ADMIN",
     permiso: "facturas.gestionar",
     requiereMotivo: true,
-    descripcion: "Anular sin pagos registrados",
+    descripcion: "Anular con nota crédito",
   },
   {
     entidad: "facturas",
@@ -770,6 +770,15 @@ export const TRANSICIONES: readonly TransicionEstado[] = [
     permiso: null,
     requiereMotivo: false,
     descripcion: "Vencimiento con saldo (cron)",
+  },
+  {
+    entidad: "facturas",
+    desde: "VENCIDA",
+    hacia: "ANULADA",
+    actor: "ADMIN",
+    permiso: "facturas.gestionar",
+    requiereMotivo: true,
+    descripcion: "Anular con nota crédito",
   },
   {
     entidad: "facturas",

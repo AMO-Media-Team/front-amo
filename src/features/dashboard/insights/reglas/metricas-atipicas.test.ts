@@ -11,6 +11,7 @@ const ATIPICAS: MetricasAtipicas = {
   total: 5,
   desviacion: 3,
   multiplo: 2,
+  corregidas: 0,
   masAntiguaAt: haceHoras(72),
 }
 
@@ -70,6 +71,7 @@ describe("reglaMetricasAtipicas", () => {
           total: 1,
           desviacion: 0,
           multiplo: 1,
+          corregidas: 0,
           masAntiguaAt: null,
         },
       })
@@ -90,6 +92,7 @@ describe("reglaMetricasAtipicas", () => {
           total: 2,
           desviacion: 0,
           multiplo: 0,
+          corregidas: 0,
           masAntiguaAt: "no-es-fecha",
         },
       })

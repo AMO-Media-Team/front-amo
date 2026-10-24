@@ -11,6 +11,7 @@ import {
   describirLimpieza,
   diasAtrasParaCorte,
   diasAtrasParaCortes,
+  esBorrable,
   ETAPAS_PAUTA,
   fechaCorteE2E,
   fechaPublicacionE2E,
@@ -567,6 +568,81 @@ describe("planCampanasPauta", () => {
     expect(plan.cancelar).toEqual(["descargada", "aceptada"])
     expect(plan.borrarAsignaciones).toEqual(["aceptada", "rechazo"])
     expect(plan.conservar.map((c) => c.id)).toEqual(["pagada"])
+    expect(plan.cerrarDisputas).toEqual([])
+    expect(plan.cerrarReclamos).toEqual([])
+  })
+
+  it("una disputa con mensajes impide borrar la campaña, como una descarga", () => {
+    const plan = planCampanasPauta([
+      campana("c1", [
+        {
+          ...fila("reclamada", "CANCELADA"),
+          conMensajes: true,
+        },
+      ]),
+    ])
+    expect(plan.borrar).toEqual([])
+    expect(plan.retener).toEqual(["c1"])
+    expect(plan.borrarAsignaciones).toEqual([])
+  })
+
+  it("cierra las disputas abiertas antes de cancelar la campaña (EN_DISPUTA ya no se conserva)", () => {
+    const plan = planCampanasPauta([
+      campana("c1", [
+        {
+          id: "disputada",
+          estado: "EN_DISPUTA",
+          estadoPrevioDisputa: "METRICAS_CARGADAS",
+          conDescarga: true,
+          conMensajes: true,
+          disputaAbiertaId: "d1",
+        },
+        {
+          id: "huerfana",
+          estado: "EN_DISPUTA",
+          estadoPrevioDisputa: "PUBLICADA",
+          conDescarga: true,
+        },
+        fila("verificada", "VERIFICADA", true),
+      ]),
+    ])
+    expect(plan.cerrarDisputas).toEqual([
+      { disputaId: "d1", asignacionId: "disputada" },
+    ])
+    // La que se cierra queda CANCELADA por la resolución: no se cancela aparte.
+    expect(plan.cancelar).toEqual(["verificada"])
+    expect(plan.conservar.map((c) => c.id)).toEqual(["huerfana"])
+    expect(plan.borrarAsignaciones).toEqual([])
+  })
+
+  it("cierra las vencidas reclamables que no se pueden borrar; las demás se borran sin más", () => {
+    const vencida = (
+      id: string,
+      conDescarga: boolean,
+      reclamable: boolean
+    ) => ({
+      ...fila(id, "VENCIDA_SIN_PUBLICAR", conDescarga),
+      reclamable,
+    })
+    const plan = planCampanasPauta([
+      campana("c1", [
+        vencida("con-descarga", true, true),
+        vencida("sin-descarga", false, true),
+        vencida("fuera-de-plazo", true, false),
+      ]),
+    ])
+    expect(plan.cerrarReclamos).toEqual(["con-descarga"])
+    expect(plan.cancelar).toEqual([])
+    expect(plan.borrarAsignaciones).toEqual(["sin-descarga"])
+  })
+})
+
+describe("esBorrable", () => {
+  it("sin descargas ni mensajes de disputa", () => {
+    expect(esBorrable({ conDescarga: false })).toBe(true)
+    expect(esBorrable({ conDescarga: false, conMensajes: false })).toBe(true)
+    expect(esBorrable({ conDescarga: true })).toBe(false)
+    expect(esBorrable({ conDescarga: false, conMensajes: true })).toBe(false)
   })
 })
 

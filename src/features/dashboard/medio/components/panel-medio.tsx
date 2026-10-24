@@ -16,6 +16,7 @@ import {
   cuentasCalidad,
   parametrosCalidad,
 } from "@/features/calidad-medio/queries"
+import { RUTA_GANANCIAS } from "@/features/ganancias/rutas"
 import { RUTA_OFERTAS_MEDIO } from "@/features/marketplace/rutas"
 import {
   enAlta,
@@ -96,12 +97,16 @@ interface PropsPeriodo {
 interface Enlaces {
   /** Pantalla de cada acción, la ficha de la asignación o ninguna. */
   acciones: DestinoAcciones
+  /** Reclamar una vencida desde su disputa (`disputas.abrir`). */
+  reclamar: boolean
   /** «Mis campañas» (`asignaciones.ver_propias`). */
   misCampanas: boolean
   /** «Ofertas» (`ofertas.marketplace`). */
   ofertas: boolean
   /** «Mi medio»: nivel y cuentas (`medios.editar_propio`). */
   miMedio: boolean
+  /** «Ganancias»: pagos y soportes (`liquidaciones.ver_propias`). */
+  ganancias: boolean
 }
 
 function enlacesDe(usuario: UsuarioSesion): Enlaces {
@@ -112,9 +117,11 @@ function enlacesDe(usuario: UsuarioSesion): Enlaces {
       : misCampanas
         ? "ficha"
         : null,
+    reclamar: tieneAlgunPermiso(usuario, ["disputas.abrir"]),
     misCampanas,
     ofertas: tieneAlgunPermiso(usuario, ["ofertas.marketplace"]),
     miMedio: tieneAlgunPermiso(usuario, ["medios.editar_propio"]),
+    ganancias: tieneAlgunPermiso(usuario, ["liquidaciones.ver_propias"]),
   }
 }
 
@@ -135,7 +142,10 @@ function enCurso(enlaces: Enlaces) {
     : Promise.resolve([])
 }
 
-async function BloqueGanancias({ periodo }: PropsPeriodo) {
+async function BloqueGanancias({
+  periodo,
+  enlaces,
+}: PropsPeriodo & { enlaces: Enlaces }) {
   const indice = indicePorKpi(await kpisDelPeriodo(periodo))
   return (
     <HeroGanancias
@@ -144,6 +154,7 @@ async function BloqueGanancias({ periodo }: PropsPeriodo) {
       pendiente={valorKpi(indice, "pendiente_pago")}
       pagado={valorKpi(indice, "pagado_historico")}
       etiquetaComparacion={etiquetaComparacionAmplia(periodo.rango)}
+      enlaceGanancias={enlaces.ganancias ? RUTA_GANANCIAS : null}
     />
   )
 }
@@ -285,6 +296,7 @@ async function BloqueAcciones({
       acciones={visibles}
       ahoraServidor={ahora.getTime()}
       destino={enlaces.acciones}
+      puedeReclamar={enlaces.reclamar}
       restantes={
         filas.length >= CONSULTA_ACCIONES
           ? null
@@ -364,7 +376,7 @@ function IndicadoresMedio({
           className={A_LO_ANCHO}
           esqueleto={<EsqueletoHeroGanancias />}
         >
-          <BloqueGanancias periodo={periodo} />
+          <BloqueGanancias periodo={periodo} enlaces={enlaces} />
         </BloquePanel>
         <BloquePanel
           titulo="Próximas acciones"

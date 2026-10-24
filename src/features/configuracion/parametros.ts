@@ -25,6 +25,8 @@ export interface FichaParametro {
   impacto?: string
   /** Textos para un booleano: [verdadero, falso]. */
   booleano?: readonly [string, string]
+  /** Nombres propios de sus opciones cuando el general no aplica («PLATAFORMA»). */
+  etiquetas?: Readonly<Record<string, string>>
 }
 
 export const GRUPO_OTROS = "otros"
@@ -46,8 +48,9 @@ export const GRUPOS: readonly GrupoParametros[] = [
   {
     id: "disputas",
     seccion: "comercial",
-    titulo: "Disputas",
-    descripcion: "Plazos del medio cuando una asignación vence sin publicar.",
+    titulo: "Disputas y soporte",
+    descripcion:
+      "Plazos del medio cuando una asignación vence sin publicar y el correo de soporte que ven medios y anunciantes.",
   },
   {
     id: "precios",
@@ -218,6 +221,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Plazo para recargar la evidencia",
     defecto: 24,
   },
+  "soporte.correo": {
+    grupo: "disputas",
+    titulo: "Correo de soporte",
+    defecto: "",
+    impacto:
+      "Medios y anunciantes lo ven cuando necesitan escribirle al equipo AMO. Vacío, solo se ofrecen los reclamos y las disputas de la plataforma.",
+  },
   "precios.redondeo": {
     grupo: "precios",
     titulo: "Redondeo del precio",
@@ -278,6 +288,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     grupo: "cortes",
     titulo: "Plazo de carga",
     defecto: 48,
+  },
+  "evidencias.plazo_recarga_horas": {
+    grupo: "cortes",
+    titulo: "Plazo para recargar una evidencia rechazada",
+    defecto: 24,
+    impacto:
+      "Si el equipo AMO rechaza una evidencia con el plazo de publicación vencido o por vencer, el medio tiene al menos estas horas para cargar una nueva.",
   },
   "metricas.factor_desviacion": {
     grupo: "integridad",
@@ -447,6 +464,39 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     titulo: "Seguridad social sin aprobar",
     defecto: "ALERTA",
   },
+  "tributario.numeracion_documento_soporte": {
+    grupo: "tributario",
+    titulo: "Numeración del documento soporte",
+    defecto: "PLATAFORMA",
+    etiquetas: { PLATAFORMA: "La plataforma (resolución registrada aquí)" },
+    impacto:
+      "Un rango de numeración se usa en un solo sistema: con «Proveedor tecnológico», Finanzas registra el número, el CUDS y el PDF que expidió el proveedor.",
+  },
+  "tributario.adquiriente_razon_social": {
+    grupo: "tributario",
+    titulo: "Razón social de AMO",
+    defecto: "",
+    impacto:
+      "Aparece como adquiriente en los documentos soporte que se emitan desde ahora; vacía, el PDF la muestra como pendiente.",
+  },
+  "tributario.adquiriente_nit": {
+    grupo: "tributario",
+    titulo: "NIT de AMO",
+    defecto: "",
+    impacto: "Sin dígito de verificación. Aparece en los documentos soporte.",
+  },
+  "tributario.adquiriente_dv": {
+    grupo: "tributario",
+    titulo: "Dígito de verificación de AMO",
+    defecto: "",
+  },
+  "tributario.adquiriente_direccion": {
+    grupo: "tributario",
+    titulo: "Dirección de AMO",
+    defecto: "",
+    impacto:
+      "Aparece como dirección del adquiriente en los documentos soporte.",
+  },
   "facturacion.iva": {
     grupo: "facturacion",
     titulo: "Tarifa de IVA",
@@ -456,6 +506,13 @@ export const FICHAS: Readonly<Record<string, FichaParametro>> = {
     grupo: "facturacion",
     titulo: "Plazo de pago",
     defecto: 30,
+  },
+  "facturacion.esquema": {
+    grupo: "facturacion",
+    titulo: "Base del IVA",
+    defecto: "COMPRA_REVENTA",
+    impacto:
+      "Aplica a los borradores de factura que se generen desde ahora; cada factura conserva el esquema y el IVA con que se calculó.",
   },
   "liquidaciones.periodicidad": {
     grupo: "liquidaciones",
@@ -481,6 +538,9 @@ export const ETIQUETAS_OPCION: Readonly<Record<string, string>> = {
   PLATAFORMA: "Domicilio de AMO",
   ALERTA: "Solo alertar",
   BLOQUEAR: "Bloquear la aprobación",
+  PROVEEDOR: "Proveedor tecnológico",
+  COMPRA_REVENTA: "Sobre el total (compra y reventa)",
+  MANDATO: "Solo sobre la comisión (mandato)",
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",

@@ -2,9 +2,21 @@
 import { describe, expect, it } from "vitest"
 
 import { ANUNCIANTE_NUEVO_E2E_ID } from "./anunciantes-e2e"
-import { MEDIO_E2E_ID, MEDIO_NUEVO_E2E_ID } from "./medios-e2e"
-import { ANUNCIANTE_E2E_ID, organizacionDe } from "./organizacion"
-import { CUENTAS_E2E, cuentaE2E, emailDe } from "./provision-e2e"
+import {
+  MEDIO_E2E_ID,
+  MEDIO_FACTURA_E2E_ID,
+  MEDIO_FINANZAS_E2E_ID,
+  MEDIO_NUEVO_E2E_ID,
+  MEDIO_SUSPENSION_E2E_ID,
+} from "./medios-e2e"
+import { ANUNCIANTE_E2E_ID, exigeTotp, organizacionDe } from "./organizacion"
+import {
+  CUENTAS_E2E,
+  cuentaE2E,
+  emailDe,
+  VARIABLE_TOTP_ADMIN,
+  variableTotpDe,
+} from "./provision-e2e"
 
 describe("CUENTAS_E2E", () => {
   it("cada cuenta tiene clave, correo y variables propios", () => {
@@ -56,6 +68,29 @@ describe("CUENTAS_E2E", () => {
     })
   })
 
+  it("incluye las cuentas de la fase 4: OPERACIONES con TOTP y el Medio Suspensión E2E", () => {
+    expect(cuentaE2E("OPERACIONES")).toMatchObject({
+      rol: "OPERACIONES",
+      conTotp: true,
+      debeCambiarPassword: false,
+      variableEmail: "E2E_OPERACIONES_EMAIL",
+      variablePassword: "E2E_OPERACIONES_PASSWORD",
+    })
+    expect(organizacionDe(cuentaE2E("OPERACIONES"))).toEqual({
+      anunciante_id: null,
+      medio_id: null,
+    })
+    const suspension = cuentaE2E("MEDIO_SUSPENSION")
+    expect(suspension).toMatchObject({
+      rol: "MEDIO",
+      medioId: MEDIO_SUSPENSION_E2E_ID,
+      nombre: "Medio Suspensión E2E",
+      conTotp: false,
+      variableEmail: "E2E_MEDIO_SUSPENSION_EMAIL",
+    })
+    expect(organizacionDe(suspension).medio_id).toBe(MEDIO_SUSPENSION_E2E_ID)
+  })
+
   it("incluye la cuenta del Anunciante Nuevo E2E, en su propia empresa y sin MFA", () => {
     const nuevo = cuentaE2E("ANUNCIANTE_NUEVO")
     expect(nuevo).toMatchObject({
@@ -79,16 +114,55 @@ describe("CUENTAS_E2E", () => {
     }
   })
 
+  it("incluye las cuentas de la fase 5: Finanzas con TOTP y los dos medios de Finanzas", () => {
+    expect(cuentaE2E("FINANZAS")).toMatchObject({
+      rol: "FINANZAS",
+      nombre: "Finanzas E2E",
+      emailPorDefecto: "e2e.finanzas@amo.test",
+      conTotp: true,
+      debeCambiarPassword: false,
+      variableEmail: "E2E_FINANZAS_EMAIL",
+      variablePassword: "E2E_FINANZAS_PASSWORD",
+    })
+    expect(variableTotpDe(cuentaE2E("FINANZAS"))).toBe(
+      "E2E_FINANZAS_TOTP_SECRET"
+    )
+    expect(organizacionDe(cuentaE2E("FINANZAS"))).toEqual({
+      anunciante_id: null,
+      medio_id: null,
+    })
+    for (const [clave, medioId, nombre] of [
+      ["MEDIO_FINANZAS", MEDIO_FINANZAS_E2E_ID, "Medio Finanzas E2E"],
+      ["MEDIO_FACTURA", MEDIO_FACTURA_E2E_ID, "Medio Factura E2E"],
+    ] as const) {
+      const cuenta = cuentaE2E(clave)
+      expect(cuenta).toMatchObject({
+        rol: "MEDIO",
+        medioId,
+        nombre,
+        conTotp: false,
+        debeCambiarPassword: false,
+      })
+      expect(organizacionDe(cuenta).medio_id).toBe(medioId)
+    }
+  })
+
   it("toda cuenta de rol MEDIO declara su medio (sin él no se puede preparar)", () => {
     for (const cuenta of CUENTAS_E2E.filter((c) => c.rol === "MEDIO")) {
       expect(() => organizacionDe(cuenta)).not.toThrow()
     }
   })
 
-  it("solo los roles internos enrolan TOTP", () => {
+  it("solo los roles internos enrolan TOTP, cada uno con su variable", () => {
     for (const cuenta of CUENTAS_E2E) {
-      expect(cuenta.conTotp).toBe(cuenta.rol === "ADMIN")
+      expect(cuenta.conTotp).toBe(exigeTotp(cuenta.rol))
     }
+    const variables = CUENTAS_E2E.filter((c) => c.conTotp).map(variableTotpDe)
+    expect(new Set(variables).size).toBe(variables.length)
+    expect(variableTotpDe(cuentaE2E("ADMIN"))).toBe(VARIABLE_TOTP_ADMIN)
+    expect(variableTotpDe(cuentaE2E("OPERACIONES"))).toBe(
+      "E2E_OPERACIONES_TOTP_SECRET"
+    )
   })
 })
 

@@ -1,3 +1,5 @@
+import { AccionesSuspensionMedio } from "@/features/suspension-medios/components/acciones-suspension"
+import type { AccionSuspension } from "@/features/suspension-medios/tipos"
 import { BotonCrearUsuario } from "@/features/usuarios/components/hoja-crear-usuario"
 import type { OrganizacionFija } from "@/features/usuarios/tipos"
 
@@ -9,19 +11,31 @@ export interface EdicionMedio {
   categorias: readonly OpcionCategoria[]
 }
 
+/** «Suspender» o «Reactivar» (`medios.suspender`, ADM-002). */
+export interface SuspensionMedio {
+  medio: { id: string; nombre: string }
+  accion: AccionSuspension
+  /** Con `asignaciones.ver`, el diálogo lista las asignaciones en curso. */
+  verAsignaciones: boolean
+  verDisputas: boolean
+}
+
 /**
  * Acciones de gestión de la ficha del medio: «Editar datos» (con
- * `medios.editar`) e «Invitar usuario» (con `usuarios.invitar`; requiere
- * `<ProveedorGestionUsuarios>` arriba). Sin ninguna, no pinta nada.
+ * `medios.editar`), «Invitar usuario» (con `usuarios.invitar`; requiere
+ * `<ProveedorGestionUsuarios>` arriba) y «Suspender»/«Reactivar» (con
+ * `medios.suspender`). Sin ninguna, no pinta nada.
  */
 export function AccionesFichaMedio({
   edicion,
   invitarA,
+  suspension = null,
 }: {
   edicion: EdicionMedio | null
   invitarA: OrganizacionFija | null
+  suspension?: SuspensionMedio | null
 }) {
-  if (!edicion && !invitarA) return null
+  if (!edicion && !invitarA && !suspension) return null
   return (
     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
       {edicion ? (
@@ -37,6 +51,7 @@ export function AccionesFichaMedio({
           variante="outline"
         />
       ) : null}
+      {suspension ? <AccionesSuspensionMedio {...suspension} /> : null}
     </div>
   )
 }

@@ -42,6 +42,7 @@ describe("generarInsights", () => {
           total: 2,
           desviacion: 2,
           multiplo: 0,
+          corregidas: 0,
           masAntiguaAt: new Date(AHORA.getTime() - 72 * 3_600_000),
         },
         accesosSospechosos: [

@@ -3,6 +3,8 @@
  * Son DTO planos (serializables en RSC): solo lo que cada vista muestra,
  * nunca columnas sensibles (rutas de documentos, datos `_privado`).
  */
+import type { MotivoDisputa, ParteDisputa } from "@/features/disputas/tipos"
+
 import type {
   IndicadoresAsignaciones,
   PuntoMensual,
@@ -26,6 +28,7 @@ import type {
   Plataforma,
   TipoMedio,
 } from "./estados"
+import type { CausaCancelacion } from "./gestion-asignacion"
 import type { EventoLineaTiempo, Progreso } from "./linea-tiempo"
 import type { CorteMetrica } from "./metricas"
 
@@ -442,14 +445,21 @@ export interface PublicacionEvidencia {
   retiradaDetectadaAt: string | null
   /** Hay imagen que firmar (la ruta no viaja al navegador). */
   conImagen: boolean
+  /**
+   * `updated_at` tal cual lo entrega la BD: la versión que se ve. Validarla
+   * decide sobre esta versión (`p_enviada_at`) y firmar de nuevo la captura
+   * depende de ella.
+   */
+  actualizadaAt: string
   cortes: CorteMetrica[]
 }
 
 export interface DisputaResumen {
   id: string
   estado: EstadoDisputa
-  motivo: string
-  parte: string
+  motivo: MotivoDisputa
+  /** Quién la abrió. */
+  parte: ParteDisputa
   descripcion: string
   resolucion: string | null
   creadaAt: string
@@ -464,6 +474,14 @@ export interface LiquidacionResumen {
   fechaPago: string | null
 }
 
+/** La factura al anunciante que incluye la asignación (`null` si no está facturada o no se ve). */
+export interface FacturaDeAsignacion {
+  id: string
+  /** Prefijo y consecutivo; `null` en un borrador. */
+  numero: string | null
+  estado: EstadoFactura
+}
+
 export interface AsignacionDetalle {
   id: string
   estado: EstadoAsignacion
@@ -471,6 +489,8 @@ export interface AsignacionDetalle {
   plataforma: Plataforma
   formato: string | null
   slot: number
+  /** Causa de la cancelación (clave) y su etiqueta. */
+  causa: CausaCancelacion | null
   causaCancelacion: string | null
   motivo: string | null
   creadaAt: string
@@ -479,7 +499,8 @@ export interface AsignacionDetalle {
   fechaLimite: string | null
   ventanaInicio: string | null
   ventanaFin: string | null
-  medio: { id: string; nombre: string | null }
+  /** `estado`: para ofrecer la suspensión al cancelar (solo un medio verificado). */
+  medio: { id: string; nombre: string | null; estado: EstadoMedio | null }
   cuenta: { plataforma: Plataforma; handle: string; url: string } | null
   oferta: { id: string; titulo: string | null }
   campana: { id: string; nombre: string | null; marca: string | null }
@@ -496,4 +517,5 @@ export interface AsignacionDetalle {
   cortesRequeridos: Corte[]
   disputas: DisputaResumen[]
   liquidacion: LiquidacionResumen | null
+  factura: FacturaDeAsignacion | null
 }

@@ -1,17 +1,17 @@
+import "server-only"
+
 import {
-  Ban,
   Banknote,
-  CircleSlash,
   FileDown,
+  Flag,
   History,
   ListChecks,
   Scale,
-  TimerOff,
-  TriangleAlert,
 } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import { rutaDisputaMedio } from "@/features/disputas/rutas"
 import {
   condicionesOferta,
   type Condicion,
@@ -21,106 +21,87 @@ import {
   MarcaPlataforma,
 } from "@/features/operacion/components/distintivos"
 import {
-  AvisoFicha,
   CabeceraFicha,
   FechaRelativa,
   ListaDatos,
   TarjetaFicha,
 } from "@/features/operacion/components/ficha"
 import { LineaTiempoAsignacion } from "@/features/operacion/components/linea-tiempo-asignacion"
-import { CAUSAS_CANCELACION } from "@/features/operacion/estados"
 import { contar, formatearHandle } from "@/features/operacion/formato"
+import { requerirUsuario, tieneAlgunPermiso } from "@/lib/auth/dal"
 import { formatearCOP, formatearFecha, formatearFechaHora } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { resumenContenido } from "../contenido"
+import { enlaceDisputa } from "../disputa"
 import { ESTADOS_PARA_MEDIO } from "../estados"
 import { desglosePago, lineaTiempoMedio } from "../presentacion"
+import { correoSoporte, medioSuspendido } from "../queries"
 import { RUTA_MIS_CAMPANAS, rutaContenido } from "../rutas"
 import type {
   AsignacionMedio,
   CondicionesOferta,
   EjecucionAsignacion,
 } from "../tipos"
+import { AvisoAsignacionMedio } from "./aviso-asignacion-medio"
 
 // ── Cabecera ─────────────────────────────────────────────────────────────────
 
-/** Desistida, vencida, cancelada, en disputa o con métricas atrasadas. */
-export function AvisoAsignacionMedio({
+/**
+ * El enlace a la disputa en la cabecera: «Reportar un problema» en los
+ * estados disputables (con `disputas.abrir`), «Ver la disputa» con una
+ * abierta o con el resultado de la última (basta con ver la campaña). El
+ * reclamo de una vencida ya va en «Lo que sigue».
+ */
+function AccionDisputaMedio({
   asignacion,
+  ahora,
+  puedeDisputar,
 }: {
   asignacion: AsignacionMedio
+  ahora: Date
+  puedeDisputar: boolean
 }) {
-  switch (asignacion.estado) {
-    case "CANCELADA":
-      return (
-        <AvisoFicha
-          tono="peligro"
-          icono={Ban}
-          titulo="El equipo AMO canceló tu participación en esta campaña"
-        >
-          {[
-            asignacion.causaCancelacion
-              ? `Causa: ${CAUSAS_CANCELACION[asignacion.causaCancelacion].toLocaleLowerCase("es-CO")}.`
-              : null,
-            asignacion.motivo,
-          ]
-            .filter(Boolean)
-            .join(" ") ||
-            "Si tienes dudas sobre la cancelación, escríbele al equipo AMO."}
-        </AvisoFicha>
-      )
-    case "RECHAZADA":
-      return (
-        <AvisoFicha
-          tono="neutro"
-          icono={CircleSlash}
-          titulo="Desististe de esta campaña"
-        >
-          {asignacion.motivo
-            ? `Tu motivo: «${asignacion.motivo}». El cupo quedó libre para otro medio.`
-            : "El cupo quedó libre para otro medio."}
-        </AvisoFicha>
-      )
-    case "VENCIDA_SIN_PUBLICAR":
-      return (
-        <AvisoFicha
-          tono="peligro"
-          icono={TimerOff}
-          titulo="Venció el plazo para publicar"
-        >
-          {`La fecha límite era el ${formatearFechaHora(asignacion.fechaLimitePublicacion)} y no llegó la evidencia de la publicación. El cupo se liberó.`}
-        </AvisoFicha>
-      )
-    case "EN_DISPUTA":
-      return (
-        <AvisoFicha tono="aviso" icono={Scale} titulo="Hay una disputa abierta">
-          {asignacion.motivo ??
-            "El equipo AMO la está revisando y te avisará la decisión."}
-        </AvisoFicha>
-      )
-    case "PUBLICADA":
-    case "EVIDENCIA_VALIDADA":
-      return asignacion.metricasAtrasadasAt ? (
-        <AvisoFicha
-          tono="aviso"
-          icono={TriangleAlert}
-          titulo="Tienes métricas atrasadas"
-        >
-          Carga los cortes que faltan lo antes posible: sin ellos la campaña no
-          se verifica ni entra a liquidación.
-        </AvisoFicha>
-      ) : null
-    default:
-      return null
+  const enlace = enlaceDisputa({
+    perspectiva: "medio",
+    estado: asignacion.estado,
+    disputa: asignacion.disputa,
+    reclamoHasta: asignacion.reclamoHasta,
+    ahora,
+    puedeAbrir: puedeDisputar,
+  })
+  if (!enlace) return null
+  if (enlace.tipo === "abrir" && asignacion.estado === "VENCIDA_SIN_PUBLICAR") {
+    return null
   }
+  const Icono = enlace.tipo === "abrir" ? Flag : Scale
+  return (
+    <EnlaceBoton
+      href={rutaDisputaMedio(asignacion.id)}
+      variant="outline"
+      size="sm"
+    >
+      <Icono data-icon="inline-start" aria-hidden />
+      {enlace.texto}
+    </EnlaceBoton>
+  )
 }
 
-export function CabeceraAsignacionMedio({
+/**
+ * Cabecera de la ficha (Server Component): identidad de la campaña, su estado
+ * en voz del medio, el enlace a la disputa y los avisos. Lee de apoyo si el
+ * medio está suspendido y el correo de soporte (si fallan, no se muestran).
+ */
+export async function CabeceraAsignacionMedio({
   asignacion,
 }: {
   asignacion: AsignacionMedio
 }) {
+  const usuario = await requerirUsuario()
+  const [suspendido, correo] = await Promise.all([
+    medioSuspendido(usuario.medioId),
+    correoSoporte().catch(() => null),
+  ])
   const { marca, anuncianteNombre } = asignacion
   return (
     <CabeceraFicha
@@ -152,6 +133,13 @@ export function CabeceraAsignacionMedio({
           estado={asignacion.estado}
         />
       }
+      acciones={
+        <AccionDisputaMedio
+          asignacion={asignacion}
+          ahora={new Date()}
+          puedeDisputar={tieneAlgunPermiso(usuario, ["disputas.abrir"])}
+        />
+      }
       lateral={
         asignacion.aceptadaAt ? (
           <span>
@@ -162,7 +150,12 @@ export function CabeceraAsignacionMedio({
           </span>
         ) : null
       }
-      aviso={<AvisoAsignacionMedio asignacion={asignacion} />}
+      aviso={
+        <AvisoAsignacionMedio
+          asignacion={asignacion}
+          contexto={{ correoSoporte: correo, medioSuspendido: suspendido }}
+        />
+      }
     />
   )
 }
