@@ -7,6 +7,7 @@ import {
 import {
   PROYECTO_ALTA_MEDIO,
   PROYECTO_ANUNCIANTE,
+  PROYECTO_CIERRE,
   PROYECTO_ESCRITORIO,
   PROYECTO_FINANZAS,
   PROYECTO_MOVIL,
@@ -16,6 +17,7 @@ import {
   PROYECTO_VALIDACION,
   SPECS_ALTA_MEDIO,
   SPECS_ANUNCIANTE,
+  SPECS_CIERRE,
   SPECS_FINANZAS,
   SPECS_PAUTA_MEDIO,
   SPECS_VALIDACION,
@@ -163,6 +165,26 @@ export default defineConfig({
         PROYECTO_VALIDACION,
       ],
       testMatch: SPECS_FINANZAS,
+      workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        launchOptions: OPCIONES_LANZAMIENTO,
+      },
+    },
+    {
+      // Cierre de la Entrega 3 (gestión asistida, privacidad, reputación, aviso
+      // en vivo), en serie y al final: usan las cuentas y campañas de las fases
+      // anteriores y cuentas desechables propias.
+      name: PROYECTO_CIERRE,
+      dependencies: [
+        PROYECTO_PREPARACION,
+        PROYECTO_PAUTA_MEDIO,
+        PROYECTO_ANUNCIANTE,
+        PROYECTO_VALIDACION,
+        PROYECTO_FINANZAS,
+      ],
+      testMatch: SPECS_CIERRE,
       workers: 1,
       use: {
         ...devices["Desktop Chrome"],

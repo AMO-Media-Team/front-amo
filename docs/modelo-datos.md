@@ -2827,6 +2827,7 @@ Fuente única en `src/lib/auth/permisos.ts` (objeto `PERMISOS` `as const` con `m
 | `disputas.resolver` ★            | disputas        | Resolver o descartar disputas                                                                   | ✔   | ✔   | ✔   |     |     |     |
 | `notificaciones.ver`             | notificaciones  | Ver y marcar las notificaciones propias                                                         | ✔   | ✔   | ✔   | ✔   | ✔   | ✔   |
 | `cuenta.gestionar`               | cuenta          | Gestionar el perfil, la seguridad y las preferencias propias                                    | ✔   | ✔   | ✔   | ✔   | ✔   | ✔   |
+| `privacidad.gestionar` ★        | privacidad      | Atender las solicitudes de titulares de datos (Ley 1581) y ejecutar supresiones                 | ✔   | ✔   |     |     |     |     |
 
 Notas: los permisos `*_propio(s)` solo tienen efecto para perfiles con organización (la RLS además exige `mi_anunciante_id()`/`mi_medio_id()`); SUPERADMIN los tiene por la regla «todos» pero sin organización no ven nada propio. Separación de funciones: generar ≠ aprobar liquidación (§4.2). **Anti-escalada:** asignar un rol, cambiar estado u organización, generar enlaces o cerrar sesiones de otro usuario exige que el actor tenga todos los permisos del rol actual y del rol destino del objetivo (`private.puede_gestionar`, §5.4); solo SUPERADMIN actúa sobre un SUPERADMIN. La dispersión bancaria exige `liquidaciones.registrar_pago` **y** `datos_sensibles.ver`.
 

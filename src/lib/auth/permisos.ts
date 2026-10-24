@@ -522,6 +522,13 @@ export const PERMISOS = {
     esSensible: false,
     rolesPorDefecto: TODOS,
   },
+  "privacidad.gestionar": {
+    modulo: "privacidad",
+    descripcion:
+      "Atender las solicitudes de titulares de datos (Ley 1581) y ejecutar supresiones",
+    esSensible: true,
+    rolesPorDefecto: ADMINISTRACION,
+  },
 } as const satisfies Record<string, DefinicionPermiso>
 
 export type ClavePermiso = keyof typeof PERMISOS

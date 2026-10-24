@@ -21,7 +21,12 @@ export type TipoDocumentoMedio = Enums["documento_medio_tipo"]
 export type TipoDocumentoAnunciante = Enums["documento_anunciante_tipo"]
 export type TipoEvidencia = "publicacion" | "metrica"
 export type TipoSoporte =
-  "liquidacion" | "factura" | "pago" | "documento_soporte" | "dispersion"
+  | "liquidacion"
+  | "factura"
+  | "pago"
+  | "documento_soporte"
+  | "dispersion"
+  | "titular"
 
 /** Carpeta de un bucket donde el servidor permite crear objetos. */
 export interface Ubicacion {
@@ -203,7 +208,14 @@ export function carpetaSoporte(
   const segmentos = [
     deLista(
       tipo,
-      ["liquidacion", "factura", "pago", "documento_soporte", "dispersion"],
+      [
+        "liquidacion",
+        "factura",
+        "pago",
+        "documento_soporte",
+        "dispersion",
+        "titular",
+      ],
       "tipo"
     ),
     id(entidadId, "id"),

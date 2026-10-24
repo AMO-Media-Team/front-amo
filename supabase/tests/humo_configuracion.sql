@@ -108,9 +108,11 @@ begin
   -- evidencias.plazo_recarga_horas y soporte.correo; e3_finanzas suma 6 plantillas (cola.liquidacion_por_aprobar,
   -- cola.liquidaciones_por_aprobar, cola.factura_medio_cargada, liquidacion.factura_requerida, factura.nota_credito,
   -- factura.anulada) y 6 claves
-  -- (facturacion.esquema, tributario.numeracion_documento_soporte y los datos de AMO como adquiriente).
-  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_66', v_n = 66);
-  select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_65', v_n = 65);
+  -- (facturacion.esquema, tributario.numeracion_documento_soporte y los datos de AMO como adquiriente). e3_cierre suma 10
+  -- plantillas de la aplicación (gestión asistida y titular de datos), una de correo por cada una de la aplicación
+  -- (74 de correo, más las 2 de Auth que ya había) y 9 claves (privacidad.* y correo.*).
+  select count(*) into v_n from public.plantillas_notificacion;       r := r || jsonb_build_object('a2_admin_plantillas_150', v_n = 150);
+  select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a2_admin_configuracion_74', v_n = 74);
   select count(*) into v_n from public.terminos_versiones where tipo = 'POLITICA_DATOS' and version like 'humo-%';
                                                                        r := r || jsonb_build_object('a2_admin_ve_borradores', v_n = 2);
   execute 'reset role';
@@ -395,7 +397,7 @@ begin
   r := r || jsonb_build_object('h3_tarifa_ig_reel_f3',
     exists (select 1 from public.tarifas t join public.formatos f on f.id = t.formato_id join public.franjas fr on fr.id = t.franja_id
             where f.plataforma = 'INSTAGRAM' and f.clave = 'REEL' and fr.clave = 'F3' and t.valor_base = 1200000 and t.pendiente_validacion));
-  r := r || jsonb_build_object('h4_config_tipos_validos', (select count(*) from public.configuracion) = 65);
+  r := r || jsonb_build_object('h4_config_tipos_validos', (select count(*) from public.configuracion) = 74);
   r := r || jsonb_build_object('h5_nivel_3_sin_tope', (select tope_anual is null from public.niveles_verificacion where nivel = 3));
 
   perform set_config('humo.resultado', r::text, true);

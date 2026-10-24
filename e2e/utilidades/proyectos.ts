@@ -60,6 +60,14 @@ export const SPECS_VALIDACION =
 export const PROYECTO_FINANZAS = "finanzas"
 export const SPECS_FINANZAS = /[\\/]finanzas-[^\\/]*\.spec\.ts$/
 
+/**
+ * Specs del cierre de la Entrega 3 que escriben (`cierre-*`): gestión asistida,
+ * derechos del titular (con cuentas desechables), reputación y confirmación de
+ * parámetros, y el aviso en vivo. En serie y al final.
+ */
+export const PROYECTO_CIERRE = "cierre"
+export const SPECS_CIERRE = /[\\/]cierre-[^\\/]*\.spec\.ts$/
+
 /** Tablet y móvil emulan pantalla táctil (`hasTouch`). */
 export function esTactil(proyecto: string): boolean {
   return proyecto === PROYECTO_TABLET || proyecto === PROYECTO_MOVIL

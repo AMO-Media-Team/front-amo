@@ -28,6 +28,7 @@ export const RUTAS_MI_MEDIO = {
   pago: ruta("/mi-medio/pago"),
   cuentas: ruta("/mi-medio/cuentas"),
   nivel: ruta("/mi-medio/nivel"),
+  reputacion: ruta("/mi-medio/reputacion"),
 } as const
 
 /**
