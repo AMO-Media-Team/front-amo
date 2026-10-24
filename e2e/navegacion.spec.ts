@@ -77,6 +77,7 @@ test.describe("anunciante", () => {
       "Inicio",
       "Reportes",
       "Mis campañas",
+      "Facturas",
       "Mi empresa",
     ])
   })

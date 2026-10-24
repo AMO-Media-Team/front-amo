@@ -89,8 +89,9 @@ test.describe("liquidaciones · solo lectura", () => {
       page.getByRole("heading", { level: 2, name: "Por liquidar" })
     ).toBeVisible()
     await expect(
+      // La región de la tabla genérica: tabla en escritorio, tarjetas en el teléfono.
       page
-        .getByRole("table", { name: "Medios por liquidar" })
+        .getByRole("region", { name: "Medios por liquidar" })
         .or(page.getByText("No hay nada por liquidar"))
         .first()
     ).toBeVisible()
@@ -151,7 +152,8 @@ test.describe("liquidaciones · solo lectura", () => {
     page,
   }) => {
     await page.goto(rutaVista("pagadas"))
-    const tabla = page.getByRole("table", { name: "Liquidaciones pagadas" })
+    // La región de la tabla genérica: tabla en escritorio, tarjetas en el teléfono.
+    const tabla = page.getByRole("region", { name: "Liquidaciones pagadas" })
     const vacia = page.getByText("Aún no hay liquidaciones pagadas")
     await expect(tabla.or(vacia).first()).toBeVisible()
     test.skip(
