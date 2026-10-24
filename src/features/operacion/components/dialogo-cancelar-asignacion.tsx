@@ -66,7 +66,7 @@ export interface DialogoCancelarAsignacionProps {
   estadoVisto: EstadoAsignacion
   opcion: OpcionCancelar
   /** A dónde va el foco al cerrar (`finalFocus`); `null`: el botón que lo abrió. */
-  focoAlCerrar?: () => HTMLElement | null
+  focoAlCerrar?: () => HTMLElement | null | false
   onCancelada: (hecha: CancelacionHecha) => void
 }
 

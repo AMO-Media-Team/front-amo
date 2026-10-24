@@ -21,7 +21,7 @@ import { rutaDisputaInterna } from "@/features/disputas/rutas"
 import type { MotivoDisputa } from "@/features/disputas/tipos"
 
 import { CAUSAS_CANCELACION, type EstadoAsignacion } from "../estados"
-import { avisoEstadoAsignacion } from "../foco"
+import { avisoEstadoTrasCambio } from "../foco"
 import type { OpcionesGestion } from "../gestion-asignacion"
 import { rutaMedio } from "../rutas"
 import {
@@ -145,7 +145,7 @@ export function AccionesAsignacion({
     if (!abierto) setDialogo(null)
   }
 
-  const focoAlCerrar = () => (cambio.current ? avisoEstadoAsignacion() : null)
+  const focoAlCerrar = () => (cambio.current ? avisoEstadoTrasCambio() : null)
 
   function alCancelar({ causa, medioSuspendido }: CancelacionHecha) {
     cambio.current = true

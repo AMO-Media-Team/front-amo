@@ -53,7 +53,7 @@ export interface DialogoAbrirDisputaProps {
   /** Los que admite el estado (`aperturaPosible` con la parte ADMIN). */
   motivos: readonly MotivoDisputa[]
   /** A dónde va el foco al cerrar (`finalFocus`); `null`: el botón que lo abrió. */
-  focoAlCerrar?: () => HTMLElement | null
+  focoAlCerrar?: () => HTMLElement | null | false
   onAbierta: (disputaId: string) => void
 }
 
