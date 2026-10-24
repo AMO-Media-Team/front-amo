@@ -10,7 +10,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P2   | Anunciante, campañas, asistente de oferta, creativos, moderación                        | ✅     |
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
-| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | 🔧     |
+| P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ✅     |
 | P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
 
 ## Requisitos
@@ -73,16 +73,16 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | INT-003          | Alerta de desviación frente al histórico propio            | P4    | ✅     |
 | INT-004          | Alerta de alcance excesivo frente a seguidores             | P4    | ✅     |
 | INT-006          | Revisión obligatoria y consecuencias                       | P4    | ✅     |
-| LIQ-001          | Generación de liquidaciones                                | P5    | ⬜     |
-| LIQ-002          | Cálculo de retenciones                                     | P5    | ⬜     |
-| LIQ-003          | Aprobación con segregación y anulación                     | P5    | ⬜     |
-| LIQ-004          | Documento soporte electrónico                              | P5    | ⬜     |
-| LIQ-005          | Archivo de dispersión bancaria                             | P5    | ⬜     |
-| LIQ-006          | Registro de pago con soporte                               | P5    | ⬜     |
-| LIQ-007          | Control de seguridad social                                | P5    | ⬜     |
-| LIQ-008          | Facturas al anunciante y cartera                           | P5    | ⬜     |
-| MED-015          | Ganancias                                                  | P5    | ⬜     |
-| ANU-013          | Facturación del anunciante                                 | P5    | ⬜     |
+| LIQ-001          | Generación de liquidaciones                                | P5    | ✅     |
+| LIQ-002          | Cálculo de retenciones                                     | P5    | ✅     |
+| LIQ-003          | Aprobación con segregación y anulación                     | P5    | ✅     |
+| LIQ-004          | Documento soporte electrónico                              | P5    | ✅     |
+| LIQ-005          | Archivo de dispersión bancaria                             | P5    | ✅     |
+| LIQ-006          | Registro de pago con soporte                               | P5    | ✅     |
+| LIQ-007          | Control de seguridad social                                | P5    | ✅     |
+| LIQ-008          | Facturas al anunciante y cartera                           | P5    | ✅     |
+| MED-015          | Ganancias                                                  | P5    | ✅     |
+| ANU-013          | Facturación del anunciante                                 | P5    | ✅     |
 | ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | ⬜     |
 | MED-016          | Indicadores de reputación                                  | P6    | ⬜     |
 | CTA-007          | Derechos del titular de datos                              | P6    | ⬜     |
@@ -224,3 +224,11 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   retenciones del anunciante y esquema del IVA. Suite `humo_e3_finanzas` 60/60 y las 22 suites en verde. Preparación:
   navegación, `/ir`, rutas, contratos, `subirComoServicio`, logo para PDF del servidor, rótulos de error, configuración,
   proyecto E2E `finanzas` y brief `fase-5.md`.
+- 2026-10-24 · **Fase 5 en producción.** Revisión adversarial (5 dimensiones, 34 hallazgos confirmados) corregida en la BD y el
+  front; base local reconstruida desde cero con la migración completa; 22 suites SQL (`humo_e3_finanzas` 67/67), 6.363 Vitest
+  y E2E completo en verde (finanzas 31/31). Respaldo `context/respaldos/produccion-2026-10-24-antes-e3b-*`. Andrés aplicó
+  `20261024024312_e3_finanzas` y la configuración de prueba de finanzas (retención en la fuente 4 % y 6 % desde 4 UVT, ReteICA
+  de Bogotá, Medellín, Cali y Barranquilla, resoluciones «PRUEBA» `PDS` y `PFE`, todo pendiente de validar). Verificado por MCP
+  (solo lectura): 52 migraciones, 66 plantillas, 65 claves, 146 transiciones, funciones nuevas, Storage con lectura solo de lo
+  referenciado, sin escritura de la sesión en facturas ni liquidaciones, configuración de prueba intacta, 3 superadministradores,
+  Vault; advisors sin ERROR (WARN nuevos: las lecturas definer de finanzas, con el permiso comprobado por dentro).

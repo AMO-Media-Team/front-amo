@@ -1476,7 +1476,7 @@ pública) (D74): 59 claves. Plantillas `asignacion.reabierta` y `cola.disputa_me
 ### 3.13 Entrega 3 — fase 5: finanzas (liquidaciones, documento soporte, pagos, facturas y cartera)
 
 Migración **E3b** `20261024024312_e3_finanzas` (RF-LIQ-001…008, MED-015, ANU-013), probada en la base local reconstruida
-desde cero (22 suites; `humo_e3_finanzas.sql` 67/67), con la revisión adversarial de la fase aplicada. Decisiones D75–D88 en
+desde cero (22 suites; `humo_e3_finanzas.sql` 67/67), con la revisión adversarial de la fase aplicada, y aplicada en producción el 2026-10-24. Decisiones D75–D88 en
 §11.1. Las «D» del documento de requisitos que cita esta fase (D16, D23, D35, D37 y D38 del RF: base del IVA, nota crédito, un
 solo sistema numera, mandato, nota de ajuste) se nombran «del RF» para no confundirlas con las de §11.1.
 
