@@ -362,7 +362,7 @@ test.describe("liquidaciones · decisiones de Finanzas", () => {
             .facturaMedio?.numero ?? null
       )
       .toBe("FE-E2E-101")
-    await expect(page.getByText("FE-E2E-101")).toBeVisible()
+    await expect(page.getByText("FE-E2E-101", { exact: true })).toBeVisible()
     await expect(
       page
         .getByRole("region", { name: /^Aprobada/ })
