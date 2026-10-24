@@ -202,6 +202,8 @@ begin
     ('soportes', 'liquidacion/' || l_a || '/s.pdf'), ('soportes', 'liquidacion/' || l_b || '/s.pdf'),
     ('evidencias', 'asignacion/' || x_a || '/publicacion/1-e.webp'), ('evidencias', 'asignacion/' || x_b || '/publicacion/1-e.webp'),
     ('creativos', 'oferta/' || o_a || '/' || cr_a || '/1-p.png'), ('creativos', 'oferta/' || o_b || '/' || cr_b || '/1-p.png');
+  -- E3 (fase 5): el medio lee en `soportes` solo los archivos que su liquidación referencia.
+  update public.liquidaciones set soporte_pago_path = 'liquidacion/' || id || '/s.pdf' where id in (l_a, l_b);
   perform set_config('amo.modo_carga', '', true);
   perform public.registrar_acceso_srv(u_ana, 'rls.ana@amo.test', 'LOGIN_EXITOSO', s_ana, 'aal1', '198.51.100.20'::inet, 'CO', null,
                                       'Bogotá', null, null, 'Navegador/1', 'Chrome', 'macOS', 'ESCRITORIO');

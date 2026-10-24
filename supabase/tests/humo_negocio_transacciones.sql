@@ -1003,7 +1003,8 @@ begin
     and (select factura_id = f1 from public.asignaciones where id = a_a));
   insert into storage.objects (bucket_id, name, metadata)
   select 'soportes', x.ruta, '{"mimetype": "application/pdf", "size": 1000}'
-  from (values ('factura/' || f1 || '/FH1.pdf'), ('pago/' || f1 || '/r1.pdf'), ('pago/' || f1 || '/r3.pdf')) x (ruta);
+  from (values ('factura/' || f1 || '/FH1.pdf'), ('pago/' || f1 || '/r1.pdf'), ('pago/' || f1 || '/r2.pdf'),
+               ('pago/' || f1 || '/r3.pdf')) x (ruta);
   perform set_config('request.jwt.claims', c_srv, true);
   execute 'set local role service_role';
   begin
@@ -1036,7 +1037,7 @@ begin
                                                u_fin, s_fin, 20000);
   v_ok := (select estado = 'PAGADA_PARCIAL' and pagado = 420000 and saldo = v_total - 420000 from public.facturas where id = f1);
   begin
-    perform public.registrar_pago_anunciante_srv(f1, private.hoy(), v_total, 'PSE', 'R2', 'pago/' || f1 || '/r1.pdf', u_fin, s_fin);
+    perform public.registrar_pago_anunciante_srv(f1, private.hoy(), v_total, 'PSE', 'R2', 'pago/' || f1 || '/r2.pdf', u_fin, s_fin);
     r := r || jsonb_build_object('j4_pago_no_supera_saldo', 'NO FALLÓ');
   exception when others then
     r := r || jsonb_build_object('j4_pago_no_supera_saldo', sqlerrm = 'AMO_TRANSICION_INVALIDA');

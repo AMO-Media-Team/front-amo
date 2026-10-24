@@ -4843,6 +4843,14 @@ export type Database = {
         }
         Returns: string
       }
+      reevaluar_alerta_seg_social_srv: {
+        Args: {
+          p_actor_id: string
+          p_liquidacion_id: string
+          p_session_id: string
+        }
+        Returns: boolean
+      }
       registrar_acceso_srv: {
         Args: {
           p_aal: string

@@ -595,6 +595,29 @@ begin
   return v_liq;
 end $function$;
 
+-- LIQ-007: guarda la alerta de seguridad social vigente de un borrador. Con la política BLOQUEAR la aprobación falla y
+-- revierte su propia actualización: la interfaz llama aquí antes de aprobar para que la alerta guardada sea la real.
+create function public.reevaluar_alerta_seg_social_srv(p_liquidacion_id uuid, p_actor_id uuid, p_session_id uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_tipo public.rol_tipo; l public.liquidaciones; v_alerta boolean;
+begin
+  v_tipo := private.validar_actor(p_actor_id, 'liquidaciones.aprobar', p_session_id);
+  if v_tipo is distinct from 'ADMIN' then
+    raise exception using errcode = 'P0001', message = 'AMO_NO_AUTORIZADO', detail = 'No tienes permiso para esta acción.';
+  end if;
+  select * into l from public.liquidaciones x where x.id = p_liquidacion_id for update;
+  if l.id is null or l.estado <> 'BORRADOR' then
+    return l.alerta_seg_social;
+  end if;
+  v_alerta := private.seg_social_pendiente(l.medio_id, l.periodo_fin, l.monto_medio, l.id);
+  if v_alerta is distinct from l.alerta_seg_social then
+    update public.liquidaciones x set alerta_seg_social = v_alerta where x.id = l.id;
+  end if;
+  return v_alerta;
+end $$;
+revoke all on function public.reevaluar_alerta_seg_social_srv(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.reevaluar_alerta_seg_social_srv(uuid, uuid, uuid) to service_role;
+
 -- LIQ-001: corte de un periodo para todos los medios con verificadas por liquidar. Cada medio va en su propia
 -- subtransacción: un error (traslape, parámetros) queda en su fila y no detiene a los demás.
 create function public.generar_liquidaciones_corte_srv(p_periodo_inicio date, p_periodo_fin date, p_actor_id uuid,
@@ -999,7 +1022,7 @@ language sql stable security definer set search_path = '' as $$
                      cross join jsonb_array_elements(coalesce(am.retenciones_aplicadas, '[]')) e
                      where a.liquidacion_id = l.id) ret on true
   where (select private.acceso_valido()) and (select private.tiene_permiso('liquidaciones.ver_propias'))
-    and l.medio_id = (select private.mi_medio_id()) and l.estado <> 'ANULADA'
+    and l.medio_id = (select private.mi_medio_id()) and (l.estado <> 'ANULADA' or p_id is not null)
     and (p_id is null or l.id = p_id) and (p_antes_id is null or l.id < p_antes_id)
   order by l.id desc
   limit least(greatest(coalesce(p_limite, 24), 1), 100)
@@ -1038,7 +1061,7 @@ create function public.resumen_ganancias_medio(out ganado_mes numeric, out por_l
   out asignaciones_por_liquidar integer, out por_pagar numeric, out liquidaciones_por_pagar integer,
   out pagado_historico numeric, out retenciones_historicas numeric, out proximo_pago_estimado date,
   out periodicidad text, out dias_pago integer, out comision_visible boolean, out requiere_documento_soporte boolean,
-  out seg_social_pendiente boolean)
+  out seg_social_pendiente boolean, out seg_social_bloquea boolean)
 language plpgsql stable security definer set search_path = '' as $$
 declare v_me uuid := private.mi_medio_id(); v_hoy date := private.hoy();
 begin
@@ -1065,6 +1088,7 @@ begin
   from public.medios_privado mp where mp.medio_id = v_me;
   requiere_documento_soporte := coalesce(requiere_documento_soporte, true);
   seg_social_pendiente := private.seg_social_pendiente(v_me, v_hoy, por_liquidar);
+  seg_social_bloquea := private.config_texto('tributario.politica_seg_social') = 'BLOQUEAR';
 end $$;
 revoke all on function public.resumen_ganancias_medio() from public, anon;
 grant execute on function public.resumen_ganancias_medio() to authenticated;
@@ -1257,7 +1281,7 @@ begin
   insert into public.facturas (anunciante_id, campana_id, periodo_desde, periodo_hasta, esquema, porcentaje_iva,
                                subtotal, iva, valor_terceros)
   values (p_anunciante_id, p_campana_id, least(p_periodo_desde, v_primera), p_periodo_hasta, v_esquema, v_pct, v_base,
-          round(v_base * v_pct, 2), case v_esquema when 'MANDATO' then v_medio else 0 end)
+          round(v_base * v_pct), case v_esquema when 'MANDATO' then v_medio else 0 end)
   returning id into v_id;
   update public.asignaciones a set factura_id = v_id where a.id = any (v_ids);
   return v_id;
@@ -1354,6 +1378,11 @@ begin
   end if;
   perform set_config('lock_timeout', '3s', true);
   select * into f from public.facturas x where x.id = p_factura_id for update;
+  if f.estado = 'PAGADA' then
+    raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+      detail = 'La factura ya está pagada: por ahora la devolución o el saldo a favor se gestionan fuera de la plataforma.',
+      hint = 'factura_pagada';
+  end if;
   if f.id is null or f.estado not in ('EMITIDA', 'PAGADA_PARCIAL', 'VENCIDA') then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = 'La nota crédito aplica a una factura expedida con saldo.';
@@ -1384,6 +1413,14 @@ begin
              where not exists (select 1 from public.asignaciones a where a.id = x.id and a.factura_id = f.id)) then
     raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
       detail = 'Alguna asignación indicada no pertenece a la factura.';
+  end if;
+  -- D88: solo se liberan las canceladas (no se vuelven a facturar); liberar una que sigue facturable con una nota
+  -- parcial la cobraría dos veces.
+  if exists (select 1 from unnest(coalesce(p_asignacion_ids, '{}')) x (id)
+             join public.asignaciones a on a.id = x.id where a.estado <> 'CANCELADA') then
+    raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
+      detail = 'Solo se liberan las publicaciones canceladas: las demás siguen facturadas en esta factura.',
+      hint = 'solo_canceladas';
   end if;
   if not private.soporte_cargado(p_archivo_path, 'factura/' || f.id::text || '/') then
     raise exception using errcode = 'P0001', message = 'AMO_CONFIG_INVALIDA',
@@ -1432,6 +1469,9 @@ begin
   end if;
   perform set_config('lock_timeout', '3s', true);
   select * into f from public.facturas x where x.id = p_factura_id for update;
+  -- Idempotente: reintentar con el mismo soporte (cada subida tiene su propio uuid) devuelve el pago ya registrado.
+  select g.id into v_id from public.pagos_anunciante g where g.factura_id = p_factura_id and g.soporte_path = p_soporte_path;
+  if v_id is not null then return v_id; end if;
   if f.id is null or f.estado not in ('EMITIDA', 'PAGADA_PARCIAL', 'VENCIDA') then
     raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
       detail = 'La factura no admite pagos en su estado actual.';
@@ -1456,11 +1496,14 @@ begin
   update public.facturas x set pagado = x.pagado + p_monto + v_ret where x.id = f.id returning * into f;
   if f.saldo = 0 then
     perform private.aplicar_transicion('facturas', f.id, 'PAGADA', 'SISTEMA', null);
-  elsif f.estado in ('EMITIDA', 'VENCIDA') then
+  elsif f.estado = 'EMITIDA' then
+    -- Una VENCIDA con abono sigue VENCIDA (con el saldo rebajado): el cron la devolvería y se volvería a avisar.
     perform private.aplicar_transicion('facturas', f.id, 'PAGADA_PARCIAL', 'SISTEMA', null);
   end if;
   return v_id;
 end $$;
+create unique index pagos_anunciante_soporte_key on public.pagos_anunciante (factura_id, soporte_path)
+  where soporte_path is not null;
 revoke all on function public.registrar_pago_anunciante_srv(uuid, date, numeric, text, text, text, uuid, uuid, numeric)
   from public, anon, authenticated;
 grant execute on function public.registrar_pago_anunciante_srv(uuid, date, numeric, text, text, text, uuid, uuid, numeric)
@@ -1825,6 +1868,14 @@ begin
       end if;
     when v_clave in ('liquidaciones:BORRADOR→ANULADA', 'liquidaciones:APROBADA→ANULADA',
                      'documentos_soporte:EMITIDO→ANULADO') then
+      -- El pago ya hecho necesita su soporte fiscal: se corrige con nota de ajuste, sin anularlo.
+      if p_entidad = 'documentos_soporte'
+         and (select l.estado from public.documentos_soporte d join public.liquidaciones l on l.id = d.liquidacion_id
+              where d.id = p_id for update of l) = 'PAGADA' then
+        raise exception using errcode = 'P0001', message = 'AMO_TRANSICION_INVALIDA',
+          detail = 'La liquidación ya se pagó: su documento soporte no se anula; corrígelo con una nota de ajuste.',
+          hint = 'liquidacion_pagada';
+      end if;
       -- D38 del RF: un documento soporte transmitido (con CUDS) se corrige con nota de ajuste antes de anularlo.
       if exists (select 1 from public.documentos_soporte d
                  where (case p_entidad when 'liquidaciones' then d.liquidacion_id else d.id end) = p_id
@@ -2050,6 +2101,39 @@ begin
   return r;
 end $function$;
 
+-- Medio y anunciante leen en `soportes` solo los archivos que su fila referencia (nada suelto: un PDF equivocado que
+-- se reemplazó, el archivo para el proveedor), y el medio, su carpeta de factura mientras la liquidación la espera.
+create function private.soporte_visible_para_mi(p_ruta text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select case private.seg(p_ruta, 1)
+    when 'liquidacion' then (select private.tiene_permiso('liquidaciones.ver_propias')) and exists (
+      select 1 from public.liquidaciones l
+      where l.id = private.seg_uuid(p_ruta, 2) and l.medio_id = (select private.mi_medio_id())
+        and (p_ruta in (l.soporte_pago_path, l.factura_medio_path)
+             or (private.seg(p_ruta, 3) = 'factura' and not l.requiere_documento_soporte
+                 and l.estado in ('BORRADOR', 'APROBADA'))))
+    when 'documento_soporte' then (select private.tiene_permiso('liquidaciones.ver_propias')) and exists (
+      select 1 from public.documentos_soporte d join public.liquidaciones l on l.id = d.liquidacion_id
+      where d.id = private.seg_uuid(p_ruta, 2) and l.medio_id = (select private.mi_medio_id())
+        and p_ruta in (d.archivo_path, d.nota_ajuste_path))
+    when 'factura' then (select private.tiene_permiso('facturas.ver_propias')) and exists (
+      select 1 from public.facturas f
+      where f.id = private.seg_uuid(p_ruta, 2) and f.anunciante_id = (select private.mi_anunciante_id())
+        and f.consecutivo is not null
+        and (p_ruta = f.archivo_path
+             or exists (select 1 from public.notas_credito n where n.factura_id = f.id and n.archivo_path = p_ruta)))
+    when 'pago' then (select private.tiene_permiso('facturas.ver_propias')) and exists (
+      select 1 from public.pagos_anunciante g join public.facturas f on f.id = g.factura_id
+      where g.factura_id = private.seg_uuid(p_ruta, 2) and f.anunciante_id = (select private.mi_anunciante_id())
+        and f.consecutivo is not null and g.soporte_path = p_ruta)
+    else false end
+$$;
+revoke all on function private.soporte_visible_para_mi(text) from public, anon, service_role;
+grant execute on function private.soporte_visible_para_mi(text) to authenticated;
+drop policy "storage: soportes select dueño" on storage.objects;
+create policy "storage: soportes select dueño" on storage.objects for select to authenticated
+  using (bucket_id = 'soportes' and private.soporte_visible_para_mi(name));
+
 create or replace function private.lista_blanca_authenticated() returns text[]
 language sql immutable set search_path = '' as $$
   select array['ahora', 'hoy', 'inicio_dia', 'normalizar_texto', 'uuid_v7', 'enmascarar', 'header',
@@ -2073,5 +2157,5 @@ language sql immutable set search_path = '' as $$
                -- E3 fase 4
                'alertas_metricas_por_medio', 'puedo_subir_metrica_en_disputa',
                -- E3 fase 5
-               'puedo_subir_factura_medio']::text[]
+               'puedo_subir_factura_medio', 'soporte_visible_para_mi']::text[]
 $$;

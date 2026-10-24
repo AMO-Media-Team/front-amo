@@ -80,7 +80,7 @@ language sql as $$ select case when coalesce(p_cond, false) then 'true'::jsonb e
 do $humo$
 declare
   r jsonb := '{}';
-  v_e jsonb; v_j jsonb; v_n bigint; v_m bigint; v_txt text; v_num numeric; v_ok boolean;
+  v_e jsonb; v_j jsonb; v_k jsonb; v_n bigint; v_m bigint; v_txt text; v_num numeric; v_ok boolean;
   -- usuarios y sesiones
   u_adm constant uuid := '00000000-0000-4000-a000-0000000f5001';   -- ADMIN (genera)
   u_fin constant uuid := '00000000-0000-4000-a000-0000000f5002';   -- FINANZAS (aprueba, emite, dispersa, paga, factura)
@@ -109,6 +109,7 @@ declare
   a_s2 constant uuid := '00000000-0000-4000-9000-0000000f5302';
   a_f1 constant uuid := '00000000-0000-4000-9000-0000000f5303';
   a_x1 constant uuid := '00000000-0000-4000-9000-0000000f5304';
+  a_w constant uuid := '00000000-0000-4000-9000-0000000f5305';     -- verificada que entra después (facturas f2…f4)
   res_ds constant uuid := '00000000-0000-4000-8000-0000000f5401';
   res_fv constant uuid := '00000000-0000-4000-8000-0000000f5402';
   disp constant uuid := '00000000-0000-4000-8000-0000000f5501';
@@ -290,6 +291,12 @@ begin
   r := r || jsonb_build_object('b5_traslape', pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA'));
 
   -- ── (c) Aprobación: seguridad social reevaluada y segregación (LIQ-003, LIQ-007) ────────────────────────────────
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.liquidaciones set alerta_seg_social = false where id = liq_s;
+  perform set_config('amo.modo_carga', '', true);
+  v_j := pg_temp.srv(format('select public.reevaluar_alerta_seg_social_srv(%L, %L, %L)', liq_s, u_fin, s_fin));
+  r := r || jsonb_build_object('c0_reevalua_y_guarda_la_alerta',
+    pg_temp.ok(v_j = 'true'::jsonb and (select alerta_seg_social from public.liquidaciones where id = liq_s), v_j));
   update public.configuracion set valor = '"BLOQUEAR"' where clave = 'tributario.politica_seg_social';
   v_e := pg_temp.srv_falla(format('select public.transicionar_srv(''liquidaciones'', %L, ''APROBADA'', %L, %L)', liq_s, u_fin, s_fin));
   r := r || jsonb_build_object('c1_seguridad_social_bloquea', pg_temp.es(v_e, 'AMO_SEG_SOCIAL_PENDIENTE'));
@@ -472,6 +479,9 @@ begin
                              'liquidacion/' || liq_f || '/pago/f.pdf', u_fin, s_fin));
   r := r || jsonb_build_object('g2_pago_del_medio_que_factura',
     pg_temp.ok((select estado = 'PAGADA' from public.liquidaciones where id = liq_f), null));
+  v_e := pg_temp.srv_falla(format('select public.transicionar_srv(''documentos_soporte'', %L, ''ANULADO'', %L, %L, ''Error en el titular'')',
+                                  ds2, u_fin, s_fin));
+  r := r || jsonb_build_object('g4_pagada_no_anula_su_documento', pg_temp.es(v_e, 'AMO_TRANSICION_INVALIDA', null, 'liquidacion_pagada'));
   v_e := pg_temp.srv_falla(format('update public.liquidaciones set referencia_pago = ''OTRA'' where id = %L', liq_x));
   v_j := pg_temp.falla(c_fin, 'authenticated', format('update public.liquidaciones set referencia_pago = ''OTRA'' where id = %L', liq_x));
   r := r || jsonb_build_object('g3_la_liquidacion_solo_la_cambia_la_plataforma',
@@ -494,12 +504,17 @@ begin
     pg_temp.ok((v_j ->> 'pagado_historico')::numeric = 7442720 and (v_j ->> 'retenciones_historicas')::numeric = 557280
                and (v_j ->> 'por_pagar')::numeric = 0 and (v_j ->> 'por_liquidar')::numeric = 0
                and (v_j ->> 'requiere_documento_soporte')::boolean and not (v_j ->> 'comision_visible')::boolean
-               and v_j ->> 'periodicidad' = 'QUINCENAL' and (v_j ->> 'dias_pago')::integer = 8, v_j));
+               and v_j ->> 'periodicidad' = 'QUINCENAL' and (v_j ->> 'dias_pago')::integer = 8
+               and not (v_j ->> 'seg_social_bloquea')::boolean, v_j));
   v_e := pg_temp.falla(c_fin, 'authenticated', 'select * from public.resumen_ganancias_medio()');
   r := r || jsonb_build_object('h4_resumen_solo_del_medio', pg_temp.es(v_e, 'AMO_NO_AUTORIZADO'));
   v_n := pg_temp.como(c_ms, 'authenticated', 'select (select count(*) from public.liquidaciones) + (select count(*) from public.documentos_soporte)');
   v_ok := pg_temp.como(c_ms, 'authenticated', format('select private.soy_dueno_soporte(''documento_soporte'', %L)', ds2))::boolean;
   r := r || jsonb_build_object('h5_sin_tablas_pero_con_sus_archivos', pg_temp.ok(v_n = 0 and v_ok, jsonb_build_array(v_n, v_ok)));
+  v_n := pg_temp.como(c_ms, 'authenticated', format(
+    'select count(*) from storage.objects where bucket_id = ''soportes'' and name in (%L, %L)',
+    'liquidacion/' || liq_s || '/pago/s.pdf', 'documento_soporte/' || ds1 || '/DSF1.json'));
+  r := r || jsonb_build_object('h6_storage_solo_lo_referenciado', pg_temp.ok(v_n = 1, to_jsonb(v_n)));
   update public.configuracion set valor = 'true' where clave = 'comision.visible_para_medio';
 
   -- ── (i) Facturas al anunciante (LIQ-008, ANU-013, D16/D37 del RF) ───────────────────────────────────────────────
@@ -538,6 +553,11 @@ begin
                and v_n = 1
                and exists (select 1 from public.notificaciones where usuario_id = u_an and tipo = 'factura.emitida'
                            and entidad_id = f1::text), to_jsonb(v_n)));
+  perform pg_temp.subir('factura/' || f1 || '/suelto.pdf');
+  v_n := pg_temp.como(c_an, 'authenticated', format(
+    'select count(*) from storage.objects where bucket_id = ''soportes'' and name in (%L, %L)',
+    'factura/' || f1 || '/FVF1.pdf', 'factura/' || f1 || '/suelto.pdf'));
+  r := r || jsonb_build_object('i5b_anunciante_solo_su_pdf_registrado', pg_temp.ok(v_n = 1, to_jsonb(v_n)));
   v_e := pg_temp.srv_falla(format('select public.transicionar_srv(''facturas'', %L, ''ANULADA'', %L, %L, ''Error de valor'')', f1, u_fin, s_fin));
   begin
     perform private.aplicar_transicion('facturas', f1, 'ANULADA', 'ADMIN', u_fin, 'Sin nota crédito');
@@ -559,7 +579,14 @@ begin
                and (select estado = 'PAGADA_PARCIAL' and pagado = 10280000 and saldo = 4000000 from public.facturas where id = f1)
                and (select monto = 10000000 and valor_retenciones = 280000 from public.pagos_anunciante where factura_id = f1),
                jsonb_build_array(v_e, v_j)));
-  -- Nota crédito parcial: rebaja el saldo y libera la asignación indicada.
+  v_j := pg_temp.srv(format(v_txt, f1, v_hoy, 10000000, 'pago/' || f1 || '/p1.pdf', u_fin, s_fin, 280000));
+  r := r || jsonb_build_object('i7b_reintento_del_pago_no_duplica',
+    pg_temp.ok((select count(*) = 1 from public.pagos_anunciante where factura_id = f1)
+               and (select pagado = 10280000 from public.facturas where id = f1), v_j));
+  -- Nota crédito parcial: rebaja el saldo y libera solo una asignación cancelada (una disputa la canceló).
+  perform set_config('amo.modo_carga', 'on', true);
+  update public.asignaciones set estado = 'CANCELADA', causa_cancelacion = 'ADMINISTRATIVA', cancelada_at = now() where id = a_x1;
+  perform set_config('amo.modo_carga', '', true);
   perform pg_temp.subir('factura/' || f1 || '/NC-1.pdf');
   v_txt := 'select public.registrar_nota_credito_srv(%L, %L, %L, %L, %s, %L, %L, %L::uuid[], %L, %L)';
   v_e := pg_temp.srv_falla(format(v_txt, f1, 'NC-1', repeat('f', 96), v_hoy, 1000000, 'Ajuste por permanencia incompleta',
@@ -568,14 +595,28 @@ begin
                              'factura/' || f1 || '/NC-1.pdf', array[a_x1], u_fin, s_fin));
   v_j := pg_temp.srv_falla(format(v_txt, f1, 'NC-1', repeat('a', 96), v_hoy, 100, 'Otra nota con el mismo número',
                                   'factura/' || f1 || '/NC-1.pdf', null, u_fin, s_fin));
+  v_k := pg_temp.srv_falla(format(v_txt, f1, 'NC-1B', repeat('b', 96), v_hoy, 100, 'Descuento comercial acordado',
+                                  'factura/' || f1 || '/NC-1.pdf', array[a_s1], u_fin, s_fin));
   r := r || jsonb_build_object('i8_nota_credito_parcial',
     pg_temp.ok(v_e ->> 'd' = 'Alguna asignación indicada no pertenece a la factura.'
                and v_j ->> 'd' = 'Ese número o ese CUDE ya están registrados en otra nota crédito.'
+               and v_k ->> 'h' = 'solo_canceladas'
                and (select estado = 'PAGADA_PARCIAL' and valor_notas_credito = 1000000 and saldo = 3000000 from public.facturas where id = f1)
                and (select factura_id is null from public.asignaciones where id = a_x1)
                and (select not anula_factura and numero = 'NC-1' from public.notas_credito where factura_id = f1)
                and exists (select 1 from public.notificaciones where usuario_id = u_an and tipo = 'factura.nota_credito'),
-               jsonb_build_array(v_e, v_j)));
+               jsonb_build_array(v_e, v_j, v_k)));
+  -- Una verificada nueva para las facturas siguientes (la cancelada ya no se factura).
+  perform set_config('amo.modo_carga', 'on', true);
+  insert into public.asignaciones (id, oferta_id, campana_id, anunciante_id, medio_id, cuenta_social_id, plataforma, slot, estado,
+    aceptada_at, contenido_descargado_at, publicada_at, evidencia_validada_at, metricas_cargadas_at, verificada_at,
+    fecha_limite_publicacion, publicaciones, monto_bruto, tarifa_id, franja_id, franja_clave, seguidores_al_aceptar)
+  values (a_w, o_v, c_v, an_v, me_x, cu_x, 'INSTAGRAM', 2, 'VERIFICADA', now() - interval '14 days', now() - interval '13 days',
+          now() - interval '12 days', now() - interval '11 days', now() - interval '10 days', now() - interval '1 day',
+          now() - interval '5 days', 1, 1000000, v_tarifa, fr1, 'F1', 45000);
+  insert into public.asignacion_montos (asignacion_id, medio_id, monto_bruto, porcentaje_comision, comision_origen, monto_comision)
+  values (a_w, me_x, 1000000, 0.2, 'GLOBAL', 200000);
+  perform set_config('amo.modo_carga', '', true);
   -- Nota crédito total sobre una factura sin pagos: queda ANULADA y libera sus asignaciones.
   f2 := pg_temp.srv(format('select public.generar_factura_srv(%L, null, %L, %L, %L, %L)', an_v, v_hoy - 30, v_hoy, u_fin, s_fin)) #>> '{}';
   perform pg_temp.subir('factura/' || f2 || '/FVF2.pdf');
@@ -586,7 +627,7 @@ begin
                              'factura/' || f2 || '/NC-2.pdf', null, u_fin, s_fin));
   r := r || jsonb_build_object('i9_nota_credito_total_anula',
     pg_temp.ok((select estado = 'ANULADA' and saldo = 0 and anulada_at is not null from public.facturas where id = f2)
-               and (select factura_id is null from public.asignaciones where id = a_x1)
+               and (select factura_id is null from public.asignaciones where id = a_w)
                and (select anula_factura from public.notas_credito where factura_id = f2)
                and exists (select 1 from public.notificaciones where usuario_id = u_an and tipo = 'factura.anulada'
                            and entidad_id = f2::text), null));
@@ -595,7 +636,7 @@ begin
   perform pg_temp.srv(format('select public.transicionar_srv(''facturas'', %L, ''ANULADA'', %L, %L, ''Borrador con error'')', f3, u_fin, s_fin));
   r := r || jsonb_build_object('i10_borrador_anulado_libera',
     pg_temp.ok((select estado = 'ANULADA' from public.facturas where id = f3)
-               and (select factura_id is null from public.asignaciones where id = a_x1), null));
+               and (select factura_id is null from public.asignaciones where id = a_w), null));
   -- Esquema de mandato: IVA solo sobre la comisión; el valor del medio va como ingreso para terceros.
   update public.configuracion set valor = '"MANDATO"' where clave = 'facturacion.esquema';
   f4 := pg_temp.srv(format('select public.generar_factura_srv(%L, %L, %L, %L, %L, %L)', an_v, c_v, v_hoy - 30, v_hoy, u_fin, s_fin)) #>> '{}';
