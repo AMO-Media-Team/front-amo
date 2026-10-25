@@ -211,6 +211,10 @@ public/data/geo/    GeoJSON optimizados (países, departamentos y municipios por
 4. Dominio: `https://front-amo.vercel.app`. Si Vercel asigna otro, cámbialo en
    `NEXT_PUBLIC_SITE_URL` (y vuelve a desplegar: se incrusta al compilar), en la Site URL y las
    Redirect URLs de Supabase y en las restricciones del token de Mapbox.
+5. Solo `main` despliega (a producción): las vistas previas están apagadas en el proyecto
+   (`previewDeploymentsDisabled`, _Settings → Git_). Sin los secretos de producción el build de
+   `develop` o `feature/*` fallaría a propósito en la validación de variables. Si un merge a `main`
+   no genera despliegue, créalo desde _Deployments → Create Deployment_ con la rama `main`.
 
 ### Antes de salir a producción
 
