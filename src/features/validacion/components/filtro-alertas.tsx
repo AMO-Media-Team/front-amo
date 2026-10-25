@@ -27,15 +27,22 @@ export function FiltroAlertas({ conAlerta }: { conAlerta: number | null }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <div className="flex h-10 items-center gap-2.5">
+        {/* Nombre desde el servidor: Base UI enlaza la etiqueta solo después de
+            montarse. */}
         <Switch
           id={id}
+          aria-labelledby={`${id}-etiqueta`}
           checked={alertas}
           aria-describedby={idAyuda}
           onCheckedChange={(marcado) =>
             void fijar({ alertas: marcado || null, pagina: null })
           }
         />
-        <Label htmlFor={id} className="text-sm font-normal">
+        <Label
+          id={`${id}-etiqueta`}
+          htmlFor={id}
+          className="text-sm font-normal"
+        >
           Solo con alertas
         </Label>
         {cargando ? <Spinner aria-label="Actualizando la cola" /> : null}
