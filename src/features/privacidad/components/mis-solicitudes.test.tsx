@@ -162,7 +162,9 @@ describe("MisSolicitudes", () => {
     let dialogo = await screen.findByRole("alertdialog")
     await usuario.click(within(dialogo).getByRole("button", { name: "Volver" }))
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
-    expect(desistir).toHaveFocus()
+    // Base UI devuelve el foco en el cuadro siguiente al cierre (bajo carga, un
+    // instante después de desmontar el diálogo).
+    await waitFor(() => expect(desistir).toHaveFocus())
 
     // El servidor vuelve a pintar la solicitud cerrada (refresh()).
     acciones.desistirSolicitud.mockImplementation(async () => {
