@@ -18,6 +18,7 @@ import {
   GRUPOS_ASIGNACION,
   type GrupoAsignacion,
 } from "./estados"
+import { formatoFecha } from "@/lib/format"
 
 const enBogota = { in: tz(ZONA) }
 
@@ -105,7 +106,7 @@ export interface PuntoMensual {
   gmvVerificado: number
 }
 
-const mesCorto = new Intl.DateTimeFormat("es-CO", {
+const mesCorto = formatoFecha({
   timeZone: ZONA,
   month: "short",
   year: "numeric",

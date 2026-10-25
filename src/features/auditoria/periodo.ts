@@ -27,6 +27,7 @@ import {
   type RangoFechas,
   ZONA,
 } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 /** Día de calendario `YYYY-MM-DD`; cualquier otro texto se ignora. */
 const parseAsDia = createParser<string>({
@@ -102,12 +103,12 @@ export function ventanasComparadas(rango: RangoFechas): {
   }
 }
 
-const diaMes = new Intl.DateTimeFormat("es-CO", {
+const diaMes = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",
 })
-const diaMesAnio = new Intl.DateTimeFormat("es-CO", {
+const diaMesAnio = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",

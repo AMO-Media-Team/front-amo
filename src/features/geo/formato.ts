@@ -9,7 +9,7 @@ import {
   formatearCOPCompacto,
   formatearNumero,
   formatearPorcentaje,
-  LOCALE,
+  formatoFecha,
 } from "@/lib/format"
 
 import { DEFINICIONES_METRICAS, type MetricaGeo } from "./metricas"
@@ -78,7 +78,7 @@ export function unidadGeo(metrica: MetricaGeo, por100k = false): string {
   }
 }
 
-const formatoPeriodo = new Intl.DateTimeFormat(LOCALE, {
+const formatoPeriodo = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",
@@ -118,18 +118,18 @@ export function describirCalorVacio(metrica: MetricaGeo): string {
     : "Ningún ingreso del periodo trae coordenadas: se muestra el mapa por zonas."
 }
 
-const formatoDiaSemana = new Intl.DateTimeFormat(LOCALE, {
+const formatoDiaSemana = formatoFecha({
   timeZone: ZONA,
   weekday: "short",
   day: "numeric",
   month: "short",
 })
-const formatoDiaMes = new Intl.DateTimeFormat(LOCALE, {
+const formatoDiaMes = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",
 })
-const formatoMes = new Intl.DateTimeFormat(LOCALE, {
+const formatoMes = formatoFecha({
   timeZone: ZONA,
   month: "short",
   year: "numeric",

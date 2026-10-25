@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  formatoFecha,
   calcularDelta,
   descomponerCompacto,
   formatearCOP,
@@ -201,5 +202,76 @@ describe("formatearRelativo", () => {
   it("expresa fechas futuras", () => {
     expect(formatearRelativo(hace(-2 * 86400), ahora)).toBe("pasado mañana")
     expect(formatearRelativo(hace(-3600), ahora)).toBe("dentro de 1 hora")
+  })
+})
+
+describe("formatoFecha: el mismo texto en el servidor y en Safari", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** Partes como las entrega el Intl de WebKit (Safari) para una fecha con hora. */
+  const PARTES_WEBKIT: Intl.DateTimeFormatPart[] = [
+    { type: "day", value: "30" },
+    { type: "literal", value: " de " },
+    { type: "month", value: "sep." },
+    { type: "literal", value: " de " },
+    { type: "year", value: "2026" },
+    { type: "literal", value: ", " },
+    { type: "hour", value: "3" },
+    { type: "literal", value: ":" },
+    { type: "minute", value: "05" },
+    { type: "literal", value: "\u202f" },
+    { type: "dayPeriod", value: "p.m." },
+  ]
+
+  it("normaliza el mes abreviado y «p. m.» a la forma de Node", () => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockReturnValue(
+      PARTES_WEBKIT
+    )
+    const formato = formatoFecha({
+      timeZone: "America/Bogota",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+    expect(formato.format(new Date())).toBe("30 de sept de 2026, 3:05 p. m.")
+  })
+
+  it("coincide con la salida de Node en este entorno", () => {
+    const opciones: Intl.DateTimeFormatOptions = {
+      timeZone: "America/Bogota",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }
+    const fecha = new Date("2026-09-30T20:05:00Z")
+    expect(formatoFecha(opciones).format(fecha)).toBe(
+      new Intl.DateTimeFormat("es-CO", opciones).format(fecha)
+    )
+  })
+
+  it("el mes solo («sept.», igual en todos los motores) no se toca", () => {
+    const formato = formatoFecha({ timeZone: "America/Bogota", month: "short" })
+    expect(formato.format(new Date("2026-09-15T15:00:00Z"))).toBe("sept.")
+  })
+
+  it("los rangos se normalizan igual", () => {
+    const formato = formatoFecha({
+      timeZone: "America/Bogota",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+    expect(
+      formato.formatRange(
+        new Date("2026-08-27T15:00:00Z"),
+        new Date("2026-09-25T15:00:00Z")
+      )
+    ).toBe("27 de ago al 25 de sept de 2026")
   })
 })

@@ -72,6 +72,7 @@ import { PasoCuanto } from "./paso-cuanto"
 import { PasoEnvio } from "./paso-envio"
 import { ID_FORMATOS, PasoQue } from "./paso-que"
 import { PasoQuien } from "./paso-quien"
+import { formatoFecha } from "@/lib/format"
 
 export interface PropsAsistenteOferta {
   /** `nueva`: uno o varios formatos; `editar`: una oferta en BORRADOR o DEVUELTA. */
@@ -107,7 +108,7 @@ interface ErrorDePaso {
 
 const EDITABLES = new Set(["BORRADOR", "DEVUELTA"])
 
-const horaBogota = new Intl.DateTimeFormat("es-CO", {
+const horaBogota = formatoFecha({
   timeZone: ZONA,
   hour: "numeric",
   minute: "2-digit",

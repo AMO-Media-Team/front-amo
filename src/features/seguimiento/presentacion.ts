@@ -14,6 +14,7 @@ import type {
   CorteAprobado,
   PublicacionSeguimiento,
 } from "./tipos"
+import { formatoFecha } from "@/lib/format"
 
 // ── Resultados ───────────────────────────────────────────────────────────────
 
@@ -260,7 +261,7 @@ export function anuncioCambios(cambios: CambiosSeguimiento): string {
 
 // ── Textos ───────────────────────────────────────────────────────────────────
 
-const formatoHora = new Intl.DateTimeFormat("es-CO", {
+const formatoHora = formatoFecha({
   timeZone: ZONA,
   hour: "numeric",
   minute: "2-digit",
