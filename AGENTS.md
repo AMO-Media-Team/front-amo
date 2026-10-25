@@ -49,13 +49,15 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
   usuarios, roles y permisos, auditoría, accesos, cuenta, notificaciones, configuración), modelo de
   datos completo del negocio, analítica (paneles por rol, explorador geográfico en 3 niveles, 7
   reportes con exportación) y consulta de operación.
-- **Entregas 2 y 3 (en curso, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
+- **Entregas 2 y 3 (completas, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
   organizaciones, alta y verificación del medio, términos, vinculación pública (fases 0 y 1); empresa
   del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2); marketplace, Mis
   campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3); validación de evidencias
   y métricas con alertas, verificación, cancelación con causa, disputas y suspensión de medios (fase 4);
   liquidaciones, documento soporte, archivo de pagos, facturas con notas crédito y cartera, Ganancias del medio y
-  Facturas del anunciante (fase 5). Sigue el cierre.
+  Facturas del anunciante (fase 5); gestión asistida, reputación del medio, derechos del titular de datos,
+  correo de avisos construido apagado, aviso en vivo, accesibilidad y matriz de navegadores (fase 6, cierre). Las
+  Entregas 2 y 3 están completas; lo que depende de terceros está en `context/Servicios-Pendientes-Definir.md`.
 
 ## Stack
 

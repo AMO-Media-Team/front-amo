@@ -11,7 +11,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ✅     |
-| P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | 🔧     |
+| P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ✅     |
 
 ## Requisitos
 
@@ -29,7 +29,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | MED-007          | Tope por nivel y camino para subir de nivel                | P1    | ✅     |
 | ADM-001          | Cola de verificación de medios                             | P1    | ✅     |
 | ADM-006          | Clasificación de pertinencia geográfica                    | P1    | ✅     |
-| NOT-003          | Notificaciones por eventos del negocio                     | P1/P6 | 🧪     |
+| NOT-003          | Notificaciones por eventos del negocio                     | P1/P6 | ✅     |
 | ANU-001          | Registro y datos de la empresa                             | P0/P2 | ✅     |
 | ANU-002          | Varios usuarios por anunciante                             | P2    | ✅     |
 | ANU-003          | Creación de campañas                                       | P2    | ✅     |
@@ -83,13 +83,13 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | LIQ-008          | Facturas al anunciante y cartera                           | P5    | ✅     |
 | MED-015          | Ganancias                                                  | P5    | ✅     |
 | ANU-013          | Facturación del anunciante                                 | P5    | ✅     |
-| ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | 🧪     |
-| MED-016          | Indicadores de reputación                                  | P6    | 🧪     |
-| CTA-007          | Derechos del titular de datos                              | P6    | 🧪     |
+| ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | ✅     |
+| MED-016          | Indicadores de reputación                                  | P6    | ✅     |
+| CTA-007          | Derechos del titular de datos                              | P6    | ✅     |
 | NOT-004          | Notificaciones por correo electrónico                      | P6    | ⏸      |
-| NOT-007          | Actualización en tiempo real                               | P6    | 🧪     |
-| CFG-001…009      | Criterios «Verificable en E2/E3» de configuración          | P1–P6 | 🧪     |
-| DSH-003, GEO-010 | Criterios «Verificable en E3»                              | P6    | 🧪     |
+| NOT-007          | Actualización en tiempo real                               | P6    | ✅     |
+| CFG-001…009      | Criterios «Verificable en E2/E3» de configuración          | P1–P6 | ✅     |
+| DSH-003, GEO-010 | Criterios «Verificable en E3»                              | P6    | ✅     |
 
 ## Bitácora de la ejecución
 
@@ -241,3 +241,12 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   correo en Preferencias, matriz de navegadores (`pnpm test:e2e:navegadores`), pila local con Realtime. 6.714 Vitest,
   typecheck, lint y build en verde. Commits `d32eafc`, `9894c8d`. NOT-004 queda ⏸ (construido apagado; activación en
   `context/Servicios-Pendientes-Definir.md` §5).
+- 2026-10-24/25 · **Fase 6 en producción: Entregas 2 y 3 completas.** Revisión adversarial (5 revisores, 34 hallazgos
+  corregidos en la migración y en 4 paquetes del front; `humo_e3_cierre` 85/85). Andrés aplicó
+  `20261024181218_e3_cierre` tras el respaldo `context/respaldos/produccion-2026-10-24-antes-e3c-*`; verificado por MCP (53
+  migraciones, 152 plantillas, 74 claves, 71 permisos, `amo_privacidad` activo, `amo_correos` inactivo, advisors sin
+  ERROR). Matriz de navegadores (RNF-COM-01) en verde: 136 pruebas en Firefox, Safari, Safari iOS y Chrome Android, tras
+  corregir la hidratación en Safari (mes abreviado y «p.m.» de WebKit: `formatoFecha()` y regla de ESLint) y la cookie de
+  sesión `Secure` según el protocolo. Regresión E2E completa 727/727, 6.800 Vitest, typecheck, lint y build en verde.
+  GEO-010: peor p95 del explorador 112 ms (serie mensual en una lectura y funciones puras integradas). NOT-004 queda ⏸
+  (correo construido y apagado; activación en `context/Servicios-Pendientes-Definir.md` §5).

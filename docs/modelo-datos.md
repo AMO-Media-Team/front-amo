@@ -1522,7 +1522,8 @@ Plantillas `cola.liquidacion_por_aprobar`, `cola.liquidaciones_por_aprobar`, `li
 ### 3.14 Entrega 3 — fase 6: cierre (gestión asistida, reputación, titular de datos, correo, aviso en vivo, limpieza)
 
 Migración **E3c** `20261024181218_e3_cierre` (RF-ADM-014, MED-016, CTA-007, NOT-004, NOT-007, NOT-003, CFG-001, CFG-005),
-probada en la base local (23 suites; `humo_e3_cierre.sql` 76/76). Decisiones D89–D98 en §11.1.
+probada en la base local (23 suites; `humo_e3_cierre.sql` 85/85, con la revisión adversarial aplicada) y aplicada en
+producción el 2026-10-24. Decisiones D89–D99 en §11.1.
 
 **Columnas, tablas y privilegios**
 
