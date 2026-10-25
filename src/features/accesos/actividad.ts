@@ -5,6 +5,7 @@
  */
 import type { CeldaActividad } from "@/components/charts/datos"
 import { ZONA } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 const DIA_ISO: Readonly<Record<string, number>> = {
   Mon: 1,
@@ -16,12 +17,15 @@ const DIA_ISO: Readonly<Record<string, number>> = {
   Sun: 7,
 }
 
-const formatoDiaHora = new Intl.DateTimeFormat("en-US", {
-  timeZone: ZONA,
-  weekday: "short",
-  hour: "numeric",
-  hourCycle: "h23",
-})
+const formatoDiaHora = formatoFecha(
+  {
+    timeZone: ZONA,
+    weekday: "short",
+    hour: "numeric",
+    hourCycle: "h23",
+  },
+  "en-US"
+)
 
 /** Día ISO y hora de Bogotá de un instante; `null` si no es una fecha válida. */
 export function diaYHora(

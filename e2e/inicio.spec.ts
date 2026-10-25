@@ -6,7 +6,7 @@ import {
   parametro,
 } from "./utilidades/interfaz"
 import { expect, type Locator, type Page, test } from "./utilidades/prueba"
-import { PROYECTO_MOVIL } from "./utilidades/proyectos"
+import { esMovil } from "./utilidades/proyectos"
 import { sesion } from "./utilidades/sesiones"
 
 /**
@@ -240,7 +240,7 @@ test.describe("panel del medio", () => {
     const barraInferior = page.getByRole("navigation", {
       name: "Accesos directos",
     })
-    if (info.project.name !== PROYECTO_MOVIL) {
+    if (!esMovil(info.project.name)) {
       await expect(barraInferior).toBeHidden()
       return
     }

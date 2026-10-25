@@ -63,8 +63,8 @@ begin
   execute 'set local role authenticated';
   select count(*) into v_n from public.perfiles;                      r := r || jsonb_build_object('a1_invitado_perfiles_solo_propio', v_n = 1);
   select count(*) into v_n from public.roles;                         r := r || jsonb_build_object('a1_invitado_roles_solo_propio', v_n = 1);
-  select count(*) into v_n from public.permisos;                      r := r || jsonb_build_object('a1_invitado_permisos_de_su_rol_53', v_n = 53);
-  select count(*) into v_n from public.rol_permisos;                  r := r || jsonb_build_object('a1_invitado_rol_permisos_propios_53', v_n = 53);
+  select count(*) into v_n from public.permisos;                      r := r || jsonb_build_object('a1_invitado_permisos_de_su_rol_54', v_n = 54);
+  select count(*) into v_n from public.rol_permisos;                  r := r || jsonb_build_object('a1_invitado_rol_permisos_propios_54', v_n = 54);
   select count(*) into v_n from public.paises;                        r := r || jsonb_build_object('a1_invitado_sin_geo', v_n = 0);
   select count(*) into v_n from public.configuracion;                 r := r || jsonb_build_object('a1_invitado_sin_configuracion', v_n = 0);
   execute 'reset role';
@@ -123,7 +123,7 @@ begin
   -- a5. SUPERADMIN aal2 ve todo el catálogo.
   perform set_config('request.jwt.claims', c_sup, true);
   execute 'set local role authenticated';
-  select count(*) into v_n from public.permisos;                      r := r || jsonb_build_object('a5_super_permisos_70', v_n = 70);
+  select count(*) into v_n from public.permisos;                      r := r || jsonb_build_object('a5_super_permisos_71', v_n = 71);
   execute 'reset role';
   perform set_config('request.jwt.claims', '', true);
 
@@ -370,12 +370,12 @@ begin
   r := r || jsonb_build_object('g1_geo_250_33_1122',
     (select count(*) from public.paises) = 250 and (select count(*) from public.departamentos) = 33
     and (select count(*) from public.municipios) = 1122);
-  r := r || jsonb_build_object('g2_permisos_70', (select count(*) from public.permisos) = 70);
+  r := r || jsonb_build_object('g2_permisos_71', (select count(*) from public.permisos) = 71);
   select jsonb_object_agg(r2.clave, r2.n) into v_j
   from (select ro.clave, count(rp.permiso_clave) as n from public.roles ro
         left join public.rol_permisos rp on rp.rol_id = ro.id where ro.es_sistema group by ro.clave) r2;
   r := r || jsonb_build_object('g3_permisos_por_rol_como_permisos_ts',
-    v_j = '{"SUPERADMIN": 70, "ADMIN": 53, "OPERACIONES": 30, "FINANZAS": 24, "ANUNCIANTE": 11, "MEDIO": 10}'::jsonb);
+    v_j = '{"SUPERADMIN": 71, "ADMIN": 54, "OPERACIONES": 30, "FINANZAS": 24, "ANUNCIANTE": 11, "MEDIO": 10}'::jsonb);
   r := r || jsonb_build_object('g4_configuracion_seguridad_11',
     (select count(*) from public.configuracion where clave like 'seguridad.%') = 11);
   r := r || jsonb_build_object('g5_normalizar_texto_paridad_ts',

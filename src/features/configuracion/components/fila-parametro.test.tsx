@@ -9,6 +9,7 @@ import type { Parametro, PermisosConfiguracion } from "../tipos"
 // Las Server Actions no se ejecutan en jsdom: se sustituyen por espías.
 const acciones = vi.hoisted(() => ({
   guardarParametro: vi.fn(),
+  confirmarParametro: vi.fn(),
   historialCambios: vi.fn(),
 }))
 vi.mock("../actions", () => acciones)
@@ -68,8 +69,12 @@ function renderizar(
   )
 }
 
+/** Un parámetro con la marca «pendiente de validación» que no es de comisión. */
+const PLAZO_PENDIENTE: Parametro = { ...PLAZO, pendienteValidacion: true }
+
 beforeEach(() => {
   acciones.guardarParametro.mockReset()
+  acciones.confirmarParametro.mockReset()
   acciones.historialCambios.mockReset()
 })
 
@@ -272,6 +277,77 @@ describe("FilaParametro", () => {
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: nombre })).toHaveFocus()
+    )
+  })
+})
+
+describe("FilaParametro · confirmar un valor pendiente (CFG-001)", () => {
+  const nombreConfirmar = "Confirmar valor de Plazo para recargar la evidencia"
+
+  it("junto a la marca ofrece confirmar, solo a quien puede editar", () => {
+    renderizar(PLAZO_PENDIENTE)
+    expect(screen.getByText("Por validar")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: nombreConfirmar })
+    ).not.toBeInTheDocument()
+  })
+
+  it("un valor ya confirmado no ofrece confirmarlo", () => {
+    renderizar(PLAZO, { editar: true })
+    expect(
+      screen.queryByRole("button", { name: /Confirmar valor/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("confirma con la versión que se ve y el foco pasa a «Editar»", async () => {
+    const usuario = userEvent.setup()
+    acciones.confirmarParametro.mockResolvedValue(
+      exito({ actualizadoAt: "2026-10-24T15:00:00+00:00" })
+    )
+    renderizar(PLAZO_PENDIENTE, { editar: true })
+
+    await usuario.click(screen.getByRole("button", { name: nombreConfirmar }))
+    const dialogo = await screen.findByRole("alertdialog", {
+      name: "¿Confirmar el valor de «Plazo para recargar la evidencia»?",
+    })
+    expect(dialogo).toHaveTextContent("24 h")
+    expect(dialogo).toHaveTextContent("queda en la bitácora a tu nombre")
+
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Confirmar valor" })
+    )
+    await waitFor(() =>
+      expect(acciones.confirmarParametro).toHaveBeenCalledWith({
+        clave: PLAZO.clave,
+        actualizadoAt: PLAZO.actualizadoAt,
+      })
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "Editar Plazo para recargar la evidencia",
+        })
+      ).toHaveFocus()
+    )
+  })
+
+  it("si el servidor no confirma, el motivo queda en el diálogo", async () => {
+    const usuario = userEvent.setup()
+    acciones.confirmarParametro.mockResolvedValue(
+      fallo("Otra persona cambió este dato mientras lo editabas.")
+    )
+    renderizar(PLAZO_PENDIENTE, { editar: true })
+
+    await usuario.click(screen.getByRole("button", { name: nombreConfirmar }))
+    const dialogo = await screen.findByRole("alertdialog")
+    await usuario.click(
+      within(dialogo).getByRole("button", { name: "Confirmar valor" })
+    )
+    expect(await within(dialogo).findByRole("alert")).toHaveTextContent(
+      "Otra persona cambió este dato mientras lo editabas."
     )
   })
 })

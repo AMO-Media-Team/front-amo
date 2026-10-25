@@ -2,8 +2,8 @@ import { EncabezadoPagina } from "@/components/layout/encabezado-pagina"
 import { NavegacionCuenta } from "@/features/cuenta/components/navegacion-cuenta"
 
 /**
- * Marco de «Mi cuenta»: encabezado y navegación entre Perfil, Seguridad y
- * Preferencias. Es estático a propósito: no autoriza ni consulta (los layouts
+ * Marco de «Mi cuenta»: encabezado y navegación entre Perfil, Seguridad,
+ * Preferencias y Privacidad. Es estático a propósito: no autoriza ni consulta (los layouts
  * no se vuelven a ejecutar al navegar); cada página llama al DAL.
  */
 export default function LayoutCuenta({ children }: LayoutProps<"/cuenta">) {

@@ -209,6 +209,7 @@ begin
   exception when others then v_e := sqlerrm;
   end;
   r := r || jsonb_build_object('d02_videollamada_solo_prueba_de_vida', case when v_e like '%documentos_medio_archivo_path_chk%' then 'true'::jsonb else to_jsonb(v_e) end);
+  perform set_config('amo.actor_id', u_med::text, true);            -- lo carga el medio (la cola no avisa a quien actúa)
   insert into public.documentos_medio (medio_id, tipo, archivo_path, subido_por)
   values (me_a, 'CEDULA_FRENTE', 'medio/' || me_a || '/CEDULA_FRENTE/humo.webp', u_med) returning id into v_id;
   perform public.transicionar_srv('documentos_medio', v_id, 'APROBADO', u_adm, s_adm, null, '{"fecha_vencimiento": "2030-12-31"}');

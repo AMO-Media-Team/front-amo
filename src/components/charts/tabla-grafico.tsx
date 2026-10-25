@@ -11,9 +11,17 @@ interface TablaGraficoProps {
   className?: string
 }
 
+/** Nombre de la región desplazable de la tabla visible (distinto del gráfico). */
+export function nombreRegionTabla(titulo: string): string {
+  return `Tabla de datos: ${titulo}`
+}
+
 /**
  * Equivalente tabular de un gráfico (WCAG): los mismos valores que el trazo,
  * ya formateados. Visible con "Ver datos" o, oculta, junto a cada lienzo.
+ *
+ * La visible es una región enfocable: una serie larga se desplaza con las
+ * flechas aunque ninguna celda tenga un control (WCAG 2.1.1, DSH-002).
  */
 export function TablaGrafico({
   tabla,
@@ -23,8 +31,17 @@ export function TablaGrafico({
 }: TablaGraficoProps) {
   return (
     <div
+      {...(oculta
+        ? {}
+        : {
+            tabIndex: 0,
+            role: "region",
+            "aria-label": nombreRegionTabla(titulo),
+          })}
       className={cn(
-        oculta ? "sr-only" : "max-h-full overflow-auto rounded-lg border",
+        oculta
+          ? "sr-only"
+          : "max-h-full overflow-auto rounded-lg border outline-none focus-visible:anillo-foco",
         className
       )}
     >

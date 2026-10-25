@@ -1,7 +1,7 @@
 import { rutaMiCampana } from "@/features/campanas/rutas"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 
-import { accionesAnunciante } from "../acciones"
+import { accionesGestion } from "../acciones"
 import { construirHistorial } from "../historial"
 import { situacionOferta, urgenciaSegunEstado } from "../presentacion"
 import { rutaOfertasDeCampana } from "../rutas"
@@ -53,15 +53,19 @@ export function FichaOfertaAnunciante({
     },
     { perspectiva: "anunciante", usuarioId: usuario.id }
   )
-  const opciones = accionesAnunciante(oferta.estado, usuario.permisos, {
-    cuposOcupados: oferta.cupos.ocupados,
-  })
+  const opciones = accionesGestion(
+    oferta.estado,
+    "ANUNCIANTE",
+    usuario.permisos,
+    { cuposOcupados: oferta.cupos.ocupados }
+  )
 
   return (
     <>
       <CabeceraOferta
         oferta={oferta}
         urgencia={urgencia}
+        perspectiva="anunciante"
         enlaces={{
           volver: {
             href: rutaOfertasDeCampana(oferta.campana.id),
@@ -78,6 +82,7 @@ export function FichaOfertaAnunciante({
               ofertaId={oferta.id}
               campanaId={oferta.campana.id}
               titulo={oferta.titulo}
+              estado={oferta.estado}
               opciones={opciones}
             />
           ) : null

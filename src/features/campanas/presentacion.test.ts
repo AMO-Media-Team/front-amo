@@ -111,6 +111,19 @@ describe("situación de la empresa", () => {
     expect(motivoSinActivar("RECHAZADO")).toMatch(/corrijas los datos/)
     expect(motivoSinActivar("SUSPENDIDO")).toMatch(/suspendida/)
   })
+
+  it("al equipo AMO que actúa por cuenta del anunciante le habla de «la empresa»", () => {
+    expect(motivoSinActivar("VERIFICADO", "asistido")).toBe("")
+    expect(motivoSinActivar("PENDIENTE", "asistido")).toBe(
+      "Se podrá activar cuando AMO verifique la empresa."
+    )
+    expect(motivoSinActivar("RECHAZADO", "asistido")).toMatch(
+      /la empresa corrija sus datos/
+    )
+    expect(motivoSinActivar("SUSPENDIDO", "asistido")).toBe(
+      "La empresa está suspendida: sus campañas no se pueden activar."
+    )
+  })
 })
 
 describe("vigencia", () => {

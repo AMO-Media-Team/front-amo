@@ -4,7 +4,7 @@
  */
 import { LILA, NEUTRO } from "@/components/brand/colores"
 import { ZONA } from "@/lib/fechas"
-import { LOCALE } from "@/lib/format"
+import { formatoFecha } from "@/lib/format"
 
 /** Colores en HEX sin `#` (formato de ExcelJS y utilidades de jsPDF). */
 export const COLOR_DOCUMENTO = {
@@ -23,7 +23,7 @@ export const TEXTO_CONFIDENCIAL =
 
 export const AUTOR_DOCUMENTO = "AMO — Advertising Market Optimization"
 
-const formatoGeneracion = new Intl.DateTimeFormat(LOCALE, {
+const formatoGeneracion = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "long",

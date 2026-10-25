@@ -274,15 +274,20 @@ describe("DecisionModeracion", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("cancelar una publicada sin cupos pide motivo", async () => {
+  it("cancelar una publicada sin cupos pide motivo y dice que el anunciante recibe el aviso", async () => {
     const usuario = renderizar("PUBLICADA")
     await usuario.click(screen.getByRole("button", { name: "Cancelar oferta" }))
     const dialogo = screen.getByRole("alertdialog", {
       name: "¿Cancelar la oferta publicada?",
     })
+    // La BD le avisa al anunciante con el motivo (plantilla `oferta.cancelada`).
+    expect(dialogo).toHaveAccessibleDescription(
+      /el anunciante recibe un aviso con el motivo/
+    )
+    expect(dialogo).toHaveTextContent(/Lo recibe el anunciante en el aviso/)
     await usuario.click(
       within(dialogo).getByRole("button", {
-        name: "Lo solicitó el anunciante.",
+        name: "Lo solicitó la empresa.",
       })
     )
     await usuario.click(
@@ -291,7 +296,7 @@ describe("DecisionModeracion", () => {
     await waitFor(() =>
       expect(acciones.cancelarOfertaPublicada).toHaveBeenCalledWith({
         ofertaId: OFERTA,
-        motivo: "Lo solicitó el anunciante.",
+        motivo: "Lo solicitó la empresa.",
       })
     )
   })

@@ -24,6 +24,7 @@ import {
   serializarFecha,
   ZONA,
 } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 export { parsersPeriodo, type ValoresPeriodo }
 
@@ -109,7 +110,7 @@ const nombreMes = new Intl.DateTimeFormat("es-CO", {
   timeZone: ZONA,
   month: "long",
 })
-const mesCorto = new Intl.DateTimeFormat("es-CO", {
+const mesCorto = formatoFecha({
   timeZone: ZONA,
   month: "short",
 })

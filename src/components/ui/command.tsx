@@ -34,8 +34,8 @@ function Command({
 }
 
 function CommandDialog({
-  title = "Command Palette",
-  description = "Search for a command to run...",
+  title = "Menú de comandos",
+  description = "Busca un comando y pulsa Enter.",
   children,
   className,
   showCloseButton = false,
@@ -93,11 +93,14 @@ function CommandInput({
 
 function CommandList({
   className,
+  // cmdk nombra su listbox «Suggestions» por omisión: en AMO, en español.
+  label = "Resultados",
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
+      label={label}
       className={cn(
         "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
         className

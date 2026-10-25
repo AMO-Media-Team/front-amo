@@ -13,13 +13,26 @@ import type { ResultadoAccion } from "@/lib/result"
 
 import { activarCampana, archivarCampana, cancelarCampana } from "../actions"
 import type { AccionCampana, AccionDisponible } from "../reglas"
-import { RUTA_MIS_CAMPANAS, rutaEditarCampana } from "../rutas"
+import {
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "../rutas-gestion"
 import type { EstadoCampana } from "../tipos"
 
 /** Motivos frecuentes de una cancelación (un toque llena el campo). */
 const SUGERENCIAS_CANCELACION = [
   "Cambió la estrategia de la marca.",
   "El presupuesto se reasignó a otra campaña.",
+  "La campaña se aplazó para otra fecha.",
+  "La campaña se creó por error.",
+] as const
+
+/** Los mismos motivos dichos por el equipo AMO que actúa por cuenta de la empresa. */
+const SUGERENCIAS_CANCELACION_ASISTIDA = [
+  "Lo solicitó la empresa.",
+  "La empresa reasignó el presupuesto a otra campaña.",
   "La campaña se aplazó para otra fecha.",
   "La campaña se creó por error.",
 ] as const
@@ -50,8 +63,28 @@ function tituloDeLaFicha(desde: HTMLElement | null): HTMLElement | null {
 const DESCRIPCION_CANCELACION =
   "Puedes cancelarla si lo que los medios ya aceptaron está verificado o pagado; si alguna publicación sigue en curso, espera a que AMO la verifique. Sus ofertas sin cupos aceptados se cancelan y dejan de verse en el marketplace; las que ya tienen obligaciones con medios se cierran solas. No se puede deshacer."
 
-/** Qué pasa al archivar, según cómo terminó la campaña. */
-function descripcionArchivo(estado: EstadoCampana): string {
+/** Lo mismo para el equipo AMO por cuenta del anunciante (ADM-014). */
+function descripcionCancelacionAsistida(anunciante: string): string {
+  return `Se cancela por cuenta de ${anunciante}, que recibe un aviso con el motivo. Solo se puede si lo que los medios aceptaron está verificado o pagado. Sus ofertas sin cupos aceptados se cancelan y dejan de verse en el marketplace; las que tienen obligaciones con medios se cierran solas. No se puede deshacer.`
+}
+
+/** Qué pasa al activar, según quién lo hace. */
+function descripcionActivacion(gestion: ModoGestion): string {
+  return esAsistido(gestion)
+    ? `Se activa por cuenta de ${gestion.anunciante}, que recibe un aviso; el cambio queda en la bitácora a tu nombre. Después podrás enviar sus ofertas a revisión. Una campaña activa no vuelve a borrador: si hay que detenerla, se cancela.`
+    : "Al activarla podrás enviar sus ofertas a revisión para que AMO las publique. Una campaña activa no vuelve a borrador: si necesitas detenerla, la cancelas."
+}
+
+/** Qué pasa al archivar, según cómo terminó la campaña y quién lo hace. */
+function descripcionArchivo(
+  estado: EstadoCampana,
+  gestion: ModoGestion
+): string {
+  if (esAsistido(gestion)) {
+    return estado === "BORRADOR"
+      ? `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}, y ya no se podrá activar. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
+      : `Sale de los listados junto con sus ofertas, también de «Mis campañas» de ${gestion.anunciante}; su historial se conserva. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
+  }
   return estado === "BORRADOR"
     ? "Sale de «Mis campañas» junto con sus ofertas y ya no podrás activarla. No se puede deshacer."
     : "Sale de «Mis campañas» junto con sus ofertas; el equipo AMO conserva su historial. No se puede deshacer."
@@ -65,18 +98,23 @@ function descripcionArchivo(estado: EstadoCampana): string {
  * de la BD se muestra dentro de su diálogo; archivada, se vuelve al listado.
  * Tras un cambio de estado el botón que abrió el diálogo puede desaparecer: el
  * foco va al título de la ficha y no se pierde en <body>; si se cierra sin
- * cambiar nada, vuelve al botón.
+ * cambiar nada, vuelve al botón. En la gestión asistida (`gestion`, ADM-014)
+ * los textos hablan de la empresa y los enlaces son los de Operación.
  */
 export function AccionesCampana({
   campana,
   acciones,
   puedeEditar,
+  gestion = GESTION_PROPIA,
 }: {
   campana: { id: string; nombre: string; estado: EstadoCampana }
   acciones: readonly AccionDisponible[]
   puedeEditar: boolean
+  gestion?: ModoGestion
 }) {
   const router = useRouter()
+  const rutas = rutasGestion(gestion)
+  const asistido = esAsistido(gestion)
   const [abierta, setAbierta] = useState<AccionCampana | null>(null)
   const idBloqueo = useId()
   const raiz = useRef<HTMLDivElement>(null)
@@ -130,7 +168,7 @@ export function AccionesCampana({
           </Button>
         ) : null}
         {puedeEditar ? (
-          <EnlaceBoton href={rutaEditarCampana(campana.id)} variant="outline">
+          <EnlaceBoton href={rutas.editarCampana(campana.id)} variant="outline">
             <Pencil data-icon="inline-start" aria-hidden />
             Editar
           </EnlaceBoton>
@@ -169,7 +207,7 @@ export function AccionesCampana({
         abierto={abierta === "activar"}
         onAbiertoChange={cerrar}
         titulo="¿Activar la campaña?"
-        descripcion="Al activarla podrás enviar sus ofertas a revisión para que AMO las publique. Una campaña activa no vuelve a borrador: si necesitas detenerla, la cancelas."
+        descripcion={descripcionActivacion(gestion)}
         textoConfirmar="Activar campaña"
         focoAlCerrar={focoAlCerrar}
         onConfirmar={() =>
@@ -183,14 +221,28 @@ export function AccionesCampana({
         abierto={abierta === "cancelar"}
         onAbiertoChange={cerrar}
         titulo={`¿Cancelar «${campana.nombre}»?`}
-        descripcion={DESCRIPCION_CANCELACION}
+        descripcion={
+          asistido
+            ? descripcionCancelacionAsistida(gestion.anunciante)
+            : DESCRIPCION_CANCELACION
+        }
         textoConfirmar="Cancelar campaña"
         textoCancelar="Volver"
         destructivo
         etiqueta="Motivo de la cancelación"
-        placeholder="Cuéntanos por qué cancelas la campaña."
-        ayuda="Queda en el historial de la campaña y lo ve el equipo de AMO."
-        sugerencias={SUGERENCIAS_CANCELACION}
+        placeholder={
+          asistido
+            ? "Por qué se cancela la campaña (lo verá la empresa)."
+            : "Cuéntanos por qué cancelas la campaña."
+        }
+        ayuda={
+          asistido
+            ? "Lo recibe la empresa en el aviso; queda en el historial y en la bitácora."
+            : "Queda en el historial de la campaña y lo ve el equipo de AMO."
+        }
+        sugerencias={
+          asistido ? SUGERENCIAS_CANCELACION_ASISTIDA : SUGERENCIAS_CANCELACION
+        }
         focoAlCerrar={focoAlCerrar}
         onConfirmar={(motivo) =>
           confirmar(
@@ -203,7 +255,7 @@ export function AccionesCampana({
         abierto={abierta === "archivar"}
         onAbiertoChange={cerrar}
         titulo={`¿Archivar «${campana.nombre}»?`}
-        descripcion={descripcionArchivo(campana.estado)}
+        descripcion={descripcionArchivo(campana.estado, gestion)}
         textoConfirmar="Archivar campaña"
         textoCancelar="Conservar"
         destructivo
@@ -214,7 +266,7 @@ export function AccionesCampana({
             "Campaña archivada"
           )
           // La ficha ya no existe: de vuelta al listado, sin dejarla en el historial.
-          if (respuesta.ok) router.replace(RUTA_MIS_CAMPANAS)
+          if (respuesta.ok) router.replace(rutas.listado)
           return respuesta
         }}
       />

@@ -5,6 +5,7 @@ import { type ReactNode, Suspense } from "react"
 import { LimiteErrorTabla } from "@/components/data-table/limite-error-tabla"
 import { Esqueleto } from "@/components/feedback/esqueletos"
 import { ContenedorPagina } from "@/components/layout/contenedor-pagina"
+import { InsigniaReclamoEnTramite } from "@/features/privacidad/components/insignia-reclamo"
 import { CabeceraUsuario } from "@/features/usuarios/components/cabecera-usuario"
 import { ProveedorGestionUsuarios } from "@/features/usuarios/components/contexto-gestion"
 import type { UsuarioAcciones } from "@/features/usuarios/components/dialogos-accion-usuario"
@@ -94,6 +95,11 @@ export default async function PaginaUsuario({
           usuario={usuario}
           esActor={usuario.id === actor.id}
           exigeMfa={exigeMfa}
+          distintivos={
+            <Suspense fallback={null}>
+              <InsigniaReclamoEnTramite perfilId={usuario.id} />
+            </Suspense>
+          }
           acciones={
             <MenuAccionesUsuario
               variante="ficha"

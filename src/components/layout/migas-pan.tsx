@@ -25,7 +25,11 @@ function ContenidoMiga({ miga, esUltima }: { miga: Miga; esUltima: boolean }) {
   }
   if (miga.href) {
     return (
-      <BreadcrumbLink render={<Link href={miga.href} />}>
+      // 24 px de alto: objetivo táctil mínimo (WCAG 2.5.8).
+      <BreadcrumbLink
+        render={<Link href={miga.href} />}
+        className="inline-flex min-h-6 items-center"
+      >
         {miga.titulo}
       </BreadcrumbLink>
     )
@@ -34,10 +38,37 @@ function ContenidoMiga({ miga, esUltima }: { miga: Miga; esUltima: boolean }) {
 }
 
 /**
+ * Clases de cada miga según su posición y el ancho de las migas (consulta de
+ * contenedor `migas`, no del viewport: la barra lateral cambia el espacio).
+ * La página actual siempre se ve y es la única que se recorta. Las demás no se
+ * encogen (encogidas se montaban unas sobre otras y sus enlaces quedaban por
+ * debajo de 24 px, WCAG 2.5.8): con poco ancho se ocultan a la vista, de la
+ * más lejana a la más cercana, pero siguen para los lectores de pantalla y
+ * reaparecen al recibir el foco con el teclado.
+ */
+export function clasesMiga(
+  indice: number,
+  total: number
+): { item: string; separador: string } {
+  if (indice === total - 1) return { item: "min-w-0 truncate", separador: "" }
+  const fija = "shrink-0 whitespace-nowrap"
+  // El padre de la página actual se ve desde 20 rem; el resto, desde 36 rem.
+  return indice === total - 2
+    ? {
+        item: `${fija} @max-xs/migas:sr-only @max-xs/migas:focus-within:not-sr-only`,
+        separador: "@max-xs/migas:hidden",
+      }
+    : {
+        item: `${fija} @max-xl/migas:sr-only @max-xl/migas:focus-within:not-sr-only`,
+        separador: "@max-xl/migas:hidden",
+      }
+}
+
+/**
  * Migas de la ruta actual según el registro de navegación; la última lleva el
  * título que la página haya fijado con `<TituloMiga>` (el nombre del registro
- * de una ficha). En móvil solo se ve la página actual (el resto queda para
- * lectores de pantalla).
+ * de una ficha). Con poco ancho solo se ven la página actual y, si cabe, su
+ * padre (el resto queda para lectores de pantalla; ver `clasesMiga`).
  */
 export function MigasPan({
   migas,
@@ -55,24 +86,19 @@ export function MigasPan({
   return (
     <Breadcrumb
       aria-label="Ruta de navegación"
-      className={cn("min-w-0", className)}
+      className={cn("@container/migas min-w-0", className)}
     >
       <BreadcrumbList className="flex-nowrap">
         {lista.map((miga, indice) => {
           const esUltima = indice === lista.length - 1
+          const clases = clasesMiga(indice, lista.length)
           return (
             <Fragment key={`${miga.titulo}-${indice}`}>
-              <BreadcrumbItem
-                className={cn(
-                  "min-w-0",
-                  !esUltima && "max-sm:sr-only",
-                  esUltima && "truncate"
-                )}
-              >
+              <BreadcrumbItem className={clases.item}>
                 <ContenidoMiga miga={miga} esUltima={esUltima} />
               </BreadcrumbItem>
               {esUltima ? null : (
-                <BreadcrumbSeparator className="max-sm:hidden" />
+                <BreadcrumbSeparator className={clases.separador} />
               )}
             </Fragment>
           )

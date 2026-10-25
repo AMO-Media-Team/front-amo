@@ -16,6 +16,7 @@ vi.mock("sonner", () => ({ toast: avisos }))
 const enrutador = vi.hoisted(() => ({ replace: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => enrutador }))
 
+import { modoAsistido } from "../rutas-gestion"
 import { AccionesCampana } from "./acciones-campana"
 
 const CAMPANA = {
@@ -285,5 +286,61 @@ describe("AccionesCampana", () => {
       <AccionesCampana campana={CAMPANA} puedeEditar={false} acciones={[]} />
     )
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe("AccionesCampana · gestión asistida (ADM-014)", () => {
+  const ANUNCIANTE = "e2e00000-0000-4000-8000-00000000a001"
+
+  it("activar dice que la empresa recibe el aviso; archivar, que no", async () => {
+    const usuario = userEvent.setup()
+    render(
+      <AccionesCampana
+        campana={CAMPANA}
+        puedeEditar
+        acciones={[
+          { accion: "activar", requiereMotivo: false, bloqueo: null },
+          { accion: "archivar", requiereMotivo: false, bloqueo: null },
+        ]}
+        gestion={modoAsistido(ANUNCIANTE, "Café Sierra Alta")}
+      />
+    )
+    await usuario.click(screen.getByRole("button", { name: "Activar campaña" }))
+    const activar = await screen.findByRole("alertdialog", {
+      name: "¿Activar la campaña?",
+    })
+    expect(activar).toHaveAccessibleDescription(
+      /^Se activa por cuenta de Café Sierra Alta, que recibe un aviso;/
+    )
+    await usuario.click(
+      within(activar).getByRole("button", { name: "Cancelar" })
+    )
+    await waitFor(() => expect(activar).not.toBeInTheDocument())
+
+    await usuario.click(
+      screen.getByRole("button", { name: "Archivar campaña" })
+    )
+    const archivar = await screen.findByRole("alertdialog")
+    expect(archivar).toHaveAccessibleDescription(
+      /también de «Mis campañas» de Café Sierra Alta.*Archivar no le llega como aviso a la empresa\./
+    )
+  })
+
+  it("sin el nombre de la empresa, concuerda («por cuenta de la empresa»)", async () => {
+    const usuario = userEvent.setup()
+    render(
+      <AccionesCampana
+        campana={CAMPANA}
+        puedeEditar={false}
+        acciones={[{ accion: "activar", requiereMotivo: false, bloqueo: null }]}
+        gestion={modoAsistido(ANUNCIANTE, null)}
+      />
+    )
+    await usuario.click(screen.getByRole("button", { name: "Activar campaña" }))
+    const dialogo = await screen.findByRole("alertdialog")
+    expect(dialogo).toHaveAccessibleDescription(
+      /^Se activa por cuenta de la empresa, que recibe un aviso;/
+    )
+    expect(dialogo).not.toHaveTextContent(/de el anunciante/)
   })
 })

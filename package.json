@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:navegadores": "AMO_E2E_NAVEGADORES=1 playwright test --project=firefox --project=safari --project=safari-ios --project=chrome-android",
     "geo:build": "tsx scripts/geo/build-geo.ts",
     "brand:build": "tsx scripts/brand/build-brand.ts",
     "db:types": "tsx scripts/db/generar-tipos.ts",
@@ -32,7 +33,9 @@
     "pruebas:pauta-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-pauta-e2e.ts",
     "pruebas:validacion-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-validacion-e2e.ts",
     "pruebas:finanzas-e2e": "tsx --env-file=.env.local scripts/bootstrap/comprobar-finanzas-e2e.ts",
-    "prod:config-pruebas": "tsx scripts/produccion/configuracion-pruebas.ts"
+    "pruebas:rendimiento-geo": "tsx scripts/pruebas/rendimiento-geo.ts",
+    "prod:config-pruebas": "tsx scripts/produccion/configuracion-pruebas.ts",
+    "prod:limpiar-pruebas": "tsx scripts/produccion/limpiar-pruebas.ts"
   },
   "engines": {
     "node": ">=22.12"

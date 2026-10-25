@@ -12,7 +12,7 @@ import { useBandeja } from "./marco-bandeja"
 /** «Marcar todas como leídas» del encabezado de la bandeja. */
 export function BotonMarcarTodas({ inicial }: { inicial: ConteoNoLeidas }) {
   const { marcarTodas, marcandoTodas } = useBandeja()
-  const conteo = useConteoNoLeidas(inicial)
+  const conteo = useConteoNoLeidas({ inicial })
   const { disponible, total } = conteo.data ?? inicial
 
   if (!disponible) return null

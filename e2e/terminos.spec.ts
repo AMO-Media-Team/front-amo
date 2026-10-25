@@ -1,5 +1,3 @@
-import AxeBuilder from "@axe-core/playwright"
-
 import { generarContrasena } from "../scripts/bootstrap/contrasena"
 import {
   clienteComoSuperadmin,
@@ -17,6 +15,7 @@ import {
   aceptarTerminosVigentes,
   huellaCorreo,
 } from "../scripts/bootstrap/terminos-e2e"
+import { infracciones } from "./utilidades/axe"
 import { type Credenciales, entorno, ingresar } from "./utilidades/cuentas"
 import { esperarSinDesbordeHorizontal } from "./utilidades/interfaz"
 import { expect, type Page, test } from "./utilidades/prueba"
@@ -278,10 +277,7 @@ test.describe("términos y política de datos (AUT-012)", () => {
     ).not.toBeChecked()
     await esperarSinDesbordeHorizontal(page)
 
-    const { violations } = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-      .analyze()
-    expect(violations.map(({ id, help }) => `${id}: ${help}`)).toEqual([])
+    expect(await infracciones(page), "/aceptar-terminos").toEqual([])
 
     // Ninguna sección se abre sin aceptar: el DAL vuelve a la compuerta.
     await page.goto(DESTINO)

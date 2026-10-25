@@ -188,6 +188,16 @@ export const esquemaGuardarParametro = z.object({
 
 export type EntradaGuardarParametro = z.input<typeof esquemaGuardarParametro>
 
+/** Confirmar el valor vigente de un parámetro «pendiente de validación» (CFG-001). */
+export const esquemaConfirmarParametro = z.object({
+  clave: z.string().regex(PATRON_CLAVE_PARAMETRO, "Parámetro desconocido."),
+  actualizadoAt: marcaTiempo,
+})
+
+export type EntradaConfirmarParametro = z.input<
+  typeof esquemaConfirmarParametro
+>
+
 export interface OpcionesValidacionValor {
   /** Valores que viven en otra tabla (ISO2 de países, DIVIPOLA de municipios). */
   existe?: (valor: string) => boolean

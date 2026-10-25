@@ -54,6 +54,7 @@ import {
   type OpcionMunicipio,
 } from "./queries"
 import {
+  type EntradaConfirmarParametro,
   type EntradaExcepcion,
   type EntradaFormato,
   type EntradaFranja,
@@ -73,6 +74,7 @@ import {
   esquemaArchivarCatalogo,
   esquemaBuscarMunicipio,
   esquemaBuscarObjetivo,
+  esquemaConfirmarParametro,
   esquemaDepartamento,
   esquemaElementoCatalogo,
   esquemaExcepcion,
@@ -265,6 +267,74 @@ export async function guardarParametro(
     return exito({ actualizadoAt: data[0].updated_at })
   } catch (error) {
     return falloInesperado("guardarParametro", error)
+  }
+}
+
+/**
+ * Confirma el valor vigente de un parámetro «pendiente de validación»
+ * (CFG-001): retira la marca, que no vuelve a ponerse fuera de una migración
+ * (`trg_configuracion_b_validada`), y la bitácora registra el cambio con el
+ * actor. Con bloqueo optimista: si el parámetro cambió después de que la
+ * persona lo vio, no se confirma un valor que no revisó. Confirmar uno que ya
+ * no está pendiente no hace nada.
+ */
+export async function confirmarParametro(
+  entrada: EntradaConfirmarParametro
+): Promise<ResultadoAccion<{ actualizadoAt: string }>> {
+  const usuario = await requerirPermiso("configuracion.editar")
+  const validacion = esquemaConfirmarParametro.safeParse(entrada)
+  if (!validacion.success) return desdeErrorZod(validacion.error)
+  const { clave, actualizadoAt } = validacion.data
+  if (
+    exigeComisiones(clave) &&
+    !tieneAlgunPermiso(usuario, ["configuracion.comisiones"])
+  ) {
+    return fallo(
+      "Para confirmar la comisión también necesitas el permiso «Editar la comisión global y sus excepciones»."
+    )
+  }
+
+  try {
+    const supabase = await crearClienteServidor()
+    const { data: actual, error } = await supabase
+      .from("configuracion")
+      .select("pendiente_validacion, updated_at")
+      .eq("clave", clave)
+      .maybeSingle()
+    if (error) return falloBd("leer parámetro", error)
+    if (!actual) return conflicto("Este parámetro ya no existe.")
+    if (!actual.pendiente_validacion) {
+      refresh()
+      return exito({ actualizadoAt: actual.updated_at })
+    }
+    if (actual.updated_at !== actualizadoAt) {
+      return conflicto(CAMBIO_CONCURRENTE)
+    }
+
+    const { data, error: errorConfirmar } = await supabase
+      .from("configuracion")
+      .update({ pendiente_validacion: false })
+      .eq("clave", clave)
+      .eq("updated_at", actualizadoAt)
+      .eq("pendiente_validacion", true)
+      .select("updated_at")
+    if (errorConfirmar) return falloBd("confirmar parámetro", errorConfirmar)
+    if (data.length === 0) {
+      return motivoSinFilas(
+        () =>
+          supabase
+            .from("configuracion")
+            .select("updated_at")
+            .eq("clave", clave)
+            .maybeSingle(),
+        actualizadoAt,
+        CAMBIO_CONCURRENTE
+      )
+    }
+    refresh()
+    return exito({ actualizadoAt: data[0].updated_at })
+  } catch (error) {
+    return falloInesperado("confirmarParametro", error)
   }
 }
 

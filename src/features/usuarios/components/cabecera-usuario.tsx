@@ -93,11 +93,14 @@ export function CabeceraUsuario({
   esActor,
   exigeMfa,
   acciones,
+  distintivos,
 }: {
   usuario: UsuarioDetalle
   esActor: boolean
   exigeMfa: boolean
   acciones: ReactNode
+  /** Insignias adicionales (p. ej., «Reclamo en trámite» de datos personales). */
+  distintivos?: ReactNode
 }) {
   const nombre = nombreVisible(usuario)
 
@@ -152,6 +155,7 @@ export function CabeceraUsuario({
                     usuario.estado
                   )}
                 />
+                {distintivos}
               </div>
             </div>
           </div>

@@ -61,6 +61,24 @@ describe("SelectorObjetivo", () => {
     expect(onCambio).toHaveBeenCalledWith(ANUNCIANTE)
   })
 
+  it("con la lista abierta, aria-controls apunta al listbox que existe", async () => {
+    acciones.buscarObjetivosComision.mockResolvedValue(exito([ANUNCIANTE]))
+    render(
+      <SelectorObjetivo tipo="anunciante" valor={null} onCambio={vi.fn()} />
+    )
+    const disparador = screen.getByRole("combobox")
+    expect(disparador).not.toHaveAttribute("aria-controls")
+
+    await userEvent.click(disparador)
+    const lista = await screen.findByRole("listbox")
+    // cmdk pone su propio id a la lista: el disparador debe usar ese.
+    expect(lista.id).not.toBe("")
+    expect(disparador).toHaveAttribute("aria-controls", lista.id)
+
+    await userEvent.keyboard("{Escape}")
+    await waitFor(() => expect(disparador).not.toHaveAttribute("aria-controls"))
+  })
+
   it("no consulta al servidor en cada tecla: espera a que la persona pare", async () => {
     acciones.buscarObjetivosComision.mockResolvedValue(exito([ANUNCIANTE]))
     render(

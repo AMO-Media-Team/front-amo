@@ -79,8 +79,16 @@ export async function FichaMiCampana({
     permisos: usuario.permisos,
     estadoEmpresa,
   })
-  const puedeEditar = puedeEditarCampana(campana.estado, usuario.permisos)
-  const puedeCrear = puedeCrearOfertas(campana.estado, usuario.permisos)
+  const puedeEditar = puedeEditarCampana(
+    campana.estado,
+    usuario.rol.tipo,
+    usuario.permisos
+  )
+  const puedeCrear = puedeCrearOfertas(
+    campana.estado,
+    usuario.rol.tipo,
+    usuario.permisos
+  )
   const conEjecucion = campana.estado !== "BORRADOR"
   const verSeguimiento =
     conEjecucion && tieneAlgunPermiso(usuario, ["asignaciones.ver_propias"])

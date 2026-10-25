@@ -108,6 +108,32 @@ async function idsEnRiesgo(): Promise<string[]> {
   return data.map((fila) => fila.medio_id)
 }
 
+/**
+ * Ids de los medios que pasaron el porcentaje de alerta del tope anual de su
+ * nivel (CFG-005): lo aceptado en el año frente al tope vigente.
+ */
+async function idsCercaTope(): Promise<string[]> {
+  const supabase = await clienteSolicitud()
+  const { data, error } = await supabase.rpc("medios_cerca_tope")
+  if (error) fallar("calcular los medios cerca del tope anual", error)
+  return data.map((fila) => fila.medio_id)
+}
+
+/**
+ * Los medios de las señales elegidas (una o varias: se suman, como las demás
+ * opciones de un mismo filtro); `null` sin señales elegidas.
+ */
+async function idsDeSegmentos(
+  segmentos: EstadoTablaMedios["segmento"]
+): Promise<string[] | null> {
+  if (segmentos.length === 0) return null
+  const listas = await Promise.all([
+    segmentos.includes("en_riesgo") ? idsEnRiesgo() : [],
+    segmentos.includes("cerca_tope") ? idsCercaTope() : [],
+  ])
+  return [...new Set(listas.flat())]
+}
+
 function cuentasCompactas(
   cuentas: FilaMedioBd["cuentas"],
   franjas: ReadonlyMap<string, { clave: string }>
@@ -168,9 +194,9 @@ export async function listarMedios(
   { verAsignaciones }: { verAsignaciones: boolean }
 ): Promise<PaginaFilas<MedioFila>> {
   const supabase = await clienteSolicitud()
-  const [{ franjas }, enRiesgo] = await Promise.all([
+  const [{ franjas }, deSegmentos] = await Promise.all([
     catalogos(),
-    estado.segmento.includes("en_riesgo") ? idsEnRiesgo() : null,
+    idsDeSegmentos(estado.segmento),
   ])
   const patron = patronContiene(normalizarBusqueda(estado.q))
   const columnaOrden = COLUMNAS_ORDEN[estado.orden.campo]
@@ -204,10 +230,10 @@ export async function listarMedios(
       if (estado.categoria.length > 0) {
         consulta = consulta.in("con_categoria.categoria_id", estado.categoria)
       }
-      if (enRiesgo) {
+      if (deSegmentos) {
         consulta = consulta.in(
           "id",
-          enRiesgo.length > 0 ? enRiesgo : SIN_COINCIDENCIAS
+          deSegmentos.length > 0 ? deSegmentos : SIN_COINCIDENCIAS
         )
       }
       return consulta

@@ -28,6 +28,8 @@ import {
   type ParserMap,
 } from "nuqs/server"
 
+import { formatearNumero } from "@/lib/format"
+
 /** Tamaños de página ofrecidos en el selector. */
 export const TAMANOS_PAGINA = [10, 20, 50, 100] as const
 export type TamanoPagina = (typeof TAMANOS_PAGINA)[number]
@@ -181,6 +183,27 @@ export function rangoVisible(
   const paginaReal = Math.min(pagina, totalPaginas(total, tamano))
   const desde = desplazamiento(paginaReal, tamano) + 1
   return { desde, hasta: Math.min(total, desde + tamano - 1) }
+}
+
+/**
+ * Lo que anuncia la única región viva de la tabla al buscar, filtrar, ordenar
+ * o paginar: el total, el orden (`orden`, p. ej. "nombre en orden
+ * ascendente") y, si hay más de una página, las filas que se ven.
+ * Ej.: "57 resultados, ordenados por nombre en orden ascendente; se muestran
+ * del 21 al 40".
+ */
+export function describirResultados(
+  pagina: number,
+  tamano: number,
+  total: number,
+  orden?: string
+): string {
+  if (total === 0) return "Sin resultados"
+  if (total === 1) return "1 resultado"
+  const conteo = `${formatearNumero(total)} resultados${orden ? `, ordenados por ${orden}` : ""}`
+  if (total <= tamano) return conteo
+  const { desde, hasta } = rangoVisible(pagina, tamano, total)
+  return `${conteo}; se muestran del ${formatearNumero(desde)} al ${formatearNumero(hasta)}`
 }
 
 /** ¿La vista está acotada por búsqueda o filtros? (decide el mensaje del estado vacío). */

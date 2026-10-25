@@ -86,6 +86,7 @@ describe("seccionEditable", () => {
       "legal",
       "plantillas",
     ])
+    // Legal y Plantillas tienen además parámetros: los titulares y el correo.
     expect(editables("configuracion.editar")).toEqual([
       "comercial",
       "precios",
@@ -94,6 +95,8 @@ describe("seccionEditable", () => {
       "calidad",
       "seguridad",
       "tributario",
+      "legal",
+      "plantillas",
     ])
   })
 })

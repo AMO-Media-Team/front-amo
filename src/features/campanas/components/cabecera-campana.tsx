@@ -13,7 +13,11 @@ import { formatearFecha, formatearFechaHora } from "@/lib/format"
 import { duracionVigencia } from "../presentacion"
 import { RUTA_MIS_CAMPANAS } from "../rutas"
 import type { MiCampana } from "../tipos"
-import { FaseCampana, InsigniaCampana } from "./distintivos-campana"
+import {
+  FaseCampana,
+  InsigniaCampana,
+  InsigniaGestionAsistida,
+} from "./distintivos-campana"
 
 function AvisoEstado({ campana }: { campana: MiCampana }) {
   if (campana.estado === "CANCELADA") {
@@ -90,6 +94,9 @@ export function CabeceraCampana({
         <>
           <InsigniaCampana estado={campana.estado} />
           <FaseCampana campana={campana} hoy={hoy} />
+          {campana.gestionAsistida ? (
+            <InsigniaGestionAsistida voz="propio" />
+          ) : null}
           {campana.esDemo ? <InsigniaDemo /> : null}
         </>
       }

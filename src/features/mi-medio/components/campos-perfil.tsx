@@ -98,6 +98,9 @@ export function CampoCategoriasMedio({
 }) {
   const { control } = useFormContext<EntradaPerfilMedio>()
   const idAyuda = useId()
+  // Nombre de cada casilla desde el servidor: Base UI enlaza la etiqueta que la
+  // envuelve solo después de montarse (axe y los lectores la verían sin nombre).
+  const idNombres = useId()
   return (
     <Controller
       control={control}
@@ -141,6 +144,7 @@ export function CampoCategoriasMedio({
                       )}
                     >
                       <Checkbox
+                        aria-labelledby={`${idNombres}-${categoria.id}`}
                         checked={marcada}
                         disabled={bloqueada}
                         onCheckedChange={(valor) => {
@@ -150,7 +154,9 @@ export function CampoCategoriasMedio({
                           field.onBlur()
                         }}
                       />
-                      <span>{categoria.nombre}</span>
+                      <span id={`${idNombres}-${categoria.id}`}>
+                        {categoria.nombre}
+                      </span>
                       {categoria.retirada ? (
                         <span className="text-xs font-medium text-warning">
                           (ya no disponible)

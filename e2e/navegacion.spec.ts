@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "./utilidades/prueba"
-import { PROYECTO_MOVIL } from "./utilidades/proyectos"
+import { esMovil } from "./utilidades/proyectos"
 import { sesion } from "./utilidades/sesiones"
 
 /**
@@ -12,7 +12,7 @@ import { sesion } from "./utilidades/sesiones"
 const PARTIDA = "/cuenta/perfil"
 
 async function abrirMenuPrincipal(page: Page, proyecto: string) {
-  if (proyecto === PROYECTO_MOVIL) {
+  if (esMovil(proyecto)) {
     await page
       .getByRole("banner")
       .getByRole("button", { name: "Mostrar u ocultar el menú lateral" })

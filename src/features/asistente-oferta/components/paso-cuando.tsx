@@ -127,7 +127,7 @@ export function PasoCuando({ campana, configuracion, ahora }: PropsPasoCuando) {
         <CampoInterruptor
           nombre="cuando.exclusividad"
           etiqueta="Exclusividad de sector"
-          descripcion={`Durante esos días el medio no publica para otras marcas de tu sector. El precio de cada medio sube ${recargo}.`}
+          descripcion={`Durante esos días el medio no publica para otras marcas del mismo sector. El precio de cada medio sube ${recargo}.`}
         />
         {exclusividad ? (
           <CampoCifra

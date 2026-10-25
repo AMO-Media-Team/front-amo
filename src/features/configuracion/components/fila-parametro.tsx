@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  BadgeCheck,
   Check,
   EllipsisVertical,
   History,
@@ -11,6 +12,7 @@ import {
 import { type RefObject, useEffect, useId, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { DialogoConfirmacion } from "@/components/feedback/dialogo-confirmacion"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -20,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-import { guardarParametro } from "../actions"
+import { confirmarParametro, guardarParametro } from "../actions"
 import {
   type Borrador,
   borradorInicial,
@@ -102,6 +104,8 @@ export function FilaParametro({
   const [borrador, setBorrador] = useState<Borrador | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [propuesta, setPropuesta] = useState<Propuesta | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
+  const valorConfirmado = useRef(false)
   const idBase = useId()
   const idCampo = `${idBase}-campo`
   const idAyuda = `${idBase}-ayuda`
@@ -170,6 +174,21 @@ export function FilaParametro({
     return resultado
   }
 
+  /** CFG-001: el valor vigente queda confirmado y la marca se retira. */
+  async function confirmarValor() {
+    const resultado = await confirmarParametro({
+      clave: parametro.clave,
+      actualizadoAt: parametro.actualizadoAt,
+    })
+    if (resultado.ok) {
+      valorConfirmado.current = true
+      toast.success(`${titulo} confirmado`, {
+        description: `${actual.texto} ya no está pendiente de validación.`,
+      })
+    }
+    return resultado
+  }
+
   function historial() {
     abrirHistorial?.({
       entidad: "configuracion",
@@ -205,6 +224,17 @@ export function FilaParametro({
             <h4 className="text-sm font-medium">{titulo}</h4>
             {parametro.pendienteValidacion ? (
               <InsigniaPendiente compacta />
+            ) : null}
+            {parametro.pendienteValidacion && editable && !enEdicion ? (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setConfirmando(true)}
+                aria-label={`Confirmar valor de ${titulo}`}
+              >
+                <BadgeCheck data-icon="inline-start" aria-hidden />
+                <span aria-hidden>Confirmar valor</span>
+              </Button>
             ) : null}
             {parametro.esPublica ? <InsigniaPublica /> : null}
           </div>
@@ -309,6 +339,31 @@ export function FilaParametro({
           </div>
         </div>
       ) : null}
+
+      <DialogoConfirmacion
+        abierto={confirmando}
+        onAbiertoChange={setConfirmando}
+        titulo={`¿Confirmar el valor de «${titulo}»?`}
+        descripcion={
+          <>
+            <span className="font-semibold cifras text-foreground">
+              {actual.texto}
+            </span>{" "}
+            queda como valor definitivo: se retira la marca «Pendiente de
+            validación» y la confirmación queda en la bitácora a tu nombre.
+            Podrás seguir editándolo, pero no volverá a quedar pendiente.
+          </>
+        }
+        textoConfirmar="Confirmar valor"
+        // Tras confirmar, el botón que abrió el diálogo ya no existe: el foco
+        // pasa a «Editar». Al cancelar, vuelve al botón (comportamiento normal).
+        focoAlCerrar={() => {
+          if (!valorConfirmado.current) return null
+          valorConfirmado.current = false
+          return botonEditar.current
+        }}
+        onConfirmar={confirmarValor}
+      />
 
       {propuesta ? (
         <DialogoRevision

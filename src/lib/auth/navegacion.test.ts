@@ -49,7 +49,14 @@ describe("filtrarNavegacion", () => {
   it("muestra a un administrador solo lo que sus permisos permiten", () => {
     expect(
       idsVisibles("ADMIN", ["inicio.admin", "usuarios.ver", "cuenta.gestionar"])
-    ).toEqual(["inicio", "usuarios", "perfil", "seguridad", "preferencias"])
+    ).toEqual([
+      "inicio",
+      "usuarios",
+      "perfil",
+      "seguridad",
+      "preferencias",
+      "privacidad",
+    ])
   })
 
   it("oculta secciones internas a anunciantes aunque tengan el permiso", () => {

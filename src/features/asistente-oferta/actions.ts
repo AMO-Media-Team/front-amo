@@ -1,15 +1,18 @@
 "use server"
 
 /**
- * Server Actions del asistente de oferta (ANU-004…009).
+ * Server Actions del asistente de oferta (ANU-004…009), también en la gestión
+ * asistida del equipo AMO por cuenta de un anunciante (ADM-014).
  *
- * 1. DAL (`requerirPermiso("ofertas.gestionar_propias")`), antes que nada.
+ * 1. DAL, antes que nada: `ofertas.gestionar_propias` (el anunciante) o
+ *    `ofertas.gestionar` (el equipo AMO). Solo al anunciante se le exige
+ *    empresa propia; la RLS y las transiciones ADMIN deciden para el equipo.
  * 2. zod: el MISMO esquema que el formulario (`esquemaOferta(null)`, lo que
  *    exige la BD para guardar). Las reglas del envío las aplica la BD al
  *    pasar a revisión y devuelve en `hint` el paso que falta.
  * 3. Borradores (`ofertas` + `oferta_cupos`, uno por formato) con el cliente
- *    del USUARIO: RLS «propio», la empresa la deriva la BD de la campaña y la
- *    bitácora queda con el actor. Bloqueo optimista con `updated_at` (no se
+ *    del USUARIO: RLS «propio» (o `ofertas.gestionar`), la empresa la deriva
+ *    la BD de la campaña y la bitácora queda con el actor. Bloqueo optimista con `updated_at` (no se
  *    pisa lo que guardó un compañero) y, tras un intento sin respuesta, se
  *    adoptan los borradores que alcanzó a crear (no se duplican). El envío a
  *    revisión, solo por `transicionar` (máquina de estados), y el descarte,
@@ -19,6 +22,10 @@
  */
 import "server-only"
 
+import {
+  exigeEmpresaPropia,
+  PERMISOS_GESTION_OFERTAS,
+} from "@/features/campanas/gestion"
 import { requerirPermiso } from "@/lib/auth/dal"
 import { contextoDelActor } from "@/lib/auth/contexto-actor"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
@@ -477,7 +484,9 @@ async function prepararGuardado(
   | { supabase: ClienteUsuario; ofertas: OfertaEnCurso[] }
   | (ResultadoFallo & { ofertas?: OfertaEnCurso[] })
 > {
-  if (!usuario.anuncianteId) return fallo(SIN_EMPRESA)
+  if (exigeEmpresaPropia(usuario) && !usuario.anuncianteId) {
+    return fallo(SIN_EMPRESA)
+  }
   const validacion = validarEntrada(entrada)
   if ("ok" in validacion) return validacion
   const supabase = await crearClienteServidor()
@@ -496,7 +505,7 @@ async function prepararGuardado(
 export async function guardarOfertas(
   entrada: EntradaGuardarOfertas
 ): Promise<ResultadoGuardarOfertas> {
-  const usuario = await requerirPermiso("ofertas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   try {
     const guardado = await prepararGuardado(usuario, entrada)
     if (esFallo(guardado)) return guardado
@@ -515,7 +524,7 @@ export async function guardarOfertas(
 export async function descartarOferta(entrada: {
   ofertaId: string
 }): Promise<ResultadoAccion> {
-  const usuario = await requerirPermiso("ofertas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaDescartarOferta.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   try {
@@ -551,7 +560,7 @@ export async function enviarOfertasARevision(
   | ResultadoAccion<ResultadoEnvio>
   | (ResultadoFallo & { ofertas?: OfertaEnCurso[] })
 > {
-  const usuario = await requerirPermiso("ofertas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   try {
     const guardado = await prepararGuardado(usuario, entrada)
     if (esFallo(guardado)) return guardado
@@ -605,7 +614,7 @@ export async function enviarOfertasARevision(
 export async function estimarOferta(
   entrada: ParametrosEstimacion
 ): Promise<ResultadoAccion<EstimacionFranja[]>> {
-  await requerirPermiso("ofertas.gestionar_propias")
+  await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaEstimacion.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   const p = validacion.data
@@ -651,7 +660,7 @@ export async function estimarOferta(
 export async function buscarMediosExcluibles(entrada: {
   texto: string
 }): Promise<ResultadoAccion<MedioExcluido[]>> {
-  await requerirPermiso("ofertas.gestionar_propias")
+  await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaBuscarMedios.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   try {

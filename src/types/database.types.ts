@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVO GENERADO — no editar a mano.
 // Origen: Supabase local (supabase start), esquema public,
-// última migración aplicada: 20261024024312_e3_finanzas.
+// última migración aplicada: 20261024181218_e3_cierre.
 // Regenerar con `pnpm db:types` (scripts/db/generar-tipos.ts; requiere `supabase login`).
 // ─────────────────────────────────────────────────────────────────────────────
 export type Json =
@@ -688,6 +688,7 @@ export type Database = {
           fecha_fin: string
           fecha_inicio: string
           finalizada_at: string | null
+          gestion_asistida: boolean
           id: string
           marca: string
           nombre: string
@@ -708,6 +709,7 @@ export type Database = {
           fecha_fin: string
           fecha_inicio: string
           finalizada_at?: string | null
+          gestion_asistida?: boolean
           id?: string
           marca: string
           nombre: string
@@ -728,6 +730,7 @@ export type Database = {
           fecha_fin?: string
           fecha_inicio?: string
           finalizada_at?: string | null
+          gestion_asistida?: boolean
           id?: string
           marca?: string
           nombre?: string
@@ -2741,6 +2744,7 @@ export type Database = {
           exclusividad_dias: number | null
           fecha_limite_aceptacion: string
           formato_id: string
+          gestion_asistida: boolean
           id: string
           instrucciones: string | null
           llena_at: string | null
@@ -2785,6 +2789,7 @@ export type Database = {
           exclusividad_dias?: number | null
           fecha_limite_aceptacion: string
           formato_id: string
+          gestion_asistida?: boolean
           id?: string
           instrucciones?: string | null
           llena_at?: string | null
@@ -2829,6 +2834,7 @@ export type Database = {
           exclusividad_dias?: number | null
           fecha_limite_aceptacion?: string
           formato_id?: string
+          gestion_asistida?: boolean
           id?: string
           instrucciones?: string | null
           llena_at?: string | null
@@ -3574,6 +3580,153 @@ export type Database = {
         }
         Relationships: []
       }
+      solicitudes_titular: {
+        Row: {
+          alerta_desde: string
+          anunciante_id: string | null
+          created_at: string
+          datos_afectados: string[]
+          decision:
+            | Database["public"]["Enums"]["solicitud_titular_decision"]
+            | null
+          descripcion: string
+          desistida_at: string | null
+          email_sha256: string
+          en_tramite_at: string | null
+          estado: Database["public"]["Enums"]["solicitud_titular_estado"]
+          evidencia_path: string | null
+          id: string
+          informacion_aportada: string | null
+          informacion_at: string | null
+          medio_id: string | null
+          numero: number
+          perfil_id: string | null
+          plazo_vence: string
+          prorroga_motivo: string | null
+          prorrogada_at: string | null
+          recibida_at: string
+          requerida_at: string | null
+          requerimiento: string | null
+          respondida_at: string | null
+          respondida_por: string | null
+          respuesta: string | null
+          rol_tipo: Database["public"]["Enums"]["rol_tipo"]
+          supresion_ejecutada_at: string | null
+          supresion_resultado: Json | null
+          tipo: Database["public"]["Enums"]["solicitud_titular_tipo"]
+          tramitada_por: string | null
+          updated_at: string
+        }
+        Insert: {
+          alerta_desde: string
+          anunciante_id?: string | null
+          created_at?: string
+          datos_afectados?: string[]
+          decision?:
+            | Database["public"]["Enums"]["solicitud_titular_decision"]
+            | null
+          descripcion: string
+          desistida_at?: string | null
+          email_sha256: string
+          en_tramite_at?: string | null
+          estado?: Database["public"]["Enums"]["solicitud_titular_estado"]
+          evidencia_path?: string | null
+          id?: string
+          informacion_aportada?: string | null
+          informacion_at?: string | null
+          medio_id?: string | null
+          numero?: never
+          perfil_id?: string | null
+          plazo_vence: string
+          prorroga_motivo?: string | null
+          prorrogada_at?: string | null
+          recibida_at?: string
+          requerida_at?: string | null
+          requerimiento?: string | null
+          respondida_at?: string | null
+          respondida_por?: string | null
+          respuesta?: string | null
+          rol_tipo: Database["public"]["Enums"]["rol_tipo"]
+          supresion_ejecutada_at?: string | null
+          supresion_resultado?: Json | null
+          tipo: Database["public"]["Enums"]["solicitud_titular_tipo"]
+          tramitada_por?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alerta_desde?: string
+          anunciante_id?: string | null
+          created_at?: string
+          datos_afectados?: string[]
+          decision?:
+            | Database["public"]["Enums"]["solicitud_titular_decision"]
+            | null
+          descripcion?: string
+          desistida_at?: string | null
+          email_sha256?: string
+          en_tramite_at?: string | null
+          estado?: Database["public"]["Enums"]["solicitud_titular_estado"]
+          evidencia_path?: string | null
+          id?: string
+          informacion_aportada?: string | null
+          informacion_at?: string | null
+          medio_id?: string | null
+          numero?: never
+          perfil_id?: string | null
+          plazo_vence?: string
+          prorroga_motivo?: string | null
+          prorrogada_at?: string | null
+          recibida_at?: string
+          requerida_at?: string | null
+          requerimiento?: string | null
+          respondida_at?: string | null
+          respondida_por?: string | null
+          respuesta?: string | null
+          rol_tipo?: Database["public"]["Enums"]["rol_tipo"]
+          supresion_ejecutada_at?: string | null
+          supresion_resultado?: Json | null
+          tipo?: Database["public"]["Enums"]["solicitud_titular_tipo"]
+          tramitada_por?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitudes_titular_anunciante_id_fkey"
+            columns: ["anunciante_id"]
+            isOneToOne: false
+            referencedRelation: "anunciantes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_titular_medio_id_fkey"
+            columns: ["medio_id"]
+            isOneToOne: false
+            referencedRelation: "medios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_titular_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_titular_respondida_por_fkey"
+            columns: ["respondida_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitudes_titular_tramitada_por_fkey"
+            columns: ["tramitada_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       solicitudes_vinculacion: {
         Row: {
           autoriza_datos: boolean
@@ -3891,6 +4044,15 @@ export type Database = {
           sector_id: string
         }[]
       }
+      aportar_informacion_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_id: string
+          p_informacion: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       archivar_campana_srv: {
         Args: { p_actor_id: string; p_campana_id: string; p_session_id: string }
         Returns: undefined
@@ -4101,6 +4263,7 @@ export type Database = {
         Args: { p_documento_id: string }
         Returns: Json
       }
+      datos_titular: { Args: { p_perfil_id?: string }; Returns: Json }
       desempeno_anunciante: {
         Args: {
           p_campana_id?: string
@@ -4133,6 +4296,10 @@ export type Database = {
           p_session_id: string
         }
         Returns: string
+      }
+      desistir_solicitud_titular_srv: {
+        Args: { p_actor_id: string; p_id: string; p_session_id: string }
+        Returns: undefined
       }
       detalle_zona_geo: {
         Args: {
@@ -4487,6 +4654,15 @@ export type Database = {
           vista: boolean
         }[]
       }
+      medios_cerca_tope: {
+        Args: never
+        Returns: {
+          consumido: number
+          fraccion: number
+          medio_id: string
+          tope: number
+        }[]
+      }
       medios_en_riesgo: {
         Args: { p_limite?: number }
         Returns: {
@@ -4583,6 +4759,19 @@ export type Database = {
         Returns: {
           detalle: string
           motivo: string
+        }[]
+      }
+      mi_reputacion: {
+        Args: never
+        Returns: {
+          calculada_at: string
+          casos: Json
+          cumplidas: number
+          n: number
+          n_minimo: number
+          publicaciones_180d: number
+          publicaciones_total: number
+          tasa: number
         }[]
       }
       miembros_organizacion: {
@@ -4818,6 +5007,15 @@ export type Database = {
         }
         Returns: string
       }
+      prorrogar_solicitud_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_id: string
+          p_motivo: string
+          p_session_id: string
+        }
+        Returns: string
+      }
       proximas_acciones_medio: {
         Args: { p_limite?: number }
         Returns: {
@@ -4834,6 +5032,16 @@ export type Database = {
         Args: { p_actor_id: string; p_cuenta_id: string; p_session_id: string }
         Returns: undefined
       }
+      radicar_solicitud_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_datos_afectados?: string[]
+          p_descripcion: string
+          p_session_id: string
+          p_tipo: string
+        }
+        Returns: string
+      }
       rechazar_oferta_srv: {
         Args: {
           p_actor_id: string
@@ -4842,6 +5050,24 @@ export type Database = {
           p_session_id: string
         }
         Returns: string
+      }
+      reclamar_correos_srv: {
+        Args: { p_limite?: number }
+        Returns: {
+          asunto: string
+          clave: string
+          correo_id: number
+          cuerpo: string
+          datos: Json
+          destinatario: string
+          entidad: string
+          entidad_id: string
+          intento: number
+          mensaje: string
+          nombre: string
+          titulo: string
+          url: string
+        }[]
       }
       reevaluar_alerta_seg_social_srv: {
         Args: {
@@ -4874,6 +5100,15 @@ export type Database = {
           id: number
           motivo: string
         }[]
+      }
+      registrar_archivos_supresion_srv: {
+        Args: {
+          p_actor_id: string
+          p_pendientes: Json
+          p_session_id: string
+          p_solicitud_id: string
+        }
+        Returns: undefined
       }
       registrar_cuds_srv: {
         Args: {
@@ -4915,6 +5150,16 @@ export type Database = {
           p_session_id: string
         }
         Returns: Json
+      }
+      registrar_envio_correo_srv: {
+        Args: {
+          p_error?: string
+          p_id: number
+          p_intento: number
+          p_proveedor_id?: string
+          p_resultado: string
+        }
+        Returns: string
       }
       registrar_evento_srv: {
         Args: {
@@ -5158,6 +5403,15 @@ export type Database = {
           usuario_id: string
         }[]
       }
+      requerir_informacion_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_id: string
+          p_requerimiento: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
       reservar_cupo_srv: {
         Args: {
           p_actor_id: string
@@ -5182,6 +5436,17 @@ export type Database = {
           p_id: string
           p_medio_id?: string
           p_motivo?: string
+          p_session_id: string
+        }
+        Returns: undefined
+      }
+      responder_solicitud_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_decision: string
+          p_evidencia_path?: string
+          p_id: string
+          p_respuesta: string
           p_session_id: string
         }
         Returns: undefined
@@ -5305,6 +5570,15 @@ export type Database = {
           user_agent: string
         }[]
       }
+      suprimir_titular_srv: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_simular?: boolean
+          p_solicitud_id: string
+        }
+        Returns: Json
+      }
       suspender_usuario_srv: {
         Args: {
           p_actor_id: string
@@ -5346,6 +5620,10 @@ export type Database = {
           valor_anterior: number
           variacion: number
         }[]
+      }
+      tramitar_solicitud_titular_srv: {
+        Args: { p_actor_id: string; p_id: string; p_session_id: string }
+        Returns: undefined
       }
       transicionar_srv: {
         Args: {
@@ -5493,6 +5771,20 @@ export type Database = {
       plataforma: "FACEBOOK" | "INSTAGRAM" | "TIKTOK"
       retencion_tipo: "RETEFUENTE" | "RETEICA" | "RETEIVA"
       rol_tipo: "ADMIN" | "ANUNCIANTE" | "MEDIO"
+      solicitud_titular_decision: "PROCEDE" | "PROCEDE_PARCIAL" | "NO_PROCEDE"
+      solicitud_titular_estado:
+        | "RADICADA"
+        | "EN_TRAMITE"
+        | "REQUIERE_INFORMACION"
+        | "RESPONDIDA"
+        | "DESISTIDA"
+      solicitud_titular_tipo:
+        | "CONSULTA"
+        | "PRUEBA_AUTORIZACION"
+        | "ACTUALIZACION"
+        | "RECTIFICACION"
+        | "SUPRESION"
+        | "REVOCATORIA"
       solicitud_vinculacion_estado: "PENDIENTE" | "INVITADA" | "DESCARTADA"
       terminos_tipo:
         | "TERMINOS_MEDIO"
@@ -5756,6 +6048,22 @@ export const Constants = {
       plataforma: ["FACEBOOK", "INSTAGRAM", "TIKTOK"],
       retencion_tipo: ["RETEFUENTE", "RETEICA", "RETEIVA"],
       rol_tipo: ["ADMIN", "ANUNCIANTE", "MEDIO"],
+      solicitud_titular_decision: ["PROCEDE", "PROCEDE_PARCIAL", "NO_PROCEDE"],
+      solicitud_titular_estado: [
+        "RADICADA",
+        "EN_TRAMITE",
+        "REQUIERE_INFORMACION",
+        "RESPONDIDA",
+        "DESISTIDA",
+      ],
+      solicitud_titular_tipo: [
+        "CONSULTA",
+        "PRUEBA_AUTORIZACION",
+        "ACTUALIZACION",
+        "RECTIFICACION",
+        "SUPRESION",
+        "REVOCATORIA",
+      ],
       solicitud_vinculacion_estado: ["PENDIENTE", "INVITADA", "DESCARTADA"],
       terminos_tipo: [
         "TERMINOS_MEDIO",

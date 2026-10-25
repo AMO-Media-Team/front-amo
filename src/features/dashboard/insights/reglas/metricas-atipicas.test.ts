@@ -31,9 +31,28 @@ describe("reglaMetricasAtipicas", () => {
     expect(insight?.detalle).toBe(
       "3 se desvían del histórico del medio y 2 superan el alcance esperado para sus seguidores. La más antigua llegó hace 3 días."
     )
-    expect(insight?.accion?.href).toBe(
-      "/operacion/asignaciones?alerta=metricas"
+    // DSH-003: el hallazgo crítico lleva a la cola de validación de métricas
+    // con solo las que tienen alerta.
+    expect(insight?.accion).toEqual({
+      etiqueta: "Revisar la cola de validación",
+      href: "/operacion/validacion?cola=metricas&alertas=true",
+    })
+  })
+
+  it("a quien no valida métricas lo lleva al listado de asignaciones con alerta", () => {
+    const insight = reglaMetricasAtipicas(
+      entradaVacia({ metricasAtipicas: ATIPICAS, validaMetricas: false })
     )
+    expect(insight?.accion).toEqual({
+      etiqueta: "Ver las asignaciones con alerta",
+      href: "/operacion/asignaciones?alerta=metricas",
+    })
+    // Con el permiso declarado, la cola.
+    expect(
+      reglaMetricasAtipicas(
+        entradaVacia({ metricasAtipicas: ATIPICAS, validaMetricas: true })
+      )?.accion?.href
+    ).toBe("/operacion/validacion?cola=metricas&alertas=true")
   })
 
   it("justo en 48 horas todavía es atención", () => {

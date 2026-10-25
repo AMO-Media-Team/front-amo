@@ -67,6 +67,8 @@ export interface ConfiguracionAsistente {
 export interface CampanaAsistente {
   id: string
   nombre: string
+  /** Empresa dueña (la del anunciante o, en la gestión asistida, por cuya cuenta se actúa). */
+  anuncianteId: string
   estado: EstadoCampana
   /** 'YYYY-MM-DD' (día de Bogotá). */
   fechaInicio: string

@@ -40,6 +40,7 @@ type FilaCampanaBd = Pick<
   | "presupuesto_total"
   | "presupuesto_comprometido"
   | "created_at"
+  | "gestion_asistida"
 > & {
   anunciante: { nombre_comercial: string } | null
   ofertas: Pick<
@@ -50,7 +51,7 @@ type FilaCampanaBd = Pick<
 
 const SELECCION_LISTADO = `
   id, nombre, marca, anunciante_id, estado, fecha_inicio, fecha_fin, presupuesto_total,
-  presupuesto_comprometido, created_at,
+  presupuesto_comprometido, created_at, gestion_asistida,
   anunciante:anunciantes ( nombre_comercial ),
   ofertas ( id, plataforma, cupos_totales, cupos_ocupados, deleted_at )
 `
@@ -95,6 +96,7 @@ function aCampanaFila(fila: FilaCampanaBd): CampanaFila {
       0
     ),
     creadaAt: fila.created_at,
+    gestionAsistida: fila.gestion_asistida,
   }
 }
 
@@ -125,6 +127,9 @@ export async function listarCampanas(
         consulta = consulta.in("estado", estado.estado)
       if (estado.anunciante.length > 0) {
         consulta = consulta.in("anunciante_id", estado.anunciante)
+      }
+      if (estado.origen.includes("asistida")) {
+        consulta = consulta.eq("gestion_asistida", true)
       }
       if (estado.plataforma.length > 0) {
         consulta = consulta
@@ -218,7 +223,7 @@ export const obtenerCampana = cache(
       .select(
         `id, nombre, marca, objetivo, anunciante_id, estado, fecha_inicio, fecha_fin, presupuesto_total,
          presupuesto_comprometido, activada_at, finalizada_at, cancelada_at, created_at, es_demo, deleted_at,
-         anunciante:anunciantes ( nombre_comercial )`
+         gestion_asistida, anunciante:anunciantes ( nombre_comercial )`
       )
       .eq("id", id)
       .maybeSingle()
@@ -241,6 +246,7 @@ export const obtenerCampana = cache(
       canceladaAt: fila.cancelada_at,
       creadaAt: fila.created_at,
       esDemo: fila.es_demo,
+      gestionAsistida: fila.gestion_asistida,
     }
   }
 )

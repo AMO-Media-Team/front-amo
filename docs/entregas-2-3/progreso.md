@@ -11,7 +11,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | P3   | Marketplace, ejecución del medio, seguimiento del anunciante (cierra E2)                | ✅     |
 | P4   | Validación de evidencias y métricas, disputas, suspensión                               | ✅     |
 | P5   | Liquidaciones, documento soporte, pagos, facturas, ganancias                            | ✅     |
-| P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ⬜     |
+| P6   | Gestión asistida, reputación, derechos del titular, correo, tiempo real, cierre         | ✅     |
 
 ## Requisitos
 
@@ -29,7 +29,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | MED-007          | Tope por nivel y camino para subir de nivel                | P1    | ✅     |
 | ADM-001          | Cola de verificación de medios                             | P1    | ✅     |
 | ADM-006          | Clasificación de pertinencia geográfica                    | P1    | ✅     |
-| NOT-003          | Notificaciones por eventos del negocio                     | P1    | 🔧     |
+| NOT-003          | Notificaciones por eventos del negocio                     | P1/P6 | ✅     |
 | ANU-001          | Registro y datos de la empresa                             | P0/P2 | ✅     |
 | ANU-002          | Varios usuarios por anunciante                             | P2    | ✅     |
 | ANU-003          | Creación de campañas                                       | P2    | ✅     |
@@ -83,13 +83,13 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
 | LIQ-008          | Facturas al anunciante y cartera                           | P5    | ✅     |
 | MED-015          | Ganancias                                                  | P5    | ✅     |
 | ANU-013          | Facturación del anunciante                                 | P5    | ✅     |
-| ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | ⬜     |
-| MED-016          | Indicadores de reputación                                  | P6    | ⬜     |
-| CTA-007          | Derechos del titular de datos                              | P6    | ⬜     |
-| NOT-004          | Notificaciones por correo electrónico                      | P6    | ⬜     |
-| NOT-007          | Actualización en tiempo real                               | P6    | ⬜     |
-| CFG-001…009      | Criterios «Verificable en E2/E3» de configuración          | P1–P5 | ⬜     |
-| DSH-003, GEO-010 | Criterios «Verificable en E3»                              | P6    | ⬜     |
+| ADM-014          | Gestión asistida por cuenta del anunciante                 | P6    | ✅     |
+| MED-016          | Indicadores de reputación                                  | P6    | ✅     |
+| CTA-007          | Derechos del titular de datos                              | P6    | ✅     |
+| NOT-004          | Notificaciones por correo electrónico                      | P6    | ⏸      |
+| NOT-007          | Actualización en tiempo real                               | P6    | ✅     |
+| CFG-001…009      | Criterios «Verificable en E2/E3» de configuración          | P1–P6 | ✅     |
+| DSH-003, GEO-010 | Criterios «Verificable en E3»                              | P6    | ✅     |
 
 ## Bitácora de la ejecución
 
@@ -129,7 +129,7 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   (`_r_…`), y React la descarta al revelar el lote. No se ve ni la anuncian los lectores de pantalla, pero `getByLabel` y
   `getByText` la cuentan. El fixture E2E (`e2e/utilidades/prueba.ts`) hace que `goto`, `reload` y los ingresos esperen a
   que no quede ninguna (`esperarStreaming`); los specs además buscan por rol o dentro de un contenedor visible.
-- Pendiente (P6): limpieza programada de objetos de Storage sin fila (subidas no confirmadas o reemplazadas).
+- Pendiente (después de E3): limpieza programada de objetos de Storage sin fila (subidas no confirmadas o reemplazadas). La supresión de datos ya no depende de ella: registra los archivos pendientes y ofrece «Reintentar el borrado de archivos».
 - 2026-10-22 · **Fases 0 y 1 en producción** (`oriuuuaczpncmtglfgpv`): respaldo previo de esquema y datos en
   `context/respaldos/` (0600, fuera de git); `pnpm db:push produccion --confirmar-produccion` aplicó
   `20261022024336`, `20261022030524` y `20261022030525`. Verificación por MCP (solo lectura): 48 migraciones iguales a
@@ -232,3 +232,21 @@ servicio externo, ver `context/Servicios-Pendientes-Definir.md`).
   (solo lectura): 52 migraciones, 66 plantillas, 65 claves, 146 transiciones, funciones nuevas, Storage con lectura solo de lo
   referenciado, sin escritura de la sesión en facturas ni liquidaciones, configuración de prueba intacta, 3 superadministradores,
   Vault; advisors sin ERROR (WARN nuevos: las lecturas definer de finanzas, con el permiso comprobado por dentro).
+- 2026-10-24 · **Fase 6 (cierre de E3).** Mapeo con 5 lectores. Migración `20261024181218_e3_cierre` (gestión asistida,
+  reputación, titular de datos con días hábiles de Colombia, exportación y supresión, correo apagado, aviso en vivo
+  mínimo, confirmación de parámetros, medios cerca del tope, limpieza final sin ejecutar, funciones puras integradas
+  para GEO-010) con `humo_e3_cierre.sql` 76/76 y 23 suites en verde; permiso `privacidad.gestionar`. Workflow de 6
+  paquetes: el primero se cortó por límite de uso y se relanzó en modo relevo sobre el trabajo parcial. Integración del
+  líder: filtro y marca de origen asistido, enlace de DSH-003 por permiso, «Reclamo en trámite» en fichas, estado del
+  correo en Preferencias, matriz de navegadores (`pnpm test:e2e:navegadores`), pila local con Realtime. 6.714 Vitest,
+  typecheck, lint y build en verde. Commits `d32eafc`, `9894c8d`. NOT-004 queda ⏸ (construido apagado; activación en
+  `context/Servicios-Pendientes-Definir.md` §5).
+- 2026-10-24/25 · **Fase 6 en producción: Entregas 2 y 3 completas.** Revisión adversarial (5 revisores, 34 hallazgos
+  corregidos en la migración y en 4 paquetes del front; `humo_e3_cierre` 85/85). Andrés aplicó
+  `20261024181218_e3_cierre` tras el respaldo `context/respaldos/produccion-2026-10-24-antes-e3c-*`; verificado por MCP (53
+  migraciones, 152 plantillas, 74 claves, 71 permisos, `amo_privacidad` activo, `amo_correos` inactivo, advisors sin
+  ERROR). Matriz de navegadores (RNF-COM-01) en verde: 136 pruebas en Firefox, Safari, Safari iOS y Chrome Android, tras
+  corregir la hidratación en Safari (mes abreviado y «p.m.» de WebKit: `formatoFecha()` y regla de ESLint) y la cookie de
+  sesión `Secure` según el protocolo. Regresión E2E completa 727/727, 6.800 Vitest, typecheck, lint y build en verde.
+  GEO-010: peor p95 del explorador 112 ms (serie mensual en una lectura y funciones puras integradas). NOT-004 queda ⏸
+  (correo construido y apagado; activación en `context/Servicios-Pendientes-Definir.md` §5).

@@ -294,8 +294,10 @@ function FormularioFormato({
                 deshabilitado={pendiente}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              Los tres límites son opcionales: vacío significa sin límite.
+            <p className="text-sm text-pretty text-muted-foreground">
+              Los tres límites son opcionales: vacío significa sin límite. Al
+              subir un creativo rige el menor entre este peso y el «Tamaño
+              máximo de un creativo» (Seguridad › Archivos).
             </p>
           </div>
         </fieldset>

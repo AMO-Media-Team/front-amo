@@ -31,6 +31,7 @@ export const ENTIDADES_ENLACE = [
   "disputas",
   "liquidaciones",
   "facturas",
+  "solicitudes_titular",
 ] as const
 
 export type EntidadEnlace = (typeof ENTIDADES_ENLACE)[number]
@@ -140,6 +141,11 @@ function destinoInterno(
             `/operacion/anunciantes/${relacionados.anuncianteId}?pestana=cartera`
           )
         : null
+    case "solicitudes_titular":
+      // La bandeja de privacidad para quien atiende; si no, la solicitud propia del titular.
+      return permisos.includes("privacidad.gestionar")
+        ? r(`/administracion/privacidad/${id}`)
+        : r(`/cuenta/privacidad?solicitud=${id}`)
   }
 }
 
@@ -176,6 +182,8 @@ function destinoMedio(
     case "liquidaciones":
       // El medio no lee la tabla (la RLS lo impide); la página lo hace por RPC.
       return r(`/ganancias/${id}`)
+    case "solicitudes_titular":
+      return r(`/cuenta/privacidad?solicitud=${id}`)
     default:
       return INICIO
   }
@@ -219,6 +227,8 @@ function destinoAnunciante(
         : r("/campanas")
     case "facturas":
       return r(`/facturas/${id}`)
+    case "solicitudes_titular":
+      return r(`/cuenta/privacidad?solicitud=${id}`)
     default:
       return INICIO
   }

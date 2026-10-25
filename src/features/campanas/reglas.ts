@@ -10,6 +10,10 @@ import { serializarFecha } from "@/lib/fechas"
 import { accionesPermitidas } from "@/lib/negocio/acciones"
 import type { TipoActor } from "@/lib/negocio/tipos"
 
+import {
+  puedeGestionarCampanasAsistidas,
+  puedeGestionarOfertasAsistidas,
+} from "./gestion"
 import { motivoSinActivar, ORDEN_ESTADOS_OFERTA } from "./presentacion"
 import type {
   EstadoAnunciante,
@@ -72,7 +76,10 @@ const ORDEN_ACCIONES: readonly AccionCampana[] = [
  * (`accionesPermitidas`): activar (bloqueado y explicado si la empresa no
  * está verificada) y cancelar una activa (con motivo); y archivar un
  * borrador, una cancelada o una finalizada (`archivar_campana_srv`, sin
- * motivo). Un borrador no se cancela: se archiva.
+ * motivo). Un borrador no se cancela: se archiva. El equipo AMO (ADMIN, por
+ * cuenta del anunciante, ADM-014) recibe lo mismo con sus transiciones y el
+ * bloqueo dicho de «la empresa»; si no puede leer su verificación
+ * (`estadoEmpresa` nulo), no se anticipa y decide la BD.
  */
 export function accionesCampana({
   estado,
@@ -83,8 +90,9 @@ export function accionesCampana({
   estado: EstadoCampana
   tipoActor: TipoActor
   permisos: Iterable<string>
-  estadoEmpresa: EstadoAnunciante
+  estadoEmpresa: EstadoAnunciante | null
 }): AccionDisponible[] {
+  const voz = tipoActor === "ADMIN" ? "asistido" : "propio"
   const acciones = accionesPermitidas(
     "campanas",
     estado,
@@ -97,9 +105,9 @@ export function accionesCampana({
           accion: "activar",
           requiereMotivo,
           bloqueo:
-            estadoEmpresa === "VERIFICADO"
+            estadoEmpresa === null || estadoEmpresa === "VERIFICADO"
               ? null
-              : motivoSinActivar(estadoEmpresa),
+              : motivoSinActivar(estadoEmpresa, voz),
         },
       ]
     }
@@ -136,18 +144,32 @@ export function puedeArchivarCampana(
   return false
 }
 
+/**
+ * Editar la campaña: el anunciante con `campanas.gestionar_propias`; el
+ * equipo AMO con todos los permisos de la edición asistida (sin ellos la
+ * pantalla respondería 403).
+ */
 export function puedeEditarCampana(
   estado: EstadoCampana,
+  tipoActor: TipoActor,
   permisos: Iterable<string>
 ): boolean {
-  return esEditable(estado) && tiene(permisos, PERMISO_CAMPANAS)
+  if (!esEditable(estado)) return false
+  if (tipoActor === "ANUNCIANTE") return tiene(permisos, PERMISO_CAMPANAS)
+  if (tipoActor === "ADMIN") return puedeGestionarCampanasAsistidas(permisos)
+  return false
 }
 
+/** Crearle ofertas: igual que editar, con los permisos de las ofertas. */
 export function puedeCrearOfertas(
   estado: EstadoCampana,
+  tipoActor: TipoActor,
   permisos: Iterable<string>
 ): boolean {
-  return esEditable(estado) && tiene(permisos, PERMISO_OFERTAS)
+  if (!esEditable(estado)) return false
+  if (tipoActor === "ANUNCIANTE") return tiene(permisos, PERMISO_OFERTAS)
+  if (tipoActor === "ADMIN") return puedeGestionarOfertasAsistidas(permisos)
+  return false
 }
 
 // ── Presupuesto y fechas al editar ───────────────────────────────────────────

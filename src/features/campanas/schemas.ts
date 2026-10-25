@@ -175,7 +175,7 @@ function validarReglas(
     ctx.addIssue({
       code: "custom",
       path: ["fechaInicio"],
-      message: `Tienes ofertas que se publican desde el ${diaLargo(reglas.inicioMaximo)}: la campaña debe empezar ese día o antes.`,
+      message: `La campaña tiene ofertas que se publican desde el ${diaLargo(reglas.inicioMaximo)}: debe empezar ese día o antes.`,
     })
   }
   if (fechaFin < fechaInicio) {
@@ -195,13 +195,13 @@ function validarReglas(
     ctx.addIssue({
       code: "custom",
       path: ["fechaFin"],
-      message: `Tienes ofertas que se publican hasta el ${diaLargo(reglas.finMinimo)}: la campaña debe terminar ese día o después.`,
+      message: `La campaña tiene ofertas que se publican hasta el ${diaLargo(reglas.finMinimo)}: debe terminar ese día o después.`,
     })
   }
 }
 
 export function mensajePresupuestoMinimo(minimo: number): string {
-  return `El presupuesto no puede quedar por debajo de ${formatearCOP(minimo)}: es lo que ya tienen comprometido tus ofertas en revisión o publicadas y los cupos aceptados.`
+  return `El presupuesto no puede quedar por debajo de ${formatearCOP(minimo)}: es lo que ya tienen comprometido sus ofertas en revisión o publicadas y los cupos aceptados.`
 }
 
 /** Campaña nueva: sus datos y las reglas del día. */
@@ -210,6 +210,27 @@ export function esquemaNuevaCampana(reglas: ReglasCampana) {
     .object(camposCampana)
     .superRefine((datos, ctx) => validarReglas(datos, reglas, ctx))
 }
+
+/**
+ * Campaña nueva por cuenta de un anunciante (ADM-014): lo mismo más la
+ * empresa elegida. Al anunciante nunca se le lee de la entrada: es la suya.
+ */
+export function esquemaNuevaCampanaAsistida(reglas: ReglasCampana) {
+  return z
+    .object({
+      ...camposCampana,
+      anuncianteId: z
+        .string({ error: "Elige el anunciante." })
+        .min(1, { error: "Elige el anunciante.", abort: true })
+        .pipe(z.uuid({ error: "Elige el anunciante de la lista." })),
+    })
+    .superRefine((datos, ctx) => validarReglas(datos, reglas, ctx))
+}
+
+export const CAMPOS_CAMPANA_ASISTIDA = [
+  ...CAMPOS_CAMPANA,
+  "anuncianteId",
+] as const
 
 /** Edición: lo mismo, con el registro y su versión (bloqueo optimista). */
 export function esquemaEditarCampana(reglas: ReglasCampana) {
@@ -227,6 +248,10 @@ export function esquemaEditarCampana(reglas: ReglasCampana) {
 
 export type EntradaNuevaCampana = z.input<
   ReturnType<typeof esquemaNuevaCampana>
+>
+export type DatosNuevaCampana = z.output<ReturnType<typeof esquemaNuevaCampana>>
+export type EntradaNuevaCampanaAsistida = z.input<
+  ReturnType<typeof esquemaNuevaCampanaAsistida>
 >
 export type EntradaEditarCampana = z.input<
   ReturnType<typeof esquemaEditarCampana>

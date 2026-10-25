@@ -11,10 +11,21 @@
  */
 import path from "node:path"
 
-import type { CuentaE2E } from "../../scripts/bootstrap/provision-e2e"
-import type { Credenciales } from "./cuentas"
+import {
+  type CuentaE2E,
+  cuentaE2E,
+  variableTotpDe,
+} from "../../scripts/bootstrap/provision-e2e"
+import { type Credenciales, credenciales } from "./cuentas"
+import { codigoNuevo } from "./mfa"
+import { esperarStreaming, expect, type Page } from "./prueba"
 
-export type NombreSesion = "interno" | "anunciante" | "medio"
+/**
+ * `finanzas` es de un rol interno: expira tras 30 minutos sin uso
+ * (`seguridad.inactividad_minutos_admin`). Quien la use tarde en la corrida
+ * vuelve a ingresar con `ingresarComoLecturaFinanzas`.
+ */
+export type NombreSesion = "interno" | "finanzas" | "anunciante" | "medio"
 
 /** Ignorado por git: los archivos contienen las cookies de sesión. */
 const DIRECTORIO_SESIONES = path.join(
@@ -42,6 +53,53 @@ export const CUENTA_INTERNA: CuentaE2E = {
   variablePassword: "E2E_LECTURA_PASSWORD",
   debeCambiarPassword: false,
   conTotp: true,
+}
+
+/**
+ * Finanzas de solo lectura (rol FINANZAS con TOTP) de la sesión `finanzas`:
+ * los pagos a medios piden `liquidaciones.registrar_pago`, que ADMIN no tiene.
+ * La crea `pnpm bootstrap:e2e` (`E2E_LECTURA_FINANZAS_*`).
+ */
+export const CUENTA_LECTURA_FINANZAS = cuentaE2E("LECTURA_FINANZAS")
+
+/** Correo, contraseña y clave TOTP de `.env.local` (las crea `pnpm bootstrap:e2e`). */
+export function credencialesLecturaFinanzas(): Credenciales & {
+  secreto: string
+} {
+  const variable = variableTotpDe(CUENTA_LECTURA_FINANZAS)
+  const secreto = process.env[variable]
+  if (!secreto) {
+    throw new Error(`Falta ${variable}: ejecuta \`pnpm bootstrap:e2e\`.`)
+  }
+  return { ...credenciales(CUENTA_LECTURA_FINANZAS.clave), secreto }
+}
+
+/**
+ * Ingresa como Finanzas de solo lectura (contraseña y código de la app) y
+ * espera llegar a `destino` (Inicio por omisión). Verificar el TOTP cierra
+ * las demás sesiones de la cuenta: úsalo desde un solo proceso a la vez.
+ */
+export async function ingresarComoLecturaFinanzas(
+  page: Page,
+  destino = "/inicio"
+): Promise<void> {
+  const { email, password, secreto } = credencialesLecturaFinanzas()
+  const ruta = new URL(destino, "http://amo.local").pathname
+  await page.goto(
+    destino === "/inicio"
+      ? "/ingresar"
+      : `/ingresar?${new URLSearchParams({ next: destino })}`
+  )
+  await page.getByLabel("Correo electrónico").fill(email)
+  await page.getByLabel("Contraseña", { exact: true }).fill(password)
+  await page.getByRole("button", { name: "Ingresar" }).click()
+  await expect(page).toHaveURL(/\/mfa\/verificar/)
+  // Al completar los 6 dígitos el formulario se envía solo.
+  await page
+    .getByLabel("Código de verificación")
+    .fill(await codigoNuevo(secreto))
+  await expect(page).toHaveURL((url) => url.pathname === ruta)
+  await esperarStreaming(page)
 }
 
 /**

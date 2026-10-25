@@ -287,9 +287,9 @@ export function DecisionModeracion({
         abierto={dialogo === "cancelar"}
         onAbiertoChange={cerrar}
         titulo="¿Cancelar la oferta publicada?"
-        descripcion="Deja de estar disponible en el marketplace y los medios ya no podrán tomar cupos. No se puede deshacer."
+        descripcion="Deja de estar disponible en el marketplace, los medios ya no podrán tomar cupos y el anunciante recibe un aviso con el motivo. No se puede deshacer."
         etiqueta="Motivo de la cancelación"
-        ayuda="Queda en el historial de la oferta y en la bitácora."
+        ayuda="Lo recibe el anunciante en el aviso; queda en el historial de la oferta y en la bitácora."
         sugerencias={SUGERENCIAS_CANCELACION}
         textoConfirmar="Sí, cancelar la oferta"
         textoCancelar="Volver"

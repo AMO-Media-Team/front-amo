@@ -22,6 +22,7 @@ import type { RangoFechas } from "@/lib/fechas"
 import { ZONA } from "@/lib/fechas"
 
 import { diaCalendario, etiquetasPeriodos } from "../series"
+import { formatoFecha } from "@/lib/format"
 
 // ── Título de la cifra principal ─────────────────────────────────────────────
 
@@ -434,12 +435,12 @@ export function serieGanancias(
   }
 }
 
-const diaYMes = new Intl.DateTimeFormat("es-CO", {
+const diaYMes = formatoFecha({
   timeZone: "UTC",
   day: "numeric",
   month: "short",
 })
-const mesYAnio = new Intl.DateTimeFormat("es-CO", {
+const mesYAnio = formatoFecha({
   timeZone: "UTC",
   month: "short",
   year: "numeric",

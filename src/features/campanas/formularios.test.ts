@@ -25,6 +25,7 @@ const CAMPANA: MiCampana = {
   creadaAt: "2026-09-28T15:00:00Z",
   actualizadaAt: "2026-10-21T15:00:00.123456+00:00",
   esDemo: false,
+  gestionAsistida: false,
 }
 
 describe("formularios de campaña", () => {

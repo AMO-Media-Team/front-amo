@@ -134,7 +134,10 @@ export async function formatosRetirados(
 
 // ── Campaña y empresa ────────────────────────────────────────────────────────
 
-/** Campaña propia con lo que queda disponible; `null` si no existe o no es suya. */
+/**
+ * Campaña con lo que queda disponible; `null` si no existe o no se ve (la del
+ * anunciante, o cualquiera con `campanas.ver` en la gestión asistida).
+ */
 export async function campanaParaAsistente(
   campanaId: string,
   ofertaEditada?: string
@@ -164,12 +167,31 @@ export async function campanaParaAsistente(
   return {
     id: campana.data.id,
     nombre: campana.data.nombre,
+    anuncianteId: campana.data.anunciante_id,
     estado: campana.data.estado,
     fechaInicio: campana.data.fecha_inicio,
     fechaFin: campana.data.fecha_fin,
     presupuestoTotal: n(campana.data.presupuesto_total) ?? 0,
     disponible: disponible.error ? null : n(disponible.data),
   }
+}
+
+/**
+ * Campaña de una oferta (la edición asistida llega solo con el id de la
+ * oferta, ADM-014); `null` si no existe o la RLS no la deja ver.
+ */
+export async function campanaDeOferta(
+  ofertaId: string
+): Promise<string | null> {
+  const supabase = await clienteSolicitud()
+  const { data, error } = await supabase
+    .from("ofertas")
+    .select("campana_id")
+    .eq("id", ofertaId)
+    .is("deleted_at", null)
+    .maybeSingle()
+  if (error) fallar("leer la oferta", error)
+  return data?.campana_id ?? null
 }
 
 /** Estado de verificación de la empresa (decide si puede enviar a revisión). */

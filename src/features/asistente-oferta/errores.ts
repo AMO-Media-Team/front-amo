@@ -93,13 +93,16 @@ export function interpretarErrorEnvio(error: ErrorBd): ErrorEnvio {
 export const OFERTA_NO_EDITABLE =
   "Esta oferta ya no se puede editar: está en revisión o ya se publicó. Actualiza la página para ver su estado."
 
-/** Bloqueo optimista: otra persona guardó la oferta después de abrirla aquí. */
+/**
+ * Bloqueo optimista: otra persona guardó la oferta después de abrirla aquí
+ * (alguien de la empresa o, en la gestión asistida, del equipo AMO).
+ */
 export const OFERTA_DESACTUALIZADA =
-  "Alguien de tu equipo cambió esta oferta mientras la editabas. Actualiza la página para ver lo vigente y vuelve a aplicar tus cambios."
+  "Otra persona cambió esta oferta mientras la editabas. Actualiza la página para ver lo vigente y vuelve a aplicar tus cambios."
 
 /** La oferta dejó de ser editable mientras se editaba (la envió un compañero, se canceló o venció). */
 export const OFERTA_CAMBIO_ESTADO =
-  "Cambió de estado mientras la editabas (alguien de tu equipo la envió a revisión o se canceló): no se guardaron tus cambios en ella. Ábrela desde la campaña para ver su estado."
+  "Cambió de estado mientras la editabas (otra persona la envió a revisión o se canceló): no se guardaron tus cambios en ella. Ábrela desde la campaña para ver su estado."
 
 /** Un formato elegido ya no está activo y su oferta (devuelta) no se puede descartar desde el asistente. */
 export const FORMATO_RETIRADO =

@@ -18,9 +18,14 @@ export const SUPABASE_CLAVE_PUBLICABLE =
  */
 const DURACION_COOKIE_SESION_SEGUNDOS = 60 * 60 * 12
 
+/**
+ * `Secure` cuando el sitio se sirve por HTTPS (producción y previsualizaciones
+ * de Vercel). En `http://localhost` (`next dev` y `pnpm start`) Safari no
+ * guarda ni envía cookies `Secure`, aunque Chromium y Firefox sí lo hagan.
+ */
 export const OPCIONES_COOKIE_SESION: CookieOptionsWithName = {
   path: "/",
   sameSite: "lax",
-  secure: process.env.NODE_ENV === "production",
+  secure: envCliente.NEXT_PUBLIC_SITE_URL.startsWith("https://"),
   maxAge: DURACION_COOKIE_SESION_SEGUNDOS,
 }

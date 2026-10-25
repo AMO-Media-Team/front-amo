@@ -30,7 +30,9 @@ import { EstadoDisputa, InsigniaEstadoDisputa } from "./estado-disputa"
 import { HiloDisputa } from "./hilo-disputa"
 import { ResumenAsignacionDisputa } from "./resumen-asignacion"
 
-const ENLACE = "font-medium text-foreground"
+/** 24 px de alto como mínimo: en el teléfono van apilados (WCAG 2.5.8). */
+const OBJETIVO = "inline-flex min-h-6 w-fit max-w-full items-center"
+const ENLACE = `${OBJETIVO} font-medium text-foreground`
 const ID_DECISION = "decision-disputa"
 
 /** Quién abrió la disputa: la entidad de su parte y, si el rol la ve, la persona. */
@@ -132,6 +134,7 @@ export function FichaDisputa({
               <EnlaceFicha
                 href={rutaAnunciante(asignacion.anunciante.id)}
                 permitido={enlaces.anunciante}
+                className={OBJETIVO}
               >
                 {asignacion.anunciante.nombre ?? "Anunciante"}
               </EnlaceFicha>

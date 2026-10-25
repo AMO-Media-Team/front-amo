@@ -306,8 +306,10 @@ begin
   r := r || jsonb_build_object('f1_agenda_utc',
     v_j = '{"amo_vencer_asignaciones": "*/15 * * * *", "amo_actualizar_estados": "5-59/15 * * * *",
             "amo_recordatorios": "20 * * * *", "amo_indicadores_medios": "1 5 * * *",
-            "amo_recalcular_multiplicadores": "30 8 * * 1", "amo_retencion": "0 9 * * *"}'::jsonb
-    and (select bool_and(j.username = 'postgres' and j.active) from cron.job j where j.jobname like 'amo\_%'));
+            "amo_recalcular_multiplicadores": "30 8 * * 1", "amo_retencion": "0 9 * * *",
+            "amo_privacidad": "10 13 * * *", "amo_correos": "* * * * *"}'::jsonb
+    and (select bool_and(j.username = 'postgres' and j.active = (j.jobname <> 'amo_correos')) from cron.job j
+         where j.jobname like 'amo\_%'));
   r := r || jsonb_build_object('f2_sin_execute_api',
     not has_function_privilege('authenticated', 'private.purgar_retencion()', 'execute')
     and not has_function_privilege('service_role', 'private.purgar_demo()', 'execute')

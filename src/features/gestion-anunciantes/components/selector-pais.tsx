@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronsUpDown, Globe } from "lucide-react"
-import { useId, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -60,7 +60,13 @@ export function SelectorPais({
 }) {
   const [abierto, setAbierto] = useState(false)
   const [texto, setTexto] = useState("")
-  const idLista = useId()
+  // cmdk fija el id de su listbox (pisa el que se le pase a CommandList): se
+  // lee del nodo para que `aria-controls` apunte a la lista que existe.
+  const [idLista, setIdLista] = useState<string>()
+  const registrarLista = useCallback(
+    (nodo: HTMLDivElement | null) => setIdLista(nodo?.id || undefined),
+    []
+  )
   const elegido = paises.find((pais) => pais.iso2 === valor)
   const colombia = paises.find((pais) => pais.iso2 === PAIS_COLOMBIA)
   const resultados = useMemo(
@@ -100,7 +106,7 @@ export function SelectorPais({
             variant="outline"
             role="combobox"
             aria-expanded={abierto}
-            aria-controls={idLista}
+            aria-controls={abierto ? idLista : undefined}
             aria-invalid={invalido || undefined}
             disabled={deshabilitado}
             className="w-full justify-between font-normal"
@@ -124,7 +130,7 @@ export function SelectorPais({
             onValueChange={setTexto}
             placeholder="Nombre o código (CO, US…)"
           />
-          <CommandList id={idLista}>
+          <CommandList ref={registrarLista}>
             <CommandEmpty>Ningún país coincide.</CommandEmpty>
             {texto.trim() === "" && colombia ? (
               <CommandGroup heading="Habitual">{item(colombia)}</CommandGroup>

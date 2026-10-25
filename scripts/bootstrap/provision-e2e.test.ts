@@ -147,6 +147,30 @@ describe("CUENTAS_E2E", () => {
     }
   })
 
+  it("incluye la cuenta de la fase 6: Finanzas de solo lectura con TOTP propio", () => {
+    const lectura = cuentaE2E("LECTURA_FINANZAS")
+    expect(lectura).toMatchObject({
+      rol: "FINANZAS",
+      nombre: "Lectura Finanzas E2E",
+      emailPorDefecto: "e2e.lectura.finanzas@amo.test",
+      conTotp: true,
+      debeCambiarPassword: false,
+      variableEmail: "E2E_LECTURA_FINANZAS_EMAIL",
+      variablePassword: "E2E_LECTURA_FINANZAS_PASSWORD",
+    })
+    expect(variableTotpDe(lectura)).toBe("E2E_LECTURA_FINANZAS_TOTP_SECRET")
+    // Distinta de la que usa el proyecto «finanzas»: su ingreso con TOTP
+    // cerraría la sesión compartida.
+    expect(emailDe(lectura)).not.toBe(emailDe(cuentaE2E("FINANZAS")))
+    expect(variableTotpDe(lectura)).not.toBe(
+      variableTotpDe(cuentaE2E("FINANZAS"))
+    )
+    expect(organizacionDe(lectura)).toEqual({
+      anunciante_id: null,
+      medio_id: null,
+    })
+  })
+
   it("toda cuenta de rol MEDIO declara su medio (sin él no se puede preparar)", () => {
     for (const cuenta of CUENTAS_E2E.filter((c) => c.rol === "MEDIO")) {
       expect(() => organizacionDe(cuenta)).not.toThrow()

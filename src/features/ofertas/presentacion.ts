@@ -261,8 +261,9 @@ export function situacionOferta(
         descripcion: anunciante
           ? retirada
             ? "Volvió a borrador para que la ajustes. Envíala de nuevo a revisión cuando esté lista."
-            : "Complétala en el asistente y envíala a revisión. Hasta entonces solo la ven tú y tu equipo."
-          : "El anunciante aún no la envía a revisión.",
+            : "Complétala en el asistente y envíala a revisión. Hasta entonces los medios no la ven."
+          : // También la prepara el equipo AMO por cuenta del anunciante (ADM-014).
+            "Aún no se envía a revisión.",
         comentario: null,
       }
     }
@@ -336,4 +337,11 @@ export const SUGERENCIAS_CANCELACION_ANUNCIANTE: readonly string[] = [
   "La campaña cambió de estrategia.",
   "El producto o servicio ya no está disponible.",
   "Hay un error en la configuración de la oferta.",
+]
+
+/** Los mismos motivos dichos por el equipo AMO por cuenta de la empresa (ADM-014). */
+export const SUGERENCIAS_CANCELACION_ASISTIDA: readonly string[] = [
+  "Lo solicitó la empresa.",
+  "La empresa ya no ofrece el producto o servicio.",
+  "La oferta tiene un error de configuración y se creará otra.",
 ]

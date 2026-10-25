@@ -16,6 +16,14 @@
  * la animación; la app lo trata igual (`GuardiaTransiciones`, que lo marca como
  * atendido, pero Playwright registra la excepción antes de ese `preventDefault`).
  *
+ * Y en WebKit (Safari), las solicitudes que el navegador cancela: las precargas
+ * de rutas de Next (`?_rsc=`) al navegar, y las teselas y la telemetría de
+ * Mapbox al mover el mapa, llegan como «Fetch API cannot load … due to access
+ * control checks» (excepción o consola), y el aviso «ResizeObserver loop
+ * completed with undelivered notifications» (el mapa reajusta su tamaño en el
+ * mismo cuadro; Chromium no lo reporta como error). No son errores de la
+ * aplicación.
+ *
  * Además, `page.goto` y `page.reload` esperan a que React termine de revelar el
  * contenido que llegó por streaming (`esperarStreaming`).
  */
@@ -33,6 +41,10 @@ export { expect }
 /** Mismos mensajes que `src/components/motion/abortos-transicion.ts`. */
 const ABORTO_DE_TRANSICION =
   /^(?:Transition was aborted|Skipping view transition)\b/i
+
+/** WebKit: precarga de una ruta o telemetría de Mapbox cancelada al navegar. */
+const CANCELACION_WEBKIT =
+  /(?:[?&]_rsc=\S*|[a-z]+\.mapbox\.com\/\S*) due to access control checks\.?(?: \(\))?$|^ResizeObserver loop completed with undelivered notifications\.?$/
 export type { Locator, Page } from "@playwright/test"
 
 type OpcionesContexto = NonNullable<Parameters<Browser["newContext"]>[0]>
@@ -154,6 +166,10 @@ function crearGuardia(): { guardia: Guardia; problemas: () => Problema[] } {
           // Una violación de la CSP nunca es «esperada».
           tipo === "csp" ||
           (!(tipo === "excepción" && ABORTO_DE_TRANSICION.test(detalle)) &&
+            !(
+              (tipo === "excepción" || tipo === "consola") &&
+              CANCELACION_WEBKIT.test(detalle)
+            ) &&
             !permitidos.some((patron) => patron.test(detalle)))
       ),
   }

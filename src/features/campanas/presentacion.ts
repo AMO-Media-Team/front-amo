@@ -192,8 +192,26 @@ export function presentarSituacionEmpresa(
   }
 }
 
+/** Quién lee el texto: el anunciante o el equipo AMO que actúa por su cuenta. */
+export type VozGestion = "propio" | "asistido"
+
 /** Por qué no se puede activar una campaña (junto al botón deshabilitado). */
-export function motivoSinActivar(estadoEmpresa: EstadoAnunciante): string {
+export function motivoSinActivar(
+  estadoEmpresa: EstadoAnunciante,
+  voz: VozGestion = "propio"
+): string {
+  if (voz === "asistido") {
+    switch (estadoEmpresa) {
+      case "VERIFICADO":
+        return ""
+      case "PENDIENTE":
+        return "Se podrá activar cuando AMO verifique la empresa."
+      case "RECHAZADO":
+        return "Se podrá activar cuando la empresa corrija sus datos y AMO la verifique."
+      case "SUSPENDIDO":
+        return "La empresa está suspendida: sus campañas no se pueden activar."
+    }
+  }
   switch (estadoEmpresa) {
     case "VERIFICADO":
       return ""

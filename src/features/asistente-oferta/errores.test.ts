@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   interpretarErrorEnvio,
   interpretarErrorGuardado,
+  OFERTA_CAMBIO_ESTADO,
+  OFERTA_DESACTUALIZADA,
   RESTRICCIONES_OFERTA,
 } from "./errores"
 import { pasoDeCampo } from "./pasos"
@@ -79,6 +81,15 @@ describe("interpretarErrorGuardado", () => {
       expect(["que", "quien", "cuando", "cuanto", "envio"]).toContain(
         pasoDeCampo(valor.campo)
       )
+    }
+  })
+})
+
+describe("mensajes del bloqueo optimista", () => {
+  it("no suponen que el cambio vino del equipo del anunciante (gestión asistida)", () => {
+    for (const mensaje of [OFERTA_DESACTUALIZADA, OFERTA_CAMBIO_ESTADO]) {
+      expect(mensaje).toMatch(/otra persona/i)
+      expect(mensaje).not.toMatch(/tu equipo/)
     }
   })
 })

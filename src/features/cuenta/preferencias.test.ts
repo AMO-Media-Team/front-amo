@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest"
 
+import { CLAVES_CATEGORIA } from "@/features/notificaciones/presentacion"
+
 import {
+  CATEGORIAS_CORREO_OBLIGATORIAS,
+  CATEGORIAS_CORREO_POR_TIPO,
+  CATEGORIAS_SILENCIABLES,
+  categoriasConCorreo,
   esquemaCambiosPreferencias,
+  esSilenciable,
   fusionarPreferencias,
   leerPreferencias,
+  normalizarSilenciadas,
   PREFERENCIAS_POR_DEFECTO,
 } from "./preferencias"
 
@@ -28,7 +36,20 @@ describe("leerPreferencias", () => {
       densidad: "normal",
       movimiento: "reducido",
       formatoNumeros: "colombia",
+      correoSilenciadas: [],
     })
+  })
+
+  it("lee las categorías silenciadas de correo.silenciadas", () => {
+    expect(
+      leerPreferencias({
+        correo: { silenciadas: ["pagos", "ofertas", "pagos", "seguridad", 4] },
+      }).correoSilenciadas
+    ).toEqual(["ofertas", "pagos"])
+    expect(
+      leerPreferencias({ correo: { silenciadas: "ofertas" } }).correoSilenciadas
+    ).toEqual([])
+    expect(leerPreferencias({ correo: [] }).correoSilenciadas).toEqual([])
   })
 })
 
@@ -40,6 +61,30 @@ describe("fusionarPreferencias", () => {
         { tema: "system" }
       )
     ).toEqual({ tema: "system", otroModulo: { avisos: true } })
+  })
+
+  it("guarda las silenciadas en correo.silenciadas sin perder lo demás del correo", () => {
+    expect(
+      fusionarPreferencias(
+        { tema: "light", correo: { otra: true, silenciadas: ["ofertas"] } },
+        { correoSilenciadas: ["disputas", "ofertas", "disputas"] }
+      )
+    ).toEqual({
+      tema: "light",
+      correo: { otra: true, silenciadas: ["ofertas", "disputas"] },
+    })
+    expect(
+      fusionarPreferencias({ tema: "dark" }, { correoSilenciadas: [] })
+    ).toEqual({ tema: "dark", correo: { silenciadas: [] } })
+  })
+
+  it("no toca el correo si el cambio no lo incluye", () => {
+    expect(
+      fusionarPreferencias(
+        { correo: { silenciadas: ["pagos"] } },
+        { densidad: "comoda" }
+      )
+    ).toEqual({ densidad: "comoda", correo: { silenciadas: ["pagos"] } })
   })
 
   it("parte de un objeto vacío si lo guardado no es un objeto", () => {
@@ -66,5 +111,80 @@ describe("esquemaCambiosPreferencias", () => {
         .success
     ).toBe(false)
     expect(esquemaCambiosPreferencias.safeParse({}).success).toBe(false)
+  })
+
+  it("acepta silenciar categorías, pero nunca seguridad ni privacidad", () => {
+    expect(
+      esquemaCambiosPreferencias.safeParse({
+        correoSilenciadas: ["ofertas", "pendientes"],
+      }).success
+    ).toBe(true)
+    for (const obligatoria of CATEGORIAS_CORREO_OBLIGATORIAS) {
+      expect(
+        esquemaCambiosPreferencias.safeParse({
+          correoSilenciadas: [obligatoria],
+        }).success
+      ).toBe(false)
+    }
+    expect(
+      esquemaCambiosPreferencias.safeParse({ correoSilenciadas: ["otras"] })
+        .success
+    ).toBe(false)
+  })
+})
+
+describe("categorías de correo", () => {
+  it("las silenciables son todas menos seguridad y privacidad", () => {
+    expect(
+      [...CATEGORIAS_SILENCIABLES, ...CATEGORIAS_CORREO_OBLIGATORIAS].toSorted()
+    ).toEqual([...CLAVES_CATEGORIA].toSorted())
+    expect(esSilenciable("ofertas")).toBe(true)
+    expect(esSilenciable("seguridad")).toBe(false)
+  })
+
+  it("cada tipo de rol ve categorías del catálogo, con las obligatorias", () => {
+    for (const categorias of Object.values(CATEGORIAS_CORREO_POR_TIPO)) {
+      for (const clave of categorias) {
+        expect(CLAVES_CATEGORIA).toContain(clave)
+      }
+      for (const obligatoria of CATEGORIAS_CORREO_OBLIGATORIAS) {
+        expect(categorias).toContain(obligatoria)
+      }
+    }
+    expect(CATEGORIAS_CORREO_POR_TIPO.ADMIN).toContain("pendientes")
+    expect(CATEGORIAS_CORREO_POR_TIPO.MEDIO).not.toContain("pendientes")
+    expect(CATEGORIAS_CORREO_POR_TIPO.ANUNCIANTE).not.toContain("cuentas")
+  })
+
+  it("normalizarSilenciadas ordena, quita repetidas y descarta lo ajeno", () => {
+    expect(
+      normalizarSilenciadas(["pagos", "x", "ofertas", "privacidad", "pagos"])
+    ).toEqual(["ofertas", "pagos"])
+    expect(normalizarSilenciadas(null)).toEqual([])
+  })
+})
+
+describe("categoriasConCorreo", () => {
+  it("agrupa las plantillas EMAIL activas por categoría, en el orden del catálogo", () => {
+    expect(
+      categoriasConCorreo([
+        "titular.respuesta",
+        "oferta.publicada",
+        "usuario.invitado",
+        "campana.cancelada",
+        "desconocida.algo",
+      ])
+    ).toEqual(["ofertas", "seguridad", "privacidad"])
+  })
+
+  it("sin plantillas de colas activas, «pendientes» no sale por correo", () => {
+    expect(
+      categoriasConCorreo(["seguridad.alerta_pais_inusual"])
+    ).not.toContain("pendientes")
+    expect(categoriasConCorreo([])).toEqual([])
+  })
+
+  it("null si no se pudo leer (la interfaz no deshabilita nada)", () => {
+    expect(categoriasConCorreo(null)).toBeNull()
   })
 })

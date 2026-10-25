@@ -106,6 +106,10 @@ export const MENSAJES_NEGOCIO: Readonly<Record<string, string>> = {
     "Las cifras no cuadran con la publicación o con los otros cortes. Revísalas.",
   AMO_CAPTURA_REQUERIDA:
     "Carga la captura del panel de estadísticas (una imagen) antes de enviar.",
+  AMO_SOLICITUD_ABIERTA:
+    "Ya tienes una solicitud de este tipo en trámite. Te avisaremos cuando la respondamos.",
+  AMO_SUPRESION_BLOQUEADA:
+    "La supresión no procede todavía: hay negocio en curso o pagos pendientes que obligan a conservar los datos.",
 }
 
 /**

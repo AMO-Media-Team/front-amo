@@ -17,19 +17,28 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { rutaAsistente } from "@/features/asistente-oferta/rutas"
+import {
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
+import type { EstadoOferta } from "@/features/operacion/estados"
 import { DialogoMotivo } from "@/features/usuarios/components/dialogo-motivo"
 import type { ResultadoAccion } from "@/lib/result"
+import { cn } from "@/lib/utils"
 
-import type { AccionAnunciante, OpcionAnunciante } from "../acciones"
+import type { AccionGestion, OpcionGestion } from "../acciones"
 import {
   archivarOferta,
   cancelarOferta,
   retirarOfertaDeRevision,
 } from "../actions"
 import { useFocoTrasCambio } from "./use-foco-tras-cambio"
-import { SUGERENCIAS_CANCELACION_ANUNCIANTE } from "../presentacion"
-import { rutaOfertasDeCampana } from "../rutas"
+import {
+  SUGERENCIAS_CANCELACION_ANUNCIANTE,
+  SUGERENCIAS_CANCELACION_ASISTIDA,
+} from "../presentacion"
 import { DialogoEnvio } from "./dialogo-envio"
 
 type Dialogo = "enviar" | "retirar" | "cancelar" | "archivar" | null
@@ -64,34 +73,76 @@ function DialogoBloqueado({
   )
 }
 
+/** Textos de la cancelación según el estado de la oferta y quién la cancela. */
+function textosCancelacion(estado: EstadoOferta, gestion: ModoGestion) {
+  const publicada = estado === "PUBLICADA"
+  if (esAsistido(gestion)) {
+    return {
+      titulo: publicada
+        ? "¿Cancelar la oferta publicada?"
+        : "¿Cancelar la oferta?",
+      descripcion: publicada
+        ? `Deja de estar disponible en el marketplace, los medios ya no podrán tomar cupos y ${gestion.anunciante} recibe un aviso con el motivo. No se puede deshacer.`
+        : `Se descarta por cuenta de ${gestion.anunciante}, que recibe un aviso con el motivo, y ya no se podrá enviar a revisión. No se puede deshacer.`,
+      ayuda:
+        "Lo recibe la empresa en el aviso; queda en el historial de la oferta y en la bitácora.",
+      sugerencias: SUGERENCIAS_CANCELACION_ASISTIDA,
+    }
+  }
+  return {
+    titulo: publicada
+      ? "¿Cancelar la oferta publicada?"
+      : "¿Cancelar la oferta?",
+    descripcion: publicada
+      ? "Deja de estar disponible en el marketplace y los medios ya no podrán tomar cupos. No se puede deshacer."
+      : "Se descarta y no podrás enviarla a revisión. No se puede deshacer.",
+    ayuda: "Queda en el historial de la oferta y en la bitácora.",
+    sugerencias: SUGERENCIAS_CANCELACION_ANUNCIANTE,
+  }
+}
+
 /**
- * Acciones del anunciante sobre su oferta según su estado (las calcula el
- * servidor con `accionesAnunciante`): editarla en el asistente, enviarla o
- * reenviarla a revisión, retirarla de revisión, cancelarla y archivarla
- * (cancelada o terminada; archivada, se vuelve a la campaña). La BD decide;
- * un fallo se muestra dentro de su diálogo. Tras un cambio de estado el
- * botón que abrió el diálogo desaparece: el foco va al aviso del estado.
+ * Acciones sobre la oferta según su estado (las calcula el servidor con
+ * `accionesGestion`): editarla en el asistente, enviarla o reenviarla a
+ * revisión, retirarla de revisión, cancelarla y archivarla (cancelada o
+ * terminada; archivada, se vuelve a la campaña). Las usa el anunciante en su
+ * ficha y el equipo AMO en el panel de gestión asistida de la ficha interna
+ * (`gestion`, ADM-014: enlaces de Operación, textos que hablan de la empresa
+ * y botones apilados con `disposicion="columna"`). La BD decide; un fallo se
+ * muestra dentro de su diálogo. Tras un cambio de estado el botón que abrió
+ * el diálogo desaparece: el foco va al aviso del estado.
  */
 export function AccionesOferta({
   ofertaId,
   campanaId,
   titulo,
+  estado,
   opciones,
+  gestion = GESTION_PROPIA,
+  disposicion = "fila",
 }: {
   ofertaId: string
   campanaId: string
   titulo: string
-  opciones: readonly OpcionAnunciante[]
+  estado: EstadoOferta
+  opciones: readonly OpcionGestion[]
+  gestion?: ModoGestion
+  disposicion?: "fila" | "columna"
 }) {
   const router = useRouter()
   const [dialogo, setDialogo] = useState<Dialogo>(null)
   const foco = useFocoTrasCambio()
-  const opcion = (accion: AccionAnunciante) =>
+  const rutas = rutasGestion(gestion)
+  const asistido = esAsistido(gestion)
+  const columna = disposicion === "columna"
+  const boton = columna ? "w-full" : "max-sm:flex-1"
+  const opcion = (accion: AccionGestion) =>
     opciones.find((candidata) => candidata.accion === accion)
 
   const envio = opcion("enviar") ?? opcion("reenviar")
   const cancelacion = opcion("cancelar")
   const archivo = opcion("archivar")
+  const textosCancelar = textosCancelacion(estado, gestion)
   if (opciones.length === 0) return null
 
   function abrir(nuevo: Dialogo) {
@@ -113,13 +164,13 @@ export function AccionesOferta({
   }
 
   return (
-    <div className="flex flex-wrap gap-2 lg:justify-end">
+    <div
+      className={cn(
+        columna ? "grid gap-2" : "flex flex-wrap gap-2 lg:justify-end"
+      )}
+    >
       {envio ? (
-        <Button
-          size="lg"
-          className="max-sm:flex-1"
-          onClick={() => abrir("enviar")}
-        >
+        <Button size="lg" className={boton} onClick={() => abrir("enviar")}>
           <Send data-icon="inline-start" aria-hidden />
           {envio.accion === "reenviar"
             ? "Reenviar a revisión"
@@ -128,10 +179,10 @@ export function AccionesOferta({
       ) : null}
       {opcion("editar") ? (
         <EnlaceBoton
-          href={rutaAsistente(campanaId, ofertaId)}
+          href={rutas.asistente(campanaId, ofertaId)}
           variant="outline"
           size="lg"
-          className="max-sm:flex-1"
+          className={boton}
         >
           <Pencil data-icon="inline-start" aria-hidden />
           Editar
@@ -141,7 +192,7 @@ export function AccionesOferta({
         <Button
           variant="outline"
           size="lg"
-          className="max-sm:flex-1"
+          className={boton}
           onClick={() => abrir("retirar")}
         >
           <Undo2 data-icon="inline-start" aria-hidden />
@@ -152,7 +203,7 @@ export function AccionesOferta({
         <Button
           variant="destructive"
           size="lg"
-          className="max-sm:flex-1"
+          className={boton}
           onClick={() => abrir("cancelar")}
         >
           <Ban data-icon="inline-start" aria-hidden />
@@ -163,7 +214,7 @@ export function AccionesOferta({
         <Button
           variant="outline"
           size="lg"
-          className="max-sm:flex-1"
+          className={boton}
           onClick={() => abrir("archivar")}
         >
           <Archive data-icon="inline-start" aria-hidden />
@@ -179,6 +230,7 @@ export function AccionesOferta({
           campanaId={campanaId}
           reenvio={envio.accion === "reenviar"}
           foco={foco}
+          gestion={gestion}
         />
       ) : null}
 
@@ -186,7 +238,11 @@ export function AccionesOferta({
         abierto={dialogo === "retirar"}
         onAbiertoChange={cerrar}
         titulo="¿Retirar la oferta de revisión?"
-        descripcion="Vuelve a borrador para que la ajustes. Cuando esté lista, envíala de nuevo: la revisión empieza otra vez."
+        descripcion={
+          asistido
+            ? `Vuelve a borrador para ajustarla y ${gestion.anunciante} recibe un aviso. Cuando esté lista, envíala de nuevo: la revisión empieza otra vez.`
+            : "Vuelve a borrador para que la ajustes. Cuando esté lista, envíala de nuevo: la revisión empieza otra vez."
+        }
         textoConfirmar="Retirar de revisión"
         focoAlCerrar={foco.focoAlCerrar}
         onConfirmar={() =>
@@ -208,14 +264,18 @@ export function AccionesOferta({
         <DialogoMotivo
           abierto={dialogo === "cancelar"}
           onAbiertoChange={cerrar}
-          titulo="¿Cancelar la oferta publicada?"
-          descripcion="Deja de estar disponible en el marketplace y los medios ya no podrán tomar cupos. No se puede deshacer."
+          titulo={textosCancelar.titulo}
+          descripcion={textosCancelar.descripcion}
           textoConfirmar="Sí, cancelar la oferta"
           textoCancelar="Volver"
           destructivo
-          ayuda="Queda en el historial de la oferta y en la bitácora."
-          placeholder="Ej.: la campaña cambió de estrategia…"
-          sugerencias={SUGERENCIAS_CANCELACION_ANUNCIANTE}
+          ayuda={textosCancelar.ayuda}
+          placeholder={
+            asistido
+              ? "Ej.: lo solicitó la empresa por correo…"
+              : "Ej.: la campaña cambió de estrategia…"
+          }
+          sugerencias={textosCancelar.sugerencias}
           focoAlCerrar={foco.focoAlCerrar}
           onConfirmar={(motivo) =>
             conAviso(cancelarOferta({ ofertaId, motivo }), "Oferta cancelada")
@@ -225,8 +285,8 @@ export function AccionesOferta({
         <DialogoConfirmacion
           abierto={dialogo === "cancelar"}
           onAbiertoChange={cerrar}
-          titulo="¿Cancelar la oferta?"
-          descripcion="Se descarta y no podrás enviarla a revisión. No se puede deshacer."
+          titulo={textosCancelar.titulo}
+          descripcion={textosCancelar.descripcion}
           textoConfirmar="Cancelar oferta"
           textoCancelar="Volver"
           destructivo
@@ -242,7 +302,11 @@ export function AccionesOferta({
           abierto={dialogo === "archivar"}
           onAbiertoChange={cerrar}
           titulo="¿Archivar la oferta?"
-          descripcion="Deja de verse en la campaña; el equipo AMO conserva su historial. No se puede deshacer."
+          descripcion={
+            asistido
+              ? `Deja de verse en la campaña, también para ${gestion.anunciante}; su historial se conserva. Archivar no le llega como aviso a la empresa. No se puede deshacer.`
+              : "Deja de verse en la campaña; el equipo AMO conserva su historial. No se puede deshacer."
+          }
           textoConfirmar="Archivar oferta"
           textoCancelar="Conservar"
           destructivo
@@ -252,7 +316,7 @@ export function AccionesOferta({
               "Oferta archivada"
             )
             // La ficha ya no existe: de vuelta a la campaña, sin dejarla en el historial.
-            if (respuesta.ok) router.replace(rutaOfertasDeCampana(campanaId))
+            if (respuesta.ok) router.replace(rutas.ofertasCampana(campanaId))
             return respuesta
           }}
         />

@@ -129,8 +129,16 @@ test.describe("auditoría y accesos", () => {
     const linea = page.getByRole("region", {
       name: "Línea de tiempo de la bitácora",
     })
+    // Los eventos de la cuenta de auditoría son de cuando se creó (hoy si la
+    // base se acaba de reconstruir; si no, «Ayer» o la fecha): se agrupan bajo
+    // un encabezado de día con su conteo.
     await expect(
-      linea.getByRole("heading", { level: 3, name: /^Hoy/ })
+      linea
+        .getByRole("heading", {
+          level: 3,
+          name: /^(?:Hoy|Ayer|[A-ZÁÉÍÓÚ][a-záéíóú]+, \d{1,2} de [a-záéíóú]+(?: de \d{4})?) \d+$/,
+        })
+        .first()
     ).toBeVisible()
     // En la línea de tiempo el botón del evento nombra además el resumen del
     // cambio, el actor y el origen.

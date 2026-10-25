@@ -53,7 +53,7 @@ const AREAS: readonly DefinicionArea[] = [
     id: "administracion",
     titulo: "Administración y seguridad",
     descripcion:
-      "Usuarios, roles, auditoría, configuración y datos personales de terceros.",
+      "Usuarios, roles, auditoría, configuración, datos personales de terceros y solicitudes de sus titulares.",
     modulos: [
       "usuarios",
       "roles",
@@ -61,6 +61,7 @@ const AREAS: readonly DefinicionArea[] = [
       "accesos",
       "configuracion",
       "datos_sensibles",
+      "privacidad",
     ],
   },
   {
