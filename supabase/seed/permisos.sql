@@ -71,7 +71,8 @@ insert into public.permisos (clave, modulo, descripcion, es_sensible, orden) val
   ('disputas.abrir', 'disputas', 'Abrir disputas sobre asignaciones', false, 67),
   ('disputas.resolver', 'disputas', 'Resolver o descartar disputas', true, 68),
   ('notificaciones.ver', 'notificaciones', 'Ver y marcar las notificaciones propias', false, 69),
-  ('cuenta.gestionar', 'cuenta', 'Gestionar el perfil, la seguridad y las preferencias propias', false, 70)
+  ('cuenta.gestionar', 'cuenta', 'Gestionar el perfil, la seguridad y las preferencias propias', false, 70),
+  ('privacidad.gestionar', 'privacidad', 'Atender las solicitudes de titulares de datos (Ley 1581) y ejecutar supresiones', true, 71)
 on conflict (clave) do update set
   modulo = excluded.modulo,
   descripcion = excluded.descripcion,
@@ -276,7 +277,9 @@ with por_defecto (rol_clave, permiso_clave) as (values
   ('OPERACIONES', 'cuenta.gestionar'),
   ('FINANZAS', 'cuenta.gestionar'),
   ('ANUNCIANTE', 'cuenta.gestionar'),
-  ('MEDIO', 'cuenta.gestionar')
+  ('MEDIO', 'cuenta.gestionar'),
+  ('SUPERADMIN', 'privacidad.gestionar'),
+  ('ADMIN', 'privacidad.gestionar')
 ), retirados as (
   delete from public.rol_permisos rp
   using public.roles r

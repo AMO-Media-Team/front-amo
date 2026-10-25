@@ -1,10 +1,16 @@
 "use server"
 
 /**
- * Server Actions de las campañas del anunciante (ANU-003, ANU-014). Patrón de
- * cada acción:
+ * Server Actions de las campañas del anunciante (ANU-003, ANU-014) y de la
+ * gestión asistida del equipo AMO por cuenta de un anunciante (ADM-014).
+ * Patrón de cada acción:
  *
- * 1. DAL (`requerirPermiso("campanas.gestionar_propias")`) antes que nada.
+ * 1. DAL antes que nada: `campanas.gestionar_propias` (el anunciante) o
+ *    `campanas.gestionar` (el equipo AMO). La empresa propia solo se le exige
+ *    al anunciante; el equipo elige la empresa al crear y después la deriva la
+ *    BD de la campaña. La BD es la autoridad: propiedad para el anunciante,
+ *    permiso de la transición para el equipo (la bitácora queda con el
+ *    operador como actor y el anunciante como propietario).
  * 2. zod: el MISMO esquema que el formulario; las reglas que dependen de la
  *    campaña (lo comprometido, las ventanas de sus ofertas vivas) se vuelven a
  *    leer de la BD con la sesión antes de validar.
@@ -49,9 +55,15 @@ import {
   SIN_EMPRESA,
 } from "./errores"
 import { reglasEdicion, reglasNuevaCampana } from "./formularios"
-import { obtenerMiCampana, ofertasDeMiCampana } from "./queries"
+import { exigeEmpresaPropia, PERMISOS_GESTION_CAMPANAS } from "./gestion"
+import {
+  obtenerCampanaGestionable,
+  obtenerMiCampana,
+  ofertasDeMiCampana,
+} from "./queries"
 import { esEditable, presupuestoMinimo } from "./reglas"
 import {
+  type DatosNuevaCampana,
   type EntradaCampanaId,
   type EntradaCancelarCampana,
   type EntradaEditarCampana,
@@ -60,6 +72,7 @@ import {
   esquemaCancelarCampana,
   esquemaEditarCampana,
   esquemaNuevaCampana,
+  esquemaNuevaCampanaAsistida,
 } from "./schemas"
 import type { MiCampana } from "./tipos"
 
@@ -181,21 +194,43 @@ async function aplicarTransicion(
 
 // ── Crear y editar ───────────────────────────────────────────────────────────
 
-/** Nueva campaña en BORRADOR de la empresa del usuario (la BD fija el estado). */
-export async function crearCampana(
-  entrada: EntradaNuevaCampana
-): Promise<ResultadoAccion<{ id: string }>> {
-  const usuario = await requerirPermiso("campanas.gestionar_propias")
-  const anuncianteId = usuario.anuncianteId
-  if (!anuncianteId) return fallo(SIN_EMPRESA)
-  const validacion = esquemaNuevaCampana(reglasNuevaCampana(hoy())).safeParse(
-    entrada
-  )
+/**
+ * Datos de la campaña nueva y de qué empresa es: la del anunciante en sesión
+ * (nunca la de la entrada) o, para el equipo AMO, la que eligió.
+ */
+function validarNuevaCampana(
+  usuario: UsuarioSesion,
+  entrada: EntradaNuevaCampana & { anuncianteId?: string }
+): { anuncianteId: string; datos: DatosNuevaCampana } | ResultadoFallo {
+  const reglas = reglasNuevaCampana(hoy())
+  if (exigeEmpresaPropia(usuario)) {
+    if (!usuario.anuncianteId) return fallo(SIN_EMPRESA)
+    const validacion = esquemaNuevaCampana(reglas).safeParse(entrada)
+    if (!validacion.success) return desdeErrorZod(validacion.error)
+    return { anuncianteId: usuario.anuncianteId, datos: validacion.data }
+  }
+  const validacion = esquemaNuevaCampanaAsistida(reglas).safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
+  const { anuncianteId, ...datos } = validacion.data
+  return { anuncianteId, datos }
+}
+
+/**
+ * Nueva campaña en BORRADOR (la BD fija el estado): de la empresa del
+ * anunciante o, en la gestión asistida, de la que eligió el equipo AMO (la
+ * BD la marca como asistida y le avisa a la empresa).
+ */
+export async function crearCampana(
+  entrada: EntradaNuevaCampana & { anuncianteId?: string }
+): Promise<ResultadoAccion<{ id: string }>> {
+  const usuario = await requerirPermiso(PERMISOS_GESTION_CAMPANAS)
+  const validacion = validarNuevaCampana(usuario, entrada)
+  if ("ok" in validacion) return validacion
 
   try {
+    const { anuncianteId } = validacion
     const { nombre, marca, objetivo, fechaInicio, fechaFin, presupuesto } =
-      validacion.data
+      validacion.datos
     const supabase = await crearClienteServidor()
     const { data, error } = await supabase
       .from("campanas")
@@ -220,19 +255,23 @@ export async function crearCampana(
 /**
  * Edita nombre, objetivo, marca, fechas y presupuesto de una campaña en
  * borrador o activa. Bloqueo optimista con `updated_at`: si un compañero
- * guardó antes, no se pisa su cambio.
+ * guardó antes, no se pisa su cambio. El anunciante edita las de su empresa;
+ * el equipo AMO, la que la RLS le deje ver y editar.
  */
 export async function editarCampana(
   entrada: EntradaEditarCampana
 ): Promise<ResultadoAccion<{ actualizadoAt: string }>> {
-  const usuario = await requerirPermiso("campanas.gestionar_propias")
-  const anuncianteId = usuario.anuncianteId
-  if (!anuncianteId) return fallo(SIN_EMPRESA)
+  const usuario = await requerirPermiso(PERMISOS_GESTION_CAMPANAS)
+  const propia = exigeEmpresaPropia(usuario)
+  if (propia && !usuario.anuncianteId) return fallo(SIN_EMPRESA)
   const id = esquemaCampanaId.safeParse({ campanaId: entrada?.campanaId })
   if (!id.success) return desdeErrorZod(id.error)
 
   try {
-    const campana = await obtenerMiCampana(anuncianteId, id.data.campanaId)
+    const campana =
+      propia && usuario.anuncianteId
+        ? await obtenerMiCampana(usuario.anuncianteId, id.data.campanaId)
+        : await obtenerCampanaGestionable(id.data.campanaId)
     if (!campana) return fallo(CAMPANA_NO_ENCONTRADA)
     if (!esEditable(campana.estado)) return fallo(CAMPANA_NO_EDITABLE)
     const ofertas = await ofertasDeMiCampana(campana.id)
@@ -280,7 +319,7 @@ export async function editarCampana(
 export async function activarCampana(
   entrada: EntradaCampanaId
 ): Promise<ResultadoAccion> {
-  const usuario = await requerirPermiso("campanas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_CAMPANAS)
   const validacion = esquemaCampanaId.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   return aplicarTransicion(usuario, "activar la campaña", {
@@ -298,7 +337,7 @@ export async function activarCampana(
 export async function cancelarCampana(
   entrada: EntradaCancelarCampana
 ): Promise<ResultadoAccion> {
-  const usuario = await requerirPermiso("campanas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_CAMPANAS)
   const validacion = esquemaCancelarCampana.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   return aplicarTransicion(usuario, "cancelar la campaña", {
@@ -318,7 +357,7 @@ export async function cancelarCampana(
 export async function archivarCampana(
   entrada: EntradaCampanaId
 ): Promise<ResultadoAccion> {
-  const usuario = await requerirPermiso("campanas.gestionar_propias")
+  const usuario = await requerirPermiso(PERMISOS_GESTION_CAMPANAS)
   const validacion = esquemaCampanaId.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
 

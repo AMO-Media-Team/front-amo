@@ -13,6 +13,7 @@ import type { PaginaFilas } from "@/features/operacion/tipos"
 import type { Database, Json } from "@/types/database.types"
 
 import type { EstadoTablaMisCampanas } from "./estado-tabla"
+import type { OpcionAnuncianteGestion } from "./gestion"
 import { contarPorEstado } from "./presentacion"
 import type {
   CampanaActiva,
@@ -175,52 +176,97 @@ export async function resumenMisCampanas(
 
 // ── Ficha ────────────────────────────────────────────────────────────────────
 
-/** La campaña con lo que le queda para ofertas (`disponible_campana`). */
+/**
+ * La campaña con lo que le queda para ofertas (`disponible_campana`). Con
+ * `anuncianteId`, solo si es de esa empresa (el portal del anunciante); sin
+ * él, la que la RLS deje ver (la gestión asistida del equipo AMO).
+ */
+async function leerCampana(
+  anuncianteId: string | null,
+  id: string
+): Promise<MiCampana | null> {
+  const supabase = await clienteSolicitud()
+  let consulta = supabase
+    .from("campanas")
+    .select(
+      `id, nombre, marca, objetivo, anunciante_id, estado, fecha_inicio, fecha_fin, presupuesto_total,
+       presupuesto_comprometido, activada_at, finalizada_at, cancelada_at, created_at, updated_at, es_demo,
+       gestion_asistida`
+    )
+    .eq("id", id)
+    .is("deleted_at", null)
+  if (anuncianteId) consulta = consulta.eq("anunciante_id", anuncianteId)
+  const [campana, disponible] = await Promise.all([
+    consulta.maybeSingle(),
+    supabase.rpc("disponible_campana", { p_campana_id: id }),
+  ])
+  if (campana.error) fallar("leer la campaña", campana.error)
+  if (disponible.error)
+    fallar("leer el disponible de la campaña", disponible.error)
+  const fila = campana.data
+  if (!fila) return null
+  // La función devuelve null si la campaña no es visible (las SQL generan `number`).
+  const valorDisponible = disponible.data as number | null
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    marca: fila.marca,
+    objetivo: fila.objetivo,
+    anuncianteId: fila.anunciante_id,
+    estado: fila.estado,
+    fechaInicio: fila.fecha_inicio,
+    fechaFin: fila.fecha_fin,
+    presupuestoTotal: fila.presupuesto_total,
+    presupuestoComprometido: fila.presupuesto_comprometido,
+    disponible:
+      typeof valorDisponible === "number" && Number.isFinite(valorDisponible)
+        ? valorDisponible
+        : null,
+    activadaAt: fila.activada_at,
+    finalizadaAt: fila.finalizada_at,
+    canceladaAt: fila.cancelada_at,
+    creadaAt: fila.created_at,
+    actualizadaAt: fila.updated_at,
+    esDemo: fila.es_demo,
+    gestionAsistida: fila.gestion_asistida,
+  }
+}
+
+/** Campaña de la empresa del usuario (`null` si no existe o es de otra). */
 export const obtenerMiCampana = cache(
-  async (anuncianteId: string, id: string): Promise<MiCampana | null> => {
+  async (anuncianteId: string, id: string): Promise<MiCampana | null> =>
+    leerCampana(anuncianteId, id)
+)
+
+/**
+ * Campaña que el equipo AMO gestiona por cuenta de su anunciante (ADM-014):
+ * sin filtrar por empresa, la RLS decide (`campanas.ver`).
+ */
+export const obtenerCampanaGestionable = cache(
+  async (id: string): Promise<MiCampana | null> => leerCampana(null, id)
+)
+
+/**
+ * Empresas por cuenta de las cuales el equipo AMO puede crear una campaña
+ * (no borradas), con su verificación, por nombre. Con `anunciantes.ver`.
+ */
+export const anunciantesParaGestion = cache(
+  async (): Promise<OpcionAnuncianteGestion[]> => {
     const supabase = await clienteSolicitud()
-    const [campana, disponible] = await Promise.all([
+    const filas = await leerTodo("leer los anunciantes", (desde, hasta) =>
       supabase
-        .from("campanas")
-        .select(
-          `id, nombre, marca, objetivo, anunciante_id, estado, fecha_inicio, fecha_fin, presupuesto_total,
-           presupuesto_comprometido, activada_at, finalizada_at, cancelada_at, created_at, updated_at, es_demo`
-        )
-        .eq("id", id)
-        .eq("anunciante_id", anuncianteId)
+        .from("anunciantes")
+        .select("id, nombre_comercial, estado_verificacion")
         .is("deleted_at", null)
-        .maybeSingle(),
-      supabase.rpc("disponible_campana", { p_campana_id: id }),
-    ])
-    if (campana.error) fallar("leer la campaña", campana.error)
-    if (disponible.error)
-      fallar("leer el disponible de la campaña", disponible.error)
-    const fila = campana.data
-    if (!fila) return null
-    // La función devuelve null si la campaña no es visible (las SQL generan `number`).
-    const valorDisponible = disponible.data as number | null
-    return {
+        .order("nombre_comercial")
+        .order("id")
+        .range(desde, hasta)
+    )
+    return filas.map((fila) => ({
       id: fila.id,
-      nombre: fila.nombre,
-      marca: fila.marca,
-      objetivo: fila.objetivo,
-      anuncianteId: fila.anunciante_id,
-      estado: fila.estado,
-      fechaInicio: fila.fecha_inicio,
-      fechaFin: fila.fecha_fin,
-      presupuestoTotal: fila.presupuesto_total,
-      presupuestoComprometido: fila.presupuesto_comprometido,
-      disponible:
-        typeof valorDisponible === "number" && Number.isFinite(valorDisponible)
-          ? valorDisponible
-          : null,
-      activadaAt: fila.activada_at,
-      finalizadaAt: fila.finalizada_at,
-      canceladaAt: fila.cancelada_at,
-      creadaAt: fila.created_at,
-      actualizadaAt: fila.updated_at,
-      esDemo: fila.es_demo,
-    }
+      nombre: fila.nombre_comercial,
+      estado: fila.estado_verificacion,
+    }))
   }
 )
 

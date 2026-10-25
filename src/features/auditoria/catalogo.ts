@@ -214,6 +214,12 @@ const ENTIDADES: Readonly<Record<string, Entidad>> = {
     complemento: "un pago de anunciante",
   },
   disputas: { nombre: "Disputa", complemento: "una disputa" },
+  solicitudes_titular: {
+    nombre: "Solicitud de datos personales",
+    complemento: "una solicitud de datos personales",
+  },
+  notas_credito: { nombre: "Nota crédito", complemento: "una nota crédito" },
+  plataforma: { nombre: "Plataforma", complemento: "la plataforma" },
   tarifas: { nombre: "Tarifa", complemento: "una tarifa" },
   franjas: { nombre: "Franja", complemento: "una franja" },
   formatos: { nombre: "Formato", complemento: "un formato" },

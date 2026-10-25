@@ -5,7 +5,7 @@
  */
 import { etiquetaRango } from "@/features/auditoria/periodo"
 import { diasEnRango, parsearFecha, ZONA } from "@/lib/fechas"
-import { formatearFechaHora, formatearNumero } from "@/lib/format"
+import { formatearFechaHora, formatearNumero, formatoFecha } from "@/lib/format"
 import { normalizarNombreGeo } from "@/lib/geo/normalizar"
 
 /** Dígitos mínimos para que un texto cuente como búsqueda por NIT. */
@@ -150,7 +150,7 @@ export function faseVigencia(
   return "en_curso"
 }
 
-const diaMesAnio = new Intl.DateTimeFormat("es-CO", {
+const diaMesAnio = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",

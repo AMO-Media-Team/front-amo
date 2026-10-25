@@ -19,6 +19,9 @@
  *   se limpian (`fabricas-validacion.ts`).
  * - FINANZAS con TOTP verificado (clave en `E2E_FINANZAS_TOTP_SECRET`): aprueba,
  *   emite, paga y factura en las pruebas de la fase 5.
+ * - FINANZAS de solo lectura con TOTP verificado (clave en
+ *   `E2E_LECTURA_FINANZAS_TOTP_SECRET`): la sesión `finanzas` que comparten las
+ *   pruebas de accesibilidad de los pagos a medios (`e2e/preparacion.setup.ts`).
  * - MEDIO del «Medio Finanzas E2E» (no declarante ni facturador: documento
  *   soporte) y del «Medio Factura E2E» (declarante y obligado a facturar):
  *   VERIFICADOS nivel 1 en Bogotá, con Instagram vigente, datos de pago

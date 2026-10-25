@@ -101,17 +101,113 @@ describe("accionesCampana", () => {
   })
 
   it("edición y ofertas nuevas solo en borrador o activa y con su permiso", () => {
-    expect(puedeEditarCampana("BORRADOR", PERMISOS_ANUNCIANTE)).toBe(true)
-    expect(puedeEditarCampana("ACTIVA", PERMISOS_ANUNCIANTE)).toBe(true)
-    expect(puedeEditarCampana("CANCELADA", PERMISOS_ANUNCIANTE)).toBe(false)
-    expect(puedeEditarCampana("ACTIVA", ["ofertas.gestionar_propias"])).toBe(
-      false
+    expect(
+      puedeEditarCampana("BORRADOR", "ANUNCIANTE", PERMISOS_ANUNCIANTE)
+    ).toBe(true)
+    expect(
+      puedeEditarCampana("ACTIVA", "ANUNCIANTE", PERMISOS_ANUNCIANTE)
+    ).toBe(true)
+    expect(
+      puedeEditarCampana("CANCELADA", "ANUNCIANTE", PERMISOS_ANUNCIANTE)
+    ).toBe(false)
+    expect(
+      puedeEditarCampana("ACTIVA", "ANUNCIANTE", ["ofertas.gestionar_propias"])
+    ).toBe(false)
+    expect(puedeCrearOfertas("ACTIVA", "ANUNCIANTE", PERMISOS_ANUNCIANTE)).toBe(
+      true
     )
-    expect(puedeCrearOfertas("ACTIVA", PERMISOS_ANUNCIANTE)).toBe(true)
-    expect(puedeCrearOfertas("FINALIZADA", PERMISOS_ANUNCIANTE)).toBe(false)
-    expect(puedeCrearOfertas("BORRADOR", ["campanas.gestionar_propias"])).toBe(
-      false
+    expect(
+      puedeCrearOfertas("FINALIZADA", "ANUNCIANTE", PERMISOS_ANUNCIANTE)
+    ).toBe(false)
+    expect(
+      puedeCrearOfertas("BORRADOR", "ANUNCIANTE", [
+        "campanas.gestionar_propias",
+      ])
+    ).toBe(false)
+  })
+})
+
+describe("gestión asistida (ADM-014)", () => {
+  const OPERACIONES = [
+    "campanas.gestionar",
+    "campanas.ver",
+    "anunciantes.ver",
+    "ofertas.gestionar",
+    "ofertas.ver",
+  ]
+
+  it("el equipo AMO activa un borrador o lo archiva; cancelar una activa pide motivo", () => {
+    expect(
+      accionesCampana({
+        estado: "BORRADOR",
+        tipoActor: "ADMIN",
+        permisos: OPERACIONES,
+        estadoEmpresa: "VERIFICADO",
+      })
+    ).toEqual([
+      { accion: "activar", requiereMotivo: false, bloqueo: null },
+      { accion: "archivar", requiereMotivo: false, bloqueo: null },
+    ])
+    // El cierre manual (FINALIZADA) no se ofrece desde la ficha.
+    expect(
+      accionesCampana({
+        estado: "ACTIVA",
+        tipoActor: "ADMIN",
+        permisos: OPERACIONES,
+        estadoEmpresa: "VERIFICADO",
+      })
+    ).toEqual([{ accion: "cancelar", requiereMotivo: true, bloqueo: null }])
+  })
+
+  it("el bloqueo de activar habla de «la empresa»; sin poder leerla decide la BD", () => {
+    const [activar] = accionesCampana({
+      estado: "BORRADOR",
+      tipoActor: "ADMIN",
+      permisos: OPERACIONES,
+      estadoEmpresa: "SUSPENDIDO",
+    })
+    expect(activar.bloqueo).toBe(
+      "La empresa está suspendida: sus campañas no se pueden activar."
     )
+    const [sinLeer] = accionesCampana({
+      estado: "BORRADOR",
+      tipoActor: "ADMIN",
+      permisos: OPERACIONES,
+      estadoEmpresa: null,
+    })
+    expect(sinLeer).toEqual({
+      accion: "activar",
+      requiereMotivo: false,
+      bloqueo: null,
+    })
+  })
+
+  it("el permiso del anunciante no sirve al equipo AMO ni al revés", () => {
+    expect(
+      accionesCampana({
+        estado: "BORRADOR",
+        tipoActor: "ADMIN",
+        permisos: PERMISOS_ANUNCIANTE,
+        estadoEmpresa: "VERIFICADO",
+      })
+    ).toEqual([])
+    expect(puedeEditarCampana("ACTIVA", "ANUNCIANTE", OPERACIONES)).toBe(false)
+  })
+
+  it("editar y crear ofertas exigen todos los permisos de la pantalla asistida", () => {
+    expect(puedeEditarCampana("ACTIVA", "ADMIN", OPERACIONES)).toBe(true)
+    expect(puedeCrearOfertas("BORRADOR", "ADMIN", OPERACIONES)).toBe(true)
+    expect(puedeCrearOfertas("CANCELADA", "ADMIN", OPERACIONES)).toBe(false)
+    expect(
+      puedeEditarCampana("ACTIVA", "ADMIN", [
+        "campanas.gestionar",
+        "campanas.ver",
+      ])
+    ).toBe(false)
+    expect(
+      puedeCrearOfertas("ACTIVA", "ADMIN", ["ofertas.gestionar", "ofertas.ver"])
+    ).toBe(false)
+    expect(puedeEditarCampana("ACTIVA", "MEDIO", OPERACIONES)).toBe(false)
   })
 })
 

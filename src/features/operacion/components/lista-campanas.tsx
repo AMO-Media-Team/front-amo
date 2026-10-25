@@ -8,6 +8,7 @@ import {
   formatearPorcentaje,
 } from "@/lib/format"
 
+import { InsigniaGestionAsistida } from "@/features/campanas/components/distintivos-campana"
 import { cn } from "@/lib/utils"
 
 import { proporcion } from "../calculos"
@@ -79,6 +80,9 @@ export function ListaCampanas({
                     estado={campana.estado}
                     className="h-5 px-2 text-[0.6875rem]"
                   />
+                  {campana.gestionAsistida ? (
+                    <InsigniaGestionAsistida className="h-5 px-2 text-[0.6875rem]" />
+                  ) : null}
                 </span>
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <span>{campana.marca}</span>

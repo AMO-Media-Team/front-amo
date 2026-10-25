@@ -1,20 +1,26 @@
 /**
- * Qué puede hacer el anunciante con su oferta (módulo puro, cliente y
- * servidor), según la máquina de estados (`accionesPermitidas`) y sus
- * permisos, más archivarla cuando ya terminó (`archivar_oferta_srv`). Solo
- * decide qué botones mostrar: la BD revalida propiedad, estado, envío y
- * asignaciones.
+ * Qué puede hacer quien gestiona la oferta (módulo puro, cliente y
+ * servidor): el anunciante con la suya o el equipo AMO por cuenta del
+ * anunciante (ADM-014), según la máquina de estados (`accionesPermitidas`)
+ * para su tipo de actor y sus permisos, más archivarla cuando ya terminó
+ * (`archivar_oferta_srv`). Solo decide qué botones mostrar: la BD revalida
+ * propiedad o permiso, estado, envío y asignaciones.
  */
 import type { EstadoOferta } from "@/features/operacion/estados"
 import { contar } from "@/features/operacion/formato"
+import type { ClavePermiso } from "@/lib/auth/permisos"
 import { accionesPermitidas } from "@/lib/negocio/acciones"
+import type { TipoActor } from "@/lib/negocio/tipos"
 
-export type AccionAnunciante =
+export type AccionGestion =
   "editar" | "enviar" | "reenviar" | "retirar" | "cancelar" | "archivar"
 
-export interface OpcionAnunciante {
-  accion: AccionAnunciante
-  /** La transición exige motivo (cancelar una publicada). */
+export interface OpcionGestion {
+  accion: AccionGestion
+  /**
+   * La transición exige motivo: cancelar una publicada (anunciante) o
+   * cualquier cancelación del equipo AMO.
+   */
   requiereMotivo: boolean
   /** Por qué no se puede aunque el estado lo admita (se explica, no se oculta). */
   bloqueo: string | null
@@ -37,9 +43,18 @@ export const ESTADOS_ARCHIVABLES: ReadonlySet<EstadoOferta> = new Set([
   "CERRADA",
 ])
 
-const PERMISO_PROPIAS = "ofertas.gestionar_propias"
+/**
+ * Permiso de gestión de cada tipo de actor. Para el equipo AMO solo cuentan
+ * las transiciones de `ofertas.gestionar`: las de `ofertas.moderar`
+ * (publicar, devolver, rechazar, cancelar la publicada) son la moderación
+ * (`decisionesDisponibles`), aunque el mismo rol tenga ambos permisos.
+ */
+const PERMISO_GESTION: Partial<Record<TipoActor, ClavePermiso>> = {
+  ANUNCIANTE: "ofertas.gestionar_propias",
+  ADMIN: "ofertas.gestionar",
+}
 
-const ORDEN: readonly AccionAnunciante[] = [
+const ORDEN: readonly AccionGestion[] = [
   "enviar",
   "reenviar",
   "editar",
@@ -64,24 +79,34 @@ export function bloqueoCancelacion(
   )} y no se puede cancelar. Si necesitas ayuda, escríbele al equipo AMO.`
 }
 
-export function accionesAnunciante(
+/**
+ * Botones de la oferta para su gestor: editar (BORRADOR o DEVUELTA), enviar o
+ * reenviar a revisión, retirarla de revisión, cancelarla (con motivo si la
+ * transición lo pide a ese actor) y archivarla cuando terminó. Sin el
+ * permiso de gestión de su tipo de actor no se ofrece nada.
+ */
+export function accionesGestion(
   estado: EstadoOferta,
+  tipoActor: TipoActor,
   permisos: Iterable<string>,
   { cuposOcupados }: { cuposOcupados: number }
-): OpcionAnunciante[] {
+): OpcionGestion[] {
+  const permiso = PERMISO_GESTION[tipoActor]
   const lista = [...permisos]
-  const opciones: OpcionAnunciante[] = []
+  if (!permiso || !lista.includes(permiso)) return []
+  const opciones: OpcionGestion[] = []
 
-  if (ESTADOS_EDITABLES.has(estado) && lista.includes(PERMISO_PROPIAS)) {
+  if (ESTADOS_EDITABLES.has(estado)) {
     opciones.push({ accion: "editar", requiereMotivo: false, bloqueo: null })
   }
 
-  for (const { hacia, requiereMotivo } of accionesPermitidas(
+  const transiciones = accionesPermitidas(
     "ofertas",
     estado,
-    "ANUNCIANTE",
+    tipoActor,
     lista
-  )) {
+  ).filter((transicion) => transicion.permiso === permiso)
+  for (const { hacia, requiereMotivo } of transiciones) {
     if (hacia === "EN_REVISION") {
       opciones.push({
         accion: estado === "DEVUELTA" ? "reenviar" : "enviar",
@@ -101,7 +126,7 @@ export function accionesAnunciante(
 
   // Una vencida nunca tiene cupos tomados (con alguno pasa a ejecución): se
   // archiva como una cancelada o una cerrada.
-  if (ESTADOS_ARCHIVABLES.has(estado) && lista.includes(PERMISO_PROPIAS)) {
+  if (ESTADOS_ARCHIVABLES.has(estado)) {
     opciones.push({ accion: "archivar", requiereMotivo: false, bloqueo: null })
   }
 

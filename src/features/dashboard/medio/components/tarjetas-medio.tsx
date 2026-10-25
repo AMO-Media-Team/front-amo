@@ -27,6 +27,7 @@ import { formatearFactor } from "@/features/calidad-medio/calidad"
 import { NOMBRES_PLATAFORMA } from "@/features/dashboard/insights/textos"
 import type { Plataforma } from "@/features/dashboard/insights/tipos"
 import { rutaAsignacionMedio } from "@/features/mis-campanas/rutas"
+import { TEXTO_CALIFICACION_PENDIENTE } from "@/features/reputacion/datos"
 import { formatearHandle } from "@/features/operacion/formato"
 import {
   formatearCOP,
@@ -389,7 +390,8 @@ interface DatoReputacion {
  * Reputación (§7.1.8): cumplimiento en 180 días, calificación y multiplicador.
  * Una fila por dato (nombre y nota a la izquierda, cifra a la derecha): en
  * tres casillas, a 390 px y en la columna angosta de escritorio, las notas se
- * partían en tres líneas de dos palabras.
+ * partían en tres líneas de dos palabras. Al pie, el enlace al detalle en
+ * «Mi medio › Reputación» (MED-016).
  */
 export function Reputacion({
   cumplimiento,
@@ -398,16 +400,21 @@ export function Reputacion({
   notaMultiplicador,
   publicaciones,
   nMinimoCumplimiento,
+  enlaceReputacion,
   className,
 }: {
   cumplimiento: FilaKpi | undefined
+  /** Sin escritor hasta la calificación de los anunciantes (EP §13). */
   calificacion: number | null
   /** El vigente más bajo de sus cuentas (`resumenMultiplicador`). */
   multiplicador: number | null
   /** El cambio anunciado o de cuántas cuentas es (sin ella, qué hace). */
   notaMultiplicador?: string | null
   publicaciones: number | null
+  /** El vigente, de `mi_reputacion()` (el medio no lee `configuracion`). */
   nMinimoCumplimiento: number
+  /** «Mi medio › Reputación», si el rol puede abrirla. */
+  enlaceReputacion?: Route | null
   className?: string
 }) {
   const tasa = cumplimiento?.valor ?? null
@@ -430,7 +437,7 @@ export function Reputacion({
         calificacion === null ? "—" : `${formatearNumero(calificacion, 1)} / 5`,
       nota:
         calificacion === null
-          ? "Aún sin calificaciones"
+          ? TEXTO_CALIFICACION_PENDIENTE
           : "Promedio de los anunciantes",
     },
     {
@@ -448,6 +455,11 @@ export function Reputacion({
       descripcion="Lo que ven los anunciantes y lo que mueve tu tarifa."
       icono={Award}
       className={className}
+      enlace={
+        enlaceReputacion
+          ? { href: enlaceReputacion, texto: "Ver tu reputación" }
+          : undefined
+      }
       pie={
         publicaciones !== null
           ? `${formatearNumero(publicaciones)} ${publicaciones === 1 ? "publicación aprobada" : "publicaciones aprobadas"} en el periodo.`

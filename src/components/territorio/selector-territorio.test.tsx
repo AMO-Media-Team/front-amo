@@ -131,6 +131,27 @@ describe("SelectorTerritorio · municipio", () => {
     expect(onCambio).toHaveBeenCalledWith(MUNICIPIOS["08"][0])
   })
 
+  it("con la lista abierta, aria-controls apunta al listbox que existe", async () => {
+    const usuario = userEvent.setup()
+    render(
+      conConsultas(
+        <SelectorTerritorio modo="municipio" valor={null} onCambio={vi.fn()} />
+      )
+    )
+    const disparador = screen.getByRole("combobox", { name: "Departamento" })
+    expect(disparador).not.toHaveAttribute("aria-controls")
+
+    await usuario.click(disparador)
+    await screen.findByRole("option", { name: /Antioquia/ })
+    const lista = screen.getByRole("listbox")
+    // cmdk pone su propio id a la lista: el disparador debe usar ese.
+    expect(lista.id).not.toBe("")
+    expect(disparador).toHaveAttribute("aria-controls", lista.id)
+
+    await usuario.keyboard("{Escape}")
+    await waitFor(() => expect(disparador).not.toHaveAttribute("aria-controls"))
+  })
+
   it("avisa si el municipio guardado ya no está activo", async () => {
     render(
       conConsultas(

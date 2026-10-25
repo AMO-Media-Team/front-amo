@@ -3,10 +3,14 @@
 import {
   Check,
   CircleCheck,
+  Clock,
   CloudUpload,
   Gauge,
   Hash,
+  Lock,
   type LucideIcon,
+  Mail,
+  MailX,
   Monitor,
   Moon,
   Palette,
@@ -15,23 +19,34 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import type { ChangeEvent, ReactNode } from "react"
-import { useSyncExternalStore } from "react"
+import { useId, useSyncExternalStore } from "react"
 
+import { useShell } from "@/components/layout/contexto-shell"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Field,
   FieldContent,
   FieldDescription,
   FieldLabel,
 } from "@/components/ui/field"
+import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  CATEGORIAS,
+  type ClaveCategoria,
+} from "@/features/notificaciones/presentacion"
 import { type Tema, useTransicionTema } from "@/hooks/use-transicion-tema"
+import type { TipoRol } from "@/lib/auth/permisos"
 import { cn } from "@/lib/utils"
 
 import { crearFormateadorNumeros } from "../formato-numeros"
-import type {
-  DensidadPreferida,
-  FormatoNumeros,
-  PreferenciasInterfaz,
+import {
+  CATEGORIAS_CORREO_POR_TIPO,
+  type CategoriaSilenciable,
+  type DensidadPreferida,
+  esSilenciable,
+  type FormatoNumeros,
+  type PreferenciasInterfaz,
 } from "../preferencias"
 import {
   type EstadoGuardado,
@@ -584,6 +599,210 @@ function SeccionNumeros({
   )
 }
 
+// ── Avisos por correo ────────────────────────────────────────────────────────
+
+/** Qué incluye cada categoría (los avisos de la campana, también por correo). */
+const DESCRIPCIONES_CORREO: Record<ClaveCategoria, string> = {
+  ofertas: "Ofertas nuevas, publicadas o devueltas y cambios en campañas.",
+  asignaciones: "Aceptaciones, vencimientos, cancelaciones y recordatorios.",
+  ejecucion: "Evidencias y métricas que debes corregir.",
+  pagos: "Liquidaciones, pagos, facturas y cambios de multiplicador.",
+  verificacion: "Resultado de la verificación y vencimiento de documentos.",
+  cuentas: "Verificación y reverificación de tus cuentas sociales.",
+  disputas: "Disputas abiertas, mensajes nuevos y resoluciones.",
+  pendientes:
+    "Trabajo nuevo en las colas del equipo: verificación, moderación, validación y finanzas.",
+  seguridad: "Ingresos inusuales y cambios importantes en tu cuenta.",
+  privacidad: "Respuestas a tus solicitudes sobre tus datos personales.",
+}
+
+function alternarSilenciada(
+  silenciadas: readonly CategoriaSilenciable[],
+  clave: CategoriaSilenciable,
+  recibir: boolean
+): CategoriaSilenciable[] {
+  const sin = silenciadas.filter((actual) => actual !== clave)
+  return recibir ? sin : [...sin, clave]
+}
+
+/** Por qué una casilla no se puede cambiar (o ninguno si se puede). */
+type BloqueoCorreo = "obligatoria" | "sin-correo" | null
+
+const INSIGNIAS_BLOQUEO: Record<
+  Exclude<BloqueoCorreo, null>,
+  { icono: LucideIcon; texto: string; explicacion: string }
+> = {
+  obligatoria: {
+    icono: Lock,
+    texto: "Siempre activo",
+    explicacion:
+      " Siempre te llegan por correo: protegen tu cuenta o tienen plazo legal.",
+  },
+  "sin-correo": {
+    icono: MailX,
+    texto: "Sin correo por ahora",
+    explicacion:
+      " El equipo AMO aún no envía estos avisos por correo: los ves en la campana.",
+  },
+}
+
+function OpcionCorreo({
+  clave,
+  recibe,
+  sinCorreo = false,
+  onCambiar,
+}: {
+  clave: ClaveCategoria
+  recibe: boolean
+  /**
+   * Ninguna plantilla de correo de la categoría está activa: la casilla no
+   * cambiaría nada, así que se muestra desmarcada y deshabilitada (la
+   * elección guardada se conserva).
+   */
+  sinCorreo?: boolean
+  /** Sin él la categoría es obligatoria: marcada y deshabilitada. */
+  onCambiar?: (recibir: boolean) => void
+}) {
+  const id = useId()
+  const bloqueo: BloqueoCorreo = sinCorreo
+    ? "sin-correo"
+    : onCambiar
+      ? null
+      : "obligatoria"
+  const marcada = bloqueo === "sin-correo" ? false : !onCambiar || recibe
+  const insignia = bloqueo ? INSIGNIAS_BLOQUEO[bloqueo] : null
+  const idDescripcion = `${id}-descripcion`
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-3 rounded-xl border bg-background/40 p-3 transition-colors",
+        marcada && "border-primary/30 bg-primary/[0.04] dark:bg-primary/[0.07]",
+        bloqueo === "sin-correo" && "border-dashed"
+      )}
+    >
+      <Checkbox
+        id={id}
+        checked={marcada}
+        disabled={bloqueo !== null}
+        onCheckedChange={(valor) => onCambiar?.(valor === true)}
+        aria-describedby={idDescripcion}
+        className="mt-0.5"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Label htmlFor={id} className="text-sm leading-snug font-medium">
+            {CATEGORIAS[clave].etiqueta}
+          </Label>
+          {insignia ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[0.6875rem] font-medium text-muted-foreground">
+              <insignia.icono aria-hidden className="size-3" />
+              {insignia.texto}
+            </span>
+          ) : null}
+        </span>
+        <p
+          id={idDescripcion}
+          className="text-xs leading-relaxed text-muted-foreground"
+        >
+          {DESCRIPCIONES_CORREO[clave]}
+          {insignia?.explicacion}
+        </p>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * «Avisos por correo»: qué categorías de avisos llegan también al correo. Las
+ * de seguridad y datos personales no se pueden apagar. Las elecciones se
+ * guardan aunque el envío por correo aún no esté encendido (`correo.habilitado`):
+ * con `correoHabilitado` distinto de `true` se avisa que se activará pronto.
+ * Una categoría fuera de `categoriasConCorreo` (sin plantilla de correo
+ * activa, p. ej. las colas del equipo) se muestra deshabilitada y explicada.
+ */
+export function SeccionAvisosCorreo({
+  tipoRol,
+  email,
+  silenciadas,
+  correoHabilitado,
+  categoriasConCorreo,
+  onCambiar,
+}: {
+  tipoRol: TipoRol
+  email: string
+  silenciadas: readonly CategoriaSilenciable[]
+  /** `null` o ausente: no se pudo saber (se trata como apagado). */
+  correoHabilitado?: boolean | null
+  /** Las que hoy sí salen por correo; `null` o ausente: no se sabe (todas). */
+  categoriasConCorreo?: readonly ClaveCategoria[] | null
+  onCambiar: (silenciadas: CategoriaSilenciable[]) => void
+}) {
+  const categorias = CATEGORIAS_CORREO_POR_TIPO[tipoRol]
+  const sinCorreo = (clave: ClaveCategoria) =>
+    categoriasConCorreo ? !categoriasConCorreo.includes(clave) : false
+  return (
+    <SeccionCuenta
+      id="correo"
+      titulo="Avisos por correo"
+      icono={Mail}
+      descripcion="Elige qué avisos te llegan también por correo. En la campana de AMO los sigues viendo todos."
+    >
+      <div className="flex flex-col gap-4">
+        {correoHabilitado === true ? (
+          <p className="text-sm text-muted-foreground">
+            Te escribimos a{" "}
+            <span className="font-medium break-all text-foreground">
+              {email}
+            </span>
+            .
+          </p>
+        ) : (
+          <p className="flex items-start gap-2.5 rounded-xl border border-dashed bg-muted/30 px-3.5 py-3 text-sm">
+            <Clock
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+            />
+            <span>
+              <span className="font-medium">
+                El envío por correo se activará pronto.
+              </span>{" "}
+              <span className="text-muted-foreground">
+                Tus elecciones quedan guardadas y se aplicarán desde ese
+                momento.
+              </span>
+            </span>
+          </p>
+        )}
+        <fieldset>
+          <legend className="sr-only">Avisos que recibes por correo</legend>
+          <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+            {categorias.map((clave) =>
+              esSilenciable(clave) ? (
+                <OpcionCorreo
+                  key={clave}
+                  clave={clave}
+                  recibe={!silenciadas.includes(clave)}
+                  sinCorreo={sinCorreo(clave)}
+                  onCambiar={(recibir) =>
+                    onCambiar(alternarSilenciada(silenciadas, clave, recibir))
+                  }
+                />
+              ) : (
+                <OpcionCorreo
+                  key={clave}
+                  clave={clave}
+                  recibe
+                  sinCorreo={sinCorreo(clave)}
+                />
+              )
+            )}
+          </ul>
+        </fieldset>
+      </div>
+    </SeccionCuenta>
+  )
+}
+
 // ── Panel ────────────────────────────────────────────────────────────────────
 
 const ESTADOS: Record<
@@ -612,7 +831,18 @@ const ESTADOS: Record<
   },
 }
 
-function ContenidoPreferencias() {
+interface EstadoCorreo {
+  /** `correo.habilitado` (lo lee la página con `envioCorreoHabilitado()`). */
+  correoHabilitado?: boolean | null
+  /** Categorías con plantilla de correo activa (`categoriasConCorreo`). */
+  categoriasConCorreo?: readonly ClaveCategoria[] | null
+}
+
+function ContenidoPreferencias({
+  correoHabilitado,
+  categoriasConCorreo,
+}: EstadoCorreo) {
+  const { usuario } = useShell()
   const contexto = useContextoPreferencias()
   if (!contexto) return null
   const { preferencias, estado, actualizar } = contexto
@@ -649,24 +879,34 @@ function ContenidoPreferencias() {
         valor={preferencias.formatoNumeros}
         onElegir={(formatoNumeros) => actualizar({ formatoNumeros })}
       />
+      <SeccionAvisosCorreo
+        tipoRol={usuario.rol.tipo}
+        email={usuario.email}
+        silenciadas={preferencias.correoSilenciadas}
+        correoHabilitado={correoHabilitado}
+        categoriasConCorreo={categoriasConCorreo}
+        onCambiar={(correoSilenciadas) => actualizar({ correoSilenciadas })}
+      />
     </div>
   )
 }
 
 /**
- * Preferencias de interfaz. Usa el proveedor global si el AppShell ya lo
+ * Preferencias de la cuenta. Usa el proveedor global si el AppShell ya lo
  * monta; si no, uno local (el cambio se aplica mientras se está en la página).
+ * `correoHabilitado`: estado de `correo.habilitado`; sin él se muestra que el
+ * correo se activará pronto. `categoriasConCorreo`: las que tienen plantilla
+ * de correo activa; sin él no se deshabilita ninguna.
  */
 export function PanelPreferencias({
   inicial,
-}: {
-  inicial: PreferenciasInterfaz
-}) {
+  ...correo
+}: EstadoCorreo & { inicial: PreferenciasInterfaz }) {
   const externo = useContextoPreferencias()
-  if (externo) return <ContenidoPreferencias />
+  if (externo) return <ContenidoPreferencias {...correo} />
   return (
     <ProveedorPreferencias inicial={inicial}>
-      <ContenidoPreferencias />
+      <ContenidoPreferencias {...correo} />
     </ProveedorPreferencias>
   )
 }

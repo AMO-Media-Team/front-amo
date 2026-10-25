@@ -3,16 +3,19 @@
  * (`desde`/`hasta`) y el filtro del grupo.
  *
  * El explorador geográfico tiene su propio constructor
- * (`rutaExplorador`, features/geo/rutas.ts). Verificados con sus pantallas:
- * accesos (`motivo`,
- * `periodo=personalizado` + `desde`/`hasta`, features/accesos). Supuestos a
- * confirmar cuando existan: reportes (`cumplimiento-medios`,
- * `desempeno-campanas` con `departamento`/`plataforma`), medios
- * (`segmento=en_riesgo`) y asignaciones (`alerta=metricas`).
+ * (`rutaExplorador`, features/geo/rutas.ts) y la cola de validación el suyo
+ * (`rutaCola`, features/validacion/colas.ts). Verificados con sus pantallas:
+ * accesos (`motivo`, `periodo=personalizado` + `desde`/`hasta`,
+ * features/accesos), medios (`segmento=en_riesgo`), asignaciones
+ * (`alerta=metricas`) y la cola de métricas con alerta
+ * (`/operacion/validacion?cola=metricas&alertas=true`). Supuestos a confirmar:
+ * reportes (`cumplimiento-medios`, `desempeno-campanas` con
+ * `departamento`/`plataforma`).
  */
 import type { Route } from "next"
 
 import type { MetricaGeo } from "@/features/geo/metricas"
+import { rutaCola } from "@/features/validacion/colas"
 
 import type { EntradaInsights, KpiVariacion } from "./tipos"
 
@@ -42,6 +45,20 @@ export const RUTAS_INSIGHTS = {
   asignaciones: "/operacion/asignaciones",
   accesos: "/administracion/accesos",
 } as const satisfies Record<string, `/${string}`>
+
+/**
+ * Métricas con alerta por validar (DSH-003): la cola de validación de métricas
+ * con solo las que tienen alerta, la más antigua primero. Quien no valida
+ * métricas (`metricas.validar`) las consulta en el listado de asignaciones.
+ */
+export const RUTA_COLA_METRICAS_ATIPICAS: Route = rutaCola("metricas", {
+  soloAlertas: true,
+})
+
+export const RUTA_ASIGNACIONES_METRICAS_ATIPICAS: Route = construirHref(
+  RUTAS_INSIGHTS.asignaciones,
+  { alerta: "metricas" }
+)
 
 /** Métrica del explorador geográfico equivalente a cada KPI de la regla 1. */
 export const METRICA_MAPA: Readonly<Record<KpiVariacion, MetricaGeo>> = {

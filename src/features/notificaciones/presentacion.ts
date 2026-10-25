@@ -21,6 +21,7 @@ export const CLAVES_CATEGORIA = [
   "disputas",
   "pendientes",
   "seguridad",
+  "privacidad",
 ] as const
 
 export type ClaveCategoria = (typeof CLAVES_CATEGORIA)[number]
@@ -53,6 +54,7 @@ export const CATEGORIAS: Readonly<
   disputas: { etiqueta: "Disputas", prefijos: ["disputa"] },
   pendientes: { etiqueta: "Pendientes del equipo", prefijos: ["cola"] },
   seguridad: { etiqueta: "Seguridad", prefijos: ["seguridad", "usuario"] },
+  privacidad: { etiqueta: "Tus datos personales", prefijos: ["titular"] },
 }
 
 export type Categoria = ClaveCategoria | "otras"

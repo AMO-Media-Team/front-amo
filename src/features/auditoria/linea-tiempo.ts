@@ -2,6 +2,7 @@
  * Agrupación de la línea de tiempo por día de Bogotá (módulo puro).
  */
 import { parsearFecha, serializarFecha, ZONA } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 export interface GrupoDia<T> {
   /** `YYYY-MM-DD` en Bogotá. */
@@ -55,7 +56,7 @@ export function agruparPorDia<T extends { at: string }>(
   return grupos
 }
 
-const hora = new Intl.DateTimeFormat("es-CO", {
+const hora = formatoFecha({
   timeZone: ZONA,
   hour: "numeric",
   minute: "2-digit",

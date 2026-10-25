@@ -344,7 +344,14 @@ describe("Configuración con solo `configuracion.ver`", () => {
       <CatalogoLista key="s" catalogo="sectores" elementos={SECTORES} />,
     ],
     ["versiones legales", <VersionesTerminos key="v" versiones={VERSIONES} />],
-    ["plantillas", <PlantillasNotificacion key="p" plantillas={PLANTILLAS} />],
+    [
+      "plantillas",
+      <PlantillasNotificacion
+        key="p"
+        plantillas={PLANTILLAS}
+        correoHabilitado={false}
+      />,
+    ],
     ["franjas", <FranjasSeguidores key="f" franjas={FRANJAS} />],
     ["formatos", <FormatosPlataforma key="o" formatos={FORMATOS} />],
   ])("%s: muestra los datos sin ofrecer ningún cambio", (_nombre, bloque) => {
@@ -398,10 +405,14 @@ describe("Configuración con solo `configuracion.ver`", () => {
   })
 
   it("una plantilla abre su vista previa, no el formulario", async () => {
-    renderizar(<PlantillasNotificacion plantillas={PLANTILLAS} />)
+    renderizar(
+      <PlantillasNotificacion plantillas={PLANTILLAS} correoHabilitado />
+    )
     expect(textoPlano()).toContain("2 plantillas · 1 desactivada.")
     expect(textoPlano()).toContain("Elige una para ver su texto.")
 
+    // La invitación es de correo: se filtra por ese canal.
+    await userEvent.click(screen.getByRole("button", { name: /^Correo/ }))
     await userEvent.click(
       screen.getByRole("button", { name: /Invitación a AMO/ })
     )

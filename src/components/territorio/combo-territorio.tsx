@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronsUpDown, type LucideIcon } from "lucide-react"
-import { type ReactNode, useId, useRef, useState } from "react"
+import { type ReactNode, useCallback, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -75,7 +75,13 @@ export function ComboTerritorio<T extends { codigo: string }>({
 }: PropsComboTerritorio<T>) {
   const [abiertoInterno, setAbiertoInterno] = useState(false)
   const [texto, setTexto] = useState("")
-  const idLista = useId()
+  // cmdk fija el id de su listbox (pisa el que se le pase a CommandList): se
+  // lee del nodo para que `aria-controls` apunte a la lista que existe.
+  const [idLista, setIdLista] = useState<string>()
+  const registrarLista = useCallback(
+    (nodo: HTMLDivElement | null) => setIdLista(nodo?.id || undefined),
+    []
+  )
   const eligio = useRef(false)
   const abierto = abiertoControlado ?? abiertoInterno
   const filtradas = consulta.data
@@ -142,7 +148,7 @@ export function ComboTerritorio<T extends { codigo: string }>({
             hayFilas={filtradas.length > 0}
             textoVacio={texto ? `Nada coincide con «${texto}».` : textoVacio}
           />
-          <CommandList id={idLista}>
+          <CommandList ref={registrarLista}>
             {filtradas.length > 0 ? (
               <CommandGroup>
                 {filtradas.map((opcion) => (

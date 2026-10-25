@@ -143,6 +143,12 @@ export interface EntradaInsights {
   mediosEnRiesgo?: MediosEnRiesgo
   mezclaPlataformas?: readonly FilaMezcla[]
   metricasAtipicas?: MetricasAtipicas
+  /**
+   * Quien mira valida métricas (`metricas.validar`): la regla 5 enlaza a la
+   * cola de validación. Con `false`, al listado de asignaciones con alerta
+   * (`asignaciones.ver`); sin el dato, a la cola.
+   */
+  validaMetricas?: boolean
   accesosSospechosos?: readonly AccesoSospechoso[]
   config: ConfigInsights
 }

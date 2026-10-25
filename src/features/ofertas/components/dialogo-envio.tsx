@@ -21,11 +21,16 @@ import {
   type PasoOferta,
   TITULOS_PASO,
 } from "@/features/asistente-oferta/pasos"
+import {
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
 
 import { enviarOfertaARevision } from "../actions"
 import type { FocoTrasCambio } from "./use-foco-tras-cambio"
 import { pasoCorregible, tituloFaltaPaso } from "../presentacion"
-import { rutaPasoAsistente } from "../rutas"
 
 interface FalloEnvio {
   mensaje: string
@@ -38,7 +43,8 @@ const ERROR_INESPERADO = "No se pudo enviar la oferta. Intenta de nuevo."
  * Confirmación del envío (o reenvío) a revisión. Si la BD lo rechaza, el
  * diálogo sigue abierto con «Falta completar: <paso>», el detalle de qué
  * corregir y un enlace a ese paso del asistente. Enviada, el botón que lo
- * abrió desaparece: el foco va al aviso del estado (`foco`).
+ * abrió desaparece: el foco va al aviso del estado (`foco`). En la gestión
+ * asistida (ADM-014) habla de la cola de moderación y del aviso a la empresa.
  */
 export function DialogoEnvio({
   abierto,
@@ -47,6 +53,7 @@ export function DialogoEnvio({
   campanaId,
   reenvio,
   foco,
+  gestion = GESTION_PROPIA,
 }: {
   abierto: boolean
   onAbiertoChange: (abierto: boolean) => void
@@ -56,7 +63,10 @@ export function DialogoEnvio({
   reenvio: boolean
   /** Foco tras el cambio de estado (`useFocoTrasCambio` de las acciones). */
   foco: FocoTrasCambio
+  gestion?: ModoGestion
 }) {
+  const asistido = esAsistido(gestion)
+  const rutas = rutasGestion(gestion)
   const [falla, setFalla] = useState<FalloEnvio | null>(null)
   const [pendiente, iniciar] = useTransition()
   const idFalla = useId()
@@ -77,7 +87,11 @@ export function DialogoEnvio({
             reenvio
               ? "Oferta reenviada a revisión"
               : "Oferta enviada a revisión",
-            { description: "Te avisaremos cuando el equipo AMO la revise." }
+            {
+              description: asistido
+                ? "Queda en la cola de moderación."
+                : "Te avisaremos cuando el equipo AMO la revise.",
+            }
           )
           onAbiertoChange(false)
           return
@@ -107,9 +121,9 @@ export function DialogoEnvio({
               : "¿Enviar la oferta a revisión?"}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            El equipo AMO revisará que cumpla las condiciones de publicación y
-            te avisará. Mientras esté en revisión no podrás editarla; si
-            necesitas cambiar algo, retírala de revisión.
+            {esAsistido(gestion)
+              ? `Queda en la cola de moderación y ${gestion.anunciante} recibe un aviso. Mientras esté en revisión no se edita; si hay que cambiar algo, retírala de revisión.`
+              : "El equipo AMO revisará que cumpla las condiciones de publicación y te avisará. Mientras esté en revisión no podrás editarla; si necesitas cambiar algo, retírala de revisión."}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -132,7 +146,7 @@ export function DialogoEnvio({
             <p className="text-pretty">{falla.mensaje}</p>
             {pasoCorregible(falla.paso) ? (
               <EnlaceBoton
-                href={rutaPasoAsistente(campanaId, ofertaId, falla.paso)}
+                href={rutas.pasoAsistente(campanaId, ofertaId, falla.paso)}
                 variant="outline"
                 size="lg"
                 className="w-full sm:w-fit"

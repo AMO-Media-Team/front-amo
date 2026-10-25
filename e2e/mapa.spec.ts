@@ -6,11 +6,7 @@ import {
   respuestaConEstado,
   test,
 } from "./utilidades/prueba"
-import {
-  esTactil,
-  PROYECTO_ESCRITORIO,
-  PROYECTO_MOVIL,
-} from "./utilidades/proyectos"
+import { esMovil, esTactil, PROYECTO_ESCRITORIO } from "./utilidades/proyectos"
 import { sesion } from "./utilidades/sesiones"
 
 /**
@@ -123,7 +119,7 @@ test.describe("explorador geográfico", () => {
       page.getByRole("heading", { name: "Ranking de municipios" }).last()
     ).toBeVisible()
     await expect(filaRanking(page, "Medellín")).toBeVisible()
-    if (proyecto === PROYECTO_MOVIL) await esperarSinDesbordeHorizontal(page)
+    if (esMovil(proyecto)) await esperarSinDesbordeHorizontal(page)
 
     // El nivel viaja en la URL: el enlace abre el mismo departamento.
     await page.reload()

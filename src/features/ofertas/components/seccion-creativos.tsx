@@ -3,14 +3,20 @@ import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
+import {
+  esAsistido,
+  GESTION_PROPIA,
+  type ModoGestion,
+  rutasGestion,
+} from "@/features/campanas/rutas-gestion"
 import { VersionesCreativo } from "@/features/creativos/components/versiones-creativo"
+import type { EstadoOferta } from "@/features/operacion/estados"
 
 import { ESTADOS_EDITABLES } from "../acciones"
-import { rutaPasoAsistente } from "../rutas"
 import type { OfertaCompleta } from "../tipos"
 
 /** Estados en los que el anunciante prepara una versión nueva del creativo (ANU-010). */
-const ESTADOS_VERSIONABLES = new Set([
+export const ESTADOS_VERSIONABLES: ReadonlySet<EstadoOferta> = new Set([
   "PUBLICADA",
   "CUPOS_COMPLETOS",
   "EN_EJECUCION",
@@ -46,19 +52,32 @@ export function SeccionFicha({
 }
 
 /**
+ * El paquete creativo admite cambios: se carga en el asistente (BORRADOR o
+ * DEVUELTA) o se versiona (publicada o en ejecución).
+ */
+export function creativoGestionable(estado: EstadoOferta): boolean {
+  return ESTADOS_EDITABLES.has(estado) || ESTADOS_VERSIONABLES.has(estado)
+}
+
+/**
  * Paquete creativo en la ficha del anunciante: versión vigente, pendiente e
  * historial (`VersionesCreativo`). En una oferta publicada puede preparar y
  * activar una versión nueva; antes de publicarla se edita en el asistente.
+ * El equipo AMO lo usa igual por cuenta del anunciante (`gestion`, ADM-014):
+ * el enlace lleva al asistente de Operación.
  */
 export function SeccionCreativosAnunciante({
   oferta,
   puedeGestionar,
+  gestion = GESTION_PROPIA,
 }: {
   oferta: OfertaCompleta
-  /** `ofertas.gestionar_propias`. */
+  /** `ofertas.gestionar_propias` o, en la gestión asistida, `ofertas.gestionar`. */
   puedeGestionar: boolean
+  gestion?: ModoGestion
 }) {
   const editable = puedeGestionar && ESTADOS_EDITABLES.has(oferta.estado)
+  const rutas = rutasGestion(gestion)
   return (
     <SeccionFicha
       id="paquete-creativo"
@@ -66,7 +85,9 @@ export function SeccionCreativosAnunciante({
       descripcion={
         editable
           ? "Lo que descargarán los medios. Mientras la oferta no esté publicada, se edita en el asistente."
-          : "Lo que descargan los medios. Si publicas una versión nueva, los medios con cupo reciben el aviso."
+          : esAsistido(gestion)
+            ? "Lo que descargan los medios. Si se publica una versión nueva, los medios con cupo reciben el aviso."
+            : "Lo que descargan los medios. Si publicas una versión nueva, los medios con cupo reciben el aviso."
       }
     >
       {oferta.creativos.length === 0 ? (
@@ -77,7 +98,11 @@ export function SeccionCreativosAnunciante({
         >
           {editable ? (
             <EnlaceBoton
-              href={rutaPasoAsistente(oferta.campana.id, oferta.id, "creativo")}
+              href={rutas.pasoAsistente(
+                oferta.campana.id,
+                oferta.id,
+                "creativo"
+              )}
               size="lg"
             >
               Cargar el paquete creativo

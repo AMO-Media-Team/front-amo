@@ -541,6 +541,8 @@ export interface DatosInsightsAdmin {
   vencidas?: VencidasPeriodo
   mediosEnRiesgo?: MediosEnRiesgo
   metricasAtipicas?: MetricasAtipicas
+  /** Quien ve el panel valida métricas: el hallazgo de DSH-003 lleva a su cola. */
+  validaMetricas?: boolean
   accesosSospechosos?: readonly AccesoSospechoso[]
 }
 
@@ -588,6 +590,7 @@ export function entradaInsightsAdmin(
     mediosEnRiesgo: datos.mediosEnRiesgo,
     mezclaPlataformas: datos.mezcla?.actual,
     metricasAtipicas: datos.metricasAtipicas,
+    validaMetricas: datos.validaMetricas,
     accesosSospechosos: datos.accesosSospechosos,
   }
 }

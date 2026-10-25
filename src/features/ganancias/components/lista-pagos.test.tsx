@@ -268,17 +268,23 @@ describe("ListaPagos", () => {
     expect(acciones.cargarPagos).toHaveBeenCalledWith({
       antesId: ID_LIQUIDACION,
     })
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Se agregó 1 pago anterior."
+    // El anuncio y el foco llegan en el efecto que sigue al render (bajo carga,
+    // un instante después de pintar las tarjetas).
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Se agregó 1 pago anterior."
+      )
     )
     expect(
       screen.queryByRole("button", { name: "Ver pagos anteriores" })
     ).not.toBeInTheDocument()
     // El foco no se pierde: pasa al primer pago agregado, que quedó encima
     // del botón, y el aviso final queda después de él.
-    expect(
-      within(tarjetas()[1]).getByRole("link", { name: "16 – 30 sept 2026" })
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(tarjetas()[1]).getByRole("link", { name: "16 – 30 sept 2026" })
+      ).toHaveFocus()
+    )
     expect(screen.getByText("Estos son todos tus pagos.")).toBeVisible()
   })
 

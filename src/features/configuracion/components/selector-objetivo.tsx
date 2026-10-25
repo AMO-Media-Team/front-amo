@@ -1,7 +1,7 @@
 "use client"
 
 import { Building2, ChevronsUpDown, Megaphone } from "lucide-react"
-import { useEffect, useId, useState, useTransition } from "react"
+import { useCallback, useEffect, useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -85,7 +85,13 @@ export function SelectorObjetivo({
   const resultados = encontrados.filter((objetivo) => objetivo.tipo === tipo)
   // También cuenta como búsqueda en curso la pausa entre la tecla y la consulta.
   const buscando = consultando || texto !== consulta
-  const idLista = useId()
+  // cmdk fija el id de su listbox (pisa el que se le pase a CommandList): se
+  // lee del nodo para que `aria-controls` apunte a la lista que existe.
+  const [idLista, setIdLista] = useState<string>()
+  const registrarLista = useCallback(
+    (nodo: HTMLDivElement | null) => setIdLista(nodo?.id || undefined),
+    []
+  )
   const textos = TEXTOS[tipo]
   const Icono = tipo === "anunciante" ? Building2 : Megaphone
 
@@ -132,7 +138,7 @@ export function SelectorObjetivo({
             variant="outline"
             role="combobox"
             aria-expanded={abierto}
-            aria-controls={idLista}
+            aria-controls={abierto ? idLista : undefined}
             aria-invalid={invalido || undefined}
             disabled={deshabilitado}
             className="h-auto min-h-9 w-full justify-between py-1.5 font-normal"
@@ -170,7 +176,7 @@ export function SelectorObjetivo({
                 : textos.buscar
             }
           />
-          <CommandList id={idLista}>
+          <CommandList ref={registrarLista}>
             {error ? (
               <p
                 role="alert"

@@ -36,6 +36,9 @@ function FichaCategoria({
   deshabilitada: boolean
   onCambio: (marcada: boolean) => void
 }) {
+  // Nombre desde el servidor: Base UI enlaza la etiqueta que envuelve la casilla
+  // solo después de montarse (axe y los lectores la verían sin nombre).
+  const idNombre = useId()
   return (
     <label
       className={cn(
@@ -45,11 +48,12 @@ function FichaCategoria({
       )}
     >
       <Checkbox
+        aria-labelledby={idNombre}
         checked={marcada}
         disabled={deshabilitada}
         onCheckedChange={(valor) => onCambio(valor === true)}
       />
-      <span>{categoria.nombre}</span>
+      <span id={idNombre}>{categoria.nombre}</span>
       {categoria.retirada ? (
         <span className="text-xs font-medium text-warning">
           (ya no disponible)

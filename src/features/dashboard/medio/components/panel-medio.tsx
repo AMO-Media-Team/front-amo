@@ -6,10 +6,7 @@ import { Suspense } from "react"
 import { EsqueletoTarjetaGrafico } from "@/components/charts/esqueleto-grafico"
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
-import {
-  calidadDeCuentas,
-  resumenMultiplicador,
-} from "@/features/calidad-medio/calidad"
+import { calidadDeCuentas } from "@/features/calidad-medio/calidad"
 import { CalidadCuentas } from "@/features/calidad-medio/components/calidad-cuentas"
 import { EsqueletoCalidadCuentas } from "@/features/calidad-medio/components/esqueleto-calidad"
 import {
@@ -28,6 +25,11 @@ import { LimiteErrorMiMedio } from "@/features/mi-medio/components/limite-error-
 import { TarjetaSituacion } from "@/features/mi-medio/components/tarjeta-situacion"
 import { medioPropio, resumenMiMedio } from "@/features/mi-medio/queries"
 import { RUTA_MIS_CAMPANAS } from "@/features/mis-campanas/rutas"
+import { N_MINIMO_CUMPLIMIENTO_POR_DEFECTO } from "@/features/reputacion/datos"
+import {
+  miReputacion,
+  resumenCalidadMedio,
+} from "@/features/reputacion/queries"
 import { tieneAlgunPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
 import { cn } from "@/lib/utils"
@@ -53,7 +55,6 @@ import {
   asignacionesEnCurso,
   fichaMedio,
   kpisMedio,
-  nMinimoCumplimiento,
   plazoCargaHoras,
   proximasAcciones,
   serieGananciasMedio,
@@ -105,6 +106,8 @@ interface Enlaces {
   ofertas: boolean
   /** «Mi medio»: nivel y cuentas (`medios.editar_propio`). */
   miMedio: boolean
+  /** «Mi medio › Reputación» (`medios.editar_propio` e `inicio.medio`). */
+  reputacion: boolean
   /** «Ganancias»: pagos y soportes (`liquidaciones.ver_propias`). */
   ganancias: boolean
 }
@@ -121,6 +124,9 @@ function enlacesDe(usuario: UsuarioSesion): Enlaces {
     misCampanas,
     ofertas: tieneAlgunPermiso(usuario, ["ofertas.marketplace"]),
     miMedio: tieneAlgunPermiso(usuario, ["medios.editar_propio"]),
+    reputacion:
+      tieneAlgunPermiso(usuario, ["medios.editar_propio"]) &&
+      tieneAlgunPermiso(usuario, ["inicio.medio"]),
     ganancias: tieneAlgunPermiso(usuario, ["liquidaciones.ver_propias"]),
   }
 }
@@ -190,32 +196,31 @@ async function BloqueTope({
 }
 
 /**
- * El multiplicador de «Tu reputación» es el vigente más bajo de sus cuentas
- * (el mismo cálculo que «Calidad de tus cuentas»). Es un dato de apoyo: si
- * esa lectura falla, se usa el que trae `kpis_medio`.
+ * El mínimo de casos para mostrar la tasa: el vigente que trae
+ * `mi_reputacion()` (el medio no puede leer esa clave de `configuracion`). Es
+ * un dato de apoyo: si la lectura falla, rige el valor sembrado.
  */
-async function resumenCalidad(medioId: string, ahora: Date) {
-  try {
-    const [cuentas, parametros] = await Promise.all([
-      cuentasCalidad(medioId),
-      parametrosCalidad(),
-    ])
-    return resumenMultiplicador(calidadDeCuentas(cuentas, parametros), ahora)
-  } catch {
-    return null
-  }
+async function nMinimoCumplimiento(): Promise<number> {
+  const reputacion = await miReputacion().catch(() => null)
+  return reputacion?.nMinimo ?? N_MINIMO_CUMPLIMIENTO_POR_DEFECTO
 }
 
+/**
+ * El multiplicador de «Tu reputación» es el vigente más bajo de sus cuentas
+ * (el mismo cálculo que «Calidad de tus cuentas»); si esa lectura falla, se
+ * usa el que trae `kpis_medio`.
+ */
 async function BloqueReputacion({
   periodo,
   medioId,
   ahora,
-}: PropsPeriodo & { medioId: string; ahora: Date }) {
+  enlaces,
+}: PropsPeriodo & { medioId: string; ahora: Date; enlaces: Enlaces }) {
   const [filas, ficha, nMinimo, resumen] = await Promise.all([
     kpisDelPeriodo(periodo),
     fichaMedio(medioId),
     nMinimoCumplimiento(),
-    resumenCalidad(medioId, ahora),
+    resumenCalidadMedio(medioId, ahora),
   ])
   const indice = indicePorKpi(filas)
   return (
@@ -228,6 +233,7 @@ async function BloqueReputacion({
       notaMultiplicador={resumen?.nota}
       publicaciones={valorKpi(indice, "publicaciones_realizadas")}
       nMinimoCumplimiento={nMinimo}
+      enlaceReputacion={enlaces.reputacion ? RUTAS_MI_MEDIO.reputacion : null}
     />
   )
 }
@@ -419,7 +425,12 @@ function IndicadoresMedio({
           orden={6}
           esqueleto={<EsqueletoReputacion />}
         >
-          <BloqueReputacion periodo={periodo} medioId={medioId} ahora={ahora} />
+          <BloqueReputacion
+            periodo={periodo}
+            medioId={medioId}
+            ahora={ahora}
+            enlaces={enlaces}
+          />
         </BloquePanel>
         <BloquePanel
           titulo="Calidad de tus cuentas"

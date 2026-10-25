@@ -106,6 +106,7 @@ export function DocumentoTerminos({
   const id = useId()
   const idTitulo = `${id}-titulo`
   const idError = `${id}-error`
+  const idAceptacion = `${id}-aceptacion`
   const { ref, alFinal, medir } = useFinVisible()
 
   return (
@@ -177,8 +178,11 @@ export function DocumentoTerminos({
             "has-data-checked:bg-primary/8 dark:has-data-checked:bg-primary/12"
           )}
         >
+          {/* Nombre desde el servidor: Base UI enlaza la etiqueta que la envuelve
+              solo después de montarse. */}
           <Checkbox
             ref={refCasilla}
+            aria-labelledby={idAceptacion}
             name={CAMPOS_ACEPTACION.aceptada}
             value={documento.id}
             checked={marcado}
@@ -187,7 +191,7 @@ export function DocumentoTerminos({
             aria-describedby={error ? idError : undefined}
             className="mt-0.5 size-[1.125rem]"
           />
-          <span className="text-sm leading-snug font-medium">
+          <span id={idAceptacion} className="text-sm leading-snug font-medium">
             {documento.aceptacion}
           </span>
         </label>

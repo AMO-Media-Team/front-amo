@@ -330,6 +330,7 @@ export async function BloqueInsights({
           )
         : undefined,
       metricasAtipicas: atipicas,
+      validaMetricas: tieneAlgunPermiso(usuario, ["metricas.validar"]),
       accesosSospechosos: sospechosos,
     })
   )

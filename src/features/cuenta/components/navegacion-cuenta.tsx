@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  FileLock2,
   LockKeyhole,
   type LucideIcon,
   SlidersHorizontal,
@@ -11,6 +12,7 @@ import type { Route } from "next"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+import { RUTA_PRIVACIDAD_CUENTA } from "@/features/privacidad/rutas"
 import { perteneceA, RUTA_PERFIL, RUTA_SEGURIDAD } from "@/lib/auth/navegacion"
 import { cn } from "@/lib/utils"
 
@@ -42,11 +44,18 @@ const SECCIONES: readonly SeccionNavegable[] = [
     descripcion: "Tema, densidad y cifras",
     icono: SlidersHorizontal,
   },
+  {
+    href: RUTA_PRIVACIDAD_CUENTA,
+    titulo: "Privacidad",
+    descripcion: "Tus datos y solicitudes",
+    icono: FileLock2,
+  },
 ]
 
 /**
  * Navegación entre las secciones de «Mi cuenta»: lista vertical fija en
- * escritorio y fila desplazable en móvil. El indicador se desliza entre
+ * escritorio, una fila de cuatro en tableta y una cuadrícula de dos por dos
+ * en el celular (sin desbordar a 390 px). El indicador se desliza entre
  * secciones (el layout persiste al navegar).
  */
 export function NavegacionCuenta() {
@@ -57,7 +66,7 @@ export function NavegacionCuenta() {
       aria-label="Secciones de mi cuenta"
       className="min-w-0 lg:sticky lg:top-20 lg:self-start"
     >
-      <ul className="grid grid-cols-3 gap-1 rounded-2xl border bg-muted/30 p-1 lg:flex lg:flex-col lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
+      <ul className="grid grid-cols-2 gap-1 rounded-2xl border bg-muted/30 p-1 sm:grid-cols-4 lg:flex lg:flex-col lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
         {SECCIONES.map(({ href, titulo, descripcion, icono: Icono }) => {
           const activa = perteneceA(ruta, href)
           return (

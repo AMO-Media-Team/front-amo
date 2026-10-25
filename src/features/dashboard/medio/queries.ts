@@ -141,29 +141,6 @@ export const plazoCargaHoras = cache(async (): Promise<number> => {
   return valor !== null && valor > 0 ? valor : PLAZO_CARGA_HORAS_POR_DEFECTO
 })
 
-/** Valor que siembra la migración (`medios.n_minimo_cumplimiento`). */
-const N_MINIMO_CUMPLIMIENTO_POR_DEFECTO = 3
-
-/**
- * Historial mínimo para mostrar la tasa de cumplimiento del medio. El medio
- * no lee `configuracion` (no es pública): sin permiso se usa el valor
- * sembrado, que es el mismo con el que la RPC decide si la tasa es `null`.
- */
-export const nMinimoCumplimiento = cache(async (): Promise<number> => {
-  const supabase = await clientePanel()
-  const { data } = await supabase
-    .from("configuracion")
-    .select("valor")
-    .eq("clave", "medios.n_minimo_cumplimiento")
-    .maybeSingle()
-  const valor = numero(
-    typeof data?.valor === "number" || typeof data?.valor === "string"
-      ? data.valor
-      : null
-  )
-  return valor !== null && valor > 0 ? valor : N_MINIMO_CUMPLIMIENTO_POR_DEFECTO
-})
-
 /**
  * Lo que el panel toma de la ficha del medio: su nivel con los umbrales del
  * tope y la calificación. El tope y lo consumido llegan de `kpis_medio`, y el

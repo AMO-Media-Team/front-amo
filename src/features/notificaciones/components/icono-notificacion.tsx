@@ -3,6 +3,7 @@ import {
   Bell,
   CalendarClock,
   ChartColumnBig,
+  FileLock2,
   Inbox,
   type LucideIcon,
   Megaphone,
@@ -32,6 +33,7 @@ export const ESTILOS_CATEGORIA: Readonly<
     icono: ShieldAlert,
     clase: "bg-destructive/12 text-destructive",
   },
+  privacidad: { icono: FileLock2, clase: "bg-info/12 text-info" },
   otras: { icono: Bell, clase: "bg-muted text-muted-foreground" },
 }
 

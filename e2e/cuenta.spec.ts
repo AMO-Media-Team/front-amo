@@ -1,5 +1,3 @@
-import AxeBuilder from "@axe-core/playwright"
-
 import { generarContrasena } from "../scripts/bootstrap/contrasena"
 import {
   clienteComoSuperadmin,
@@ -13,6 +11,7 @@ import {
   PASO_TOTP_SEGUNDOS,
   segundosRestantesTotp,
 } from "../scripts/bootstrap/totp"
+import { infraccionesGraves } from "./utilidades/axe"
 import { type Credenciales, entorno, ingresar } from "./utilidades/cuentas"
 import {
   type AbrirContexto,
@@ -399,14 +398,10 @@ test.describe("mi cuenta", () => {
         await expect(page.locator("html")).toHaveClass(
           new RegExp(`\\b${tema}\\b`)
         )
-        const { violations } = await new AxeBuilder({ page })
-          .include("main")
-          .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-          .analyze()
-        const graves = violations.filter((violacion) =>
-          ["serious", "critical"].includes(violacion.impact ?? "")
-        )
-        expect(graves, `${ruta} (${tema})`).toEqual([])
+        expect(
+          await infraccionesGraves(page, "main"),
+          `${ruta} (${tema})`
+        ).toEqual([])
       }
     }
   })

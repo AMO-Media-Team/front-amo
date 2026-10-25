@@ -151,15 +151,20 @@ de datos: las cuentas con `pnpm demo:generar usuarios` y los datos ejecutando en
 
 ## Comandos
 
-| Comando                                            | Qué hace                                                        |
-| -------------------------------------------------- | --------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm start`           | Desarrollo, compilación y servidor de producción                |
-| `pnpm typecheck` · `pnpm lint` · `pnpm format`     | Tipos, ESLint y Prettier                                        |
-| `pnpm test` · `pnpm test:e2e`                      | Pruebas unitarias (Vitest) y de extremo a extremo (Playwright)  |
-| `pnpm geo:build`                                   | Regenera GeoJSON optimizados, diccionarios y semilla geográfica |
-| `pnpm brand:build`                                 | Regenera logos e iconos                                         |
-| `pnpm db:types` · `pnpm db:permisos`               | Tipos de la base de datos · semilla del catálogo de permisos    |
-| `pnpm bootstrap:superadmin` · `pnpm bootstrap:e2e` | Superadministrador · cuentas de prueba                          |
+| Comando                                                  | Qué hace                                                                                                   |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm start`                 | Desarrollo, compilación y servidor de producción                                                           |
+| `pnpm typecheck` · `pnpm lint` · `pnpm format`           | Tipos, ESLint y Prettier                                                                                   |
+| `pnpm test` · `pnpm test:e2e`                            | Pruebas unitarias (Vitest) y de extremo a extremo (Playwright)                                             |
+| `pnpm geo:build`                                         | Regenera GeoJSON optimizados, diccionarios y semilla geográfica                                            |
+| `pnpm brand:build`                                       | Regenera logos e iconos                                                                                    |
+| `pnpm db:types` · `pnpm db:permisos`                     | Tipos de la base de datos · semilla del catálogo de permisos                                               |
+| `pnpm bootstrap:superadmin` · `pnpm bootstrap:e2e`       | Superadministrador · cuentas de prueba                                                                     |
+| `pnpm test:e2e:navegadores`                              | Matriz de navegadores: Firefox, Safari, Safari iOS y Chrome Android                                        |
+| `pnpm db:local` · `pnpm db:suites local`                 | Base local (Docker) reconstruida con demo y cuentas E2E · suites SQL                                       |
+| `pnpm db:push <entorno>` · `pnpm db:respaldo <entorno>`  | Aplica migraciones (develop, luego producción) · respaldo previo                                           |
+| `pnpm prod:config-pruebas` · `pnpm prod:limpiar-pruebas` | Configuración de prueba del cliente · limpieza final (simula por defecto; ejecutar solo por orden expresa) |
+| `pnpm pruebas:rendimiento-geo local`                     | p95 del explorador geográfico (< 300 ms)                                                                   |
 
 ## Estructura
 

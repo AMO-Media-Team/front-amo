@@ -5,6 +5,7 @@
  * hora: se calculan en UTC puro para no desplazar el día. Módulo puro.
  */
 import type { Granularidad } from "./periodo"
+import { formatoFecha } from "@/lib/format"
 
 const DIA_ISO = /^(\d{4})-(\d{2})-(\d{2})$/
 const MS_DIA = 86_400_000
@@ -22,16 +23,16 @@ function aTexto(fecha: Date): string {
   return fecha.toISOString().slice(0, 10)
 }
 
-const formatoDia = new Intl.DateTimeFormat("es-CO", {
+const formatoDia = formatoFecha({
   timeZone: "UTC",
   day: "numeric",
   month: "short",
 })
-const formatoMes = new Intl.DateTimeFormat("es-CO", {
+const formatoMes = formatoFecha({
   timeZone: "UTC",
   month: "short",
 })
-const formatoMesAnio = new Intl.DateTimeFormat("es-CO", {
+const formatoMesAnio = formatoFecha({
   timeZone: "UTC",
   month: "short",
   year: "numeric",

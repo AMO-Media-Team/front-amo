@@ -35,7 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatearNumero } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 import { BarraHerramientas, type OpcionOrden } from "./barra-herramientas"
@@ -52,6 +51,7 @@ import {
 } from "./columnas"
 import {
   type DefinicionEstadoTabla,
+  describirResultados,
   hayFiltrosActivos,
   type Orden,
   TAMANOS_PAGINA,
@@ -183,9 +183,13 @@ function valorExportable(
   return String(valor)
 }
 
-function describirOrden(orden: Orden, titulo: string | undefined): string {
-  if (!titulo) return ""
-  return `, ordenada por ${titulo.toLocaleLowerCase("es-CO")} en orden ${
+/** "nombre en orden ascendente" (lo completa `describirResultados`). */
+function describirOrden(
+  orden: Orden,
+  titulo: string | undefined
+): string | undefined {
+  if (!titulo) return undefined
+  return `${titulo.toLocaleLowerCase("es-CO")} en orden ${
     orden.descendente ? "descendente" : "ascendente"
   }`
 }
@@ -279,6 +283,7 @@ export function TablaDatos<
 }: TablaDatosProps<TFila, C, F>) {
   const router = useRouter()
   const idResumen = useId()
+  const idTitulo = useId()
   const control = useEstadoTabla(estadoTabla)
   const { estado, cargando } = control
 
@@ -474,10 +479,13 @@ export function TablaDatos<
       visible: columna.getIsVisible(),
     }))
 
-  const resumen = `${formatearNumero(total)} ${total === 1 ? "resultado" : "resultados"}${describirOrden(
-    estado.orden,
-    ordenActual?.titulo
-  )}`
+  // La única región viva de la tabla (la paginación no repite el anuncio).
+  const resumen = describirResultados(
+    estado.pagina,
+    estado.tamano,
+    total,
+    describirOrden(estado.orden, ordenActual?.titulo)
+  )
   const espaciado = ESPACIADO[preferencias.densidad]
   const sinFilas = total === 0 || filasPagina.length === 0
 
@@ -553,14 +561,25 @@ export function TablaDatos<
           <div className="relative overflow-hidden rounded-xl border bg-card max-md:hidden">
             <BarraCarga activa={cargando} />
             {/* Altura acotada al viewport: la cabecera queda fija mientras se recorren las filas. */}
-            <div className="max-h-[calc(100dvh-9rem)] overflow-auto overscroll-x-contain">
+            {/* Desplazable con el teclado aunque ninguna celda tenga un
+                control (WCAG 2.1.1; axe `scrollable-region-focusable`). Un
+                grupo con el nombre de la tabla y no otra región: la sección
+                ya es la región «${titulo}». */}
+            <div
+              tabIndex={0}
+              role="group"
+              aria-labelledby={idTitulo}
+              className="max-h-[calc(100dvh-9rem)] overflow-auto overscroll-x-contain rounded-[inherit] outline-none focus-visible:anillo-foco focus-visible:-outline-offset-2"
+            >
               <table
                 data-slot="table"
                 aria-busy={cargando}
                 aria-describedby={idResumen}
                 className="w-full caption-bottom text-sm"
               >
-                <caption className="sr-only">{titulo}</caption>
+                <caption id={idTitulo} className="sr-only">
+                  {titulo}
+                </caption>
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card/95 [&_th]:backdrop-blur-sm [&_tr]:border-b-0">
                   {tabla.getHeaderGroups().map((grupo) => (
                     <TableRow key={grupo.id} className="hover:bg-transparent">

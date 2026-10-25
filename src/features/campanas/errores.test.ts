@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import { MENSAJE_INESPERADO, MENSAJE_SIN_PERMISO } from "@/lib/errores-bd"
 
-import { interpretarErrorCampana, mensajePresupuestoCampana } from "./errores"
+import {
+  CAMPANA_DESACTUALIZADA,
+  interpretarErrorCampana,
+  mensajePresupuestoCampana,
+} from "./errores"
 
 /** Lo que lanza `private.validar_campana_guardar` al bajar el total. */
 const PRESUPUESTO_BD = {
@@ -24,7 +28,7 @@ describe("interpretarErrorCampana", () => {
 
   it("con el piso vigente, el presupuesto rechazado por la BD dice la cifra como el formulario", () => {
     expect(mensajePresupuestoCampana(PRESUPUESTO_BD, 5_000_000)).toMatch(
-      /^El presupuesto no puede quedar por debajo de \$\s5\.000\.000: es lo que ya tienen comprometido tus ofertas/
+      /^El presupuesto no puede quedar por debajo de \$\s5\.000\.000: es lo que ya tienen comprometido sus ofertas/
     )
     // Sin el piso (no se pudo leer), el detalle de la BD.
     expect(mensajePresupuestoCampana(PRESUPUESTO_BD, null)).toBe(
@@ -79,5 +83,12 @@ describe("interpretarErrorCampana", () => {
     expect(interpretarErrorCampana({ code: "XX000", message: "boom" })).toEqual(
       { codigo: null, esperado: false, mensaje: MENSAJE_INESPERADO }
     )
+  })
+})
+
+describe("CAMPANA_DESACTUALIZADA", () => {
+  it("no supone que el cambio vino del equipo del anunciante (gestión asistida)", () => {
+    expect(CAMPANA_DESACTUALIZADA).toMatch(/^Otra persona cambió esta campaña/)
+    expect(CAMPANA_DESACTUALIZADA).not.toMatch(/tu equipo/)
   })
 })

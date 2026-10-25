@@ -56,6 +56,10 @@
 - **Formularios**: react-hook-form + zod 4 con el mismo esquema en cliente y servidor. Login y MFA con
   `<form action>` + `useActionState`.
 - **Estado en URL**: `nuqs` (adaptador en el layout raíz).
+- **Fechas con mes abreviado u hora**: `formatoFecha(opciones)` de `src/lib/format.ts` (misma API que
+  `Intl.DateTimeFormat`: `format`, `formatToParts`, `formatRange`). El Intl de WebKit escribe «sep.», «ago.» y «p.m.»
+  donde Node, Chromium y Firefox escriben «sept», «ago» y «p. m.»; con `new Intl.DateTimeFormat` Safari no hidrata
+  igual que el servidor (error #418) y React regenera la página.
 - **Fechas y cifras**: `date-fns` + `@date-fns/tz` siempre en `America/Bogota`; moneda y números con
   `src/lib/format.ts` (es-CO, COP). Vercel corre en UTC. Cifras abreviadas con una sola regla (escala larga):
   «mil», «M» = millones, «mil M» = miles de millones, «B» = billones, un decimal (`$1,3 M`, `96,2 mil`,
@@ -129,7 +133,7 @@ Pila completa de Supabase en Docker (Colima en macOS): Postgres 17, Auth, PostgR
 
 ```bash
 colima start                       # una vez por sesión del equipo
-supabase start -x studio,logflare,vector,edge-runtime,realtime,imgproxy,mailpit,postgres-meta
+supabase start -x studio,logflare,vector,edge-runtime,imgproxy,mailpit,postgres-meta
 pnpm db:local                      # reset + Vault + superadmin + 15 meses de demo + cuentas E2E (~1 min)
 pnpm db:local --sin-demo           # igual, sin datos demo
 pnpm db:suites local               # suites SQL
@@ -140,7 +144,11 @@ supabase stop                      # al terminar (conserva los datos); colima st
   claves son las públicas por defecto de la CLI. `pnpm db:local` se niega a correr si `.env.local` apunta a otro
   proyecto.
 - En local no hay correo: `AMO_SMTP_CONFIGURADO=false` (la app muestra los enlaces) y `pnpm db:local` activa al
-  superadministrador sin el enlace de confirmación.
+  superadministrador sin el enlace de confirmación. El correo de avisos (NOT-004) está construido y apagado
+  (`correo.habilitado = false`); con `AMO_CORREO_PROVEEDOR=registro` el despachador `/api/correos/procesar` reclama la cola
+  sin enviar nada.
+- La pila incluye **Realtime**: la campana se suscribe al canal privado `usuario:<id>` (NOT-007). Sin Realtime el
+  navegador escribe errores de WebSocket en la consola y la guardia de consola de las E2E falla.
 - La base (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) acepta `psql` dentro del contenedor:
   `docker exec -i supabase_db_front-amo psql -U postgres -d postgres`.
 - `pnpm build && pnpm test:e2e` corre contra la pila local igual que contra develop. En `config.toml` la pila local admite
@@ -165,7 +173,18 @@ AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:config-pruebas --revertir --confir
   registra cada cambio con ese actor y origen `APP`.
 - Guarda lo que cambia en `context/respaldos/configuracion-pruebas-<ref>.json` (0600, fuera de git). `--revertir`
   devuelve cada parámetro a su valor anterior solo si sigue con el de prueba. Las versiones legales publicadas son
-  inmutables: las retira la limpieza final, que se construye en la fase 6 y no se ejecuta sin orden de Andrés.
+  inmutables: las retira la limpieza final, que no se ejecuta sin orden de Andrés:
+
+```bash
+pnpm db:respaldo produccion --etiqueta antes-limpieza                 # respaldo del mismo día (obligatorio)
+AMO_ARCHIVO_ENTORNO=.env.produccion pnpm prod:limpiar-pruebas produccion   # simulación (rollback): qué se borraría
+# solo con orden expresa: … prod:limpiar-pruebas produccion --ejecutar --confirmar-produccion (pide escribir el ref)
+```
+
+Conserva exactamente a los superadministradores activos (con MFA), catálogos, configuración, tarifas, roles y
+permisos; borra negocio, usuarios, bitácora, accesos, avisos y archivos de Storage; luego revierte la configuración de
+prueba. Exige que los cuatro textos legales tengan una versión definitiva (o `--sin-textos-definitivos`).
+
 - Es idempotente y sin argumentos no cambia nada. Sin `AMO_ARCHIVO_ENTORNO` actúa sobre `.env.local` (la base
   local), útil para probarlo antes.
 
@@ -219,5 +238,16 @@ Geist (UI), Geist Mono / `tabular-nums` (cifras). Detalle completo en `docs/marc
   genera el ADMIN E2E y la aprueba Finanzas (segregación). Cuentas propias: FINANZAS con TOTP (`E2E_FINANZAS_*`), «Medio
   Finanzas E2E» (no factura: documento soporte, `E2E_MEDIO_FINANZAS_*`) y «Medio Factura E2E» (factura,
   `E2E_MEDIO_FACTURA_*`). «Generar corte» en la interfaz liquida también a los medios de la demo: los specs no lo ejecutan.
+- Proyecto `cierre` (`cierre-*`, en serie, al final): gestión asistida (`cierre-asistida`, campañas «Campaña GA E2E»),
+  derechos del titular con un medio desechable que se suprime (`cierre-privacidad`, fábrica `e2e/utilidades/privacidad.ts`),
+  reputación y confirmación de parámetros (`cierre-reputacion`) y aviso en vivo con dos navegadores (`cierre-tiempo-real`).
+- Accesibilidad: el criterio común de axe (WCAG 2.0, 2.1 y 2.2 A y AA; sin infracciones serias ni críticas) vive en
+  `e2e/utilidades/axe.ts`. `accesibilidad-portales.spec.ts` audita las pantallas clave de cada portal en los dos temas y
+  en escritorio, tablet y móvil; `preparacion` guarda también la sesión `finanzas` (cuenta de solo lectura con TOTP,
+  `E2E_LECTURA_FINANZAS_*`).
+- Matriz de navegadores (RNF-COM-01): `pnpm test:e2e:navegadores` corre humo, navegación, inicio, mapa y accesibilidad en
+  Firefox, Safari de escritorio, Safari de iOS y Chrome para Android (Edge usa el motor de Chrome). Antes de la primera
+  vez: `pnpm exec playwright install webkit firefox`.
 - `pnpm pruebas:pauta-e2e`, `pnpm pruebas:validacion-e2e` y `pnpm pruebas:finanzas-e2e` comprueban las fábricas contra la base local y `pnpm pruebas:carrera` corre la prueba de carrera
-  de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia).
+  de cupos (CUP-006: 20 medios simultáneos, presupuestos, topes, desistir e idempotencia). `pnpm pruebas:rendimiento-geo
+local` mide el p95 del explorador (GEO-010 y RNF-REN-02: < 300 ms en la base).

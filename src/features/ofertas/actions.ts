@@ -1,11 +1,15 @@
 "use server"
 
 /**
- * Server Actions del anunciante sobre su oferta (ANU-009, ANU-014): enviar o
- * reenviar a revisión, retirarla de revisión, cancelarla y archivarla.
- * Patrón de cada una:
+ * Server Actions sobre una oferta (ANU-009, ANU-014): enviar o reenviar a
+ * revisión, retirarla de revisión, cancelarla y archivarla. Las usa el
+ * anunciante con lo suyo y el equipo AMO por cuenta de un anunciante
+ * (ADM-014). Patrón de cada una:
  *
- * 1. DAL (`requerirPermiso("ofertas.gestionar_propias")`) antes que nada.
+ * 1. DAL antes que nada: `ofertas.gestionar_propias` (el anunciante) o
+ *    `ofertas.gestionar` (el equipo AMO); la BD decide propiedad o permiso
+ *    de la transición según el tipo de actor (y pide motivo al equipo AMO
+ *    para cancelar un borrador o una devuelta).
  * 2. zod: el MISMO esquema que el cliente.
  * 3. El cambio de estado va por `transicionar` (`transicionar_srv` con actor
  *    y sesión): la BD revalida propiedad, estado, condiciones del envío,
@@ -20,6 +24,7 @@ import "server-only"
 
 import { refresh } from "next/cache"
 
+import { PERMISOS_GESTION_OFERTAS } from "@/features/campanas/gestion"
 import { contextoDelActor } from "@/lib/auth/contexto-actor"
 import { requerirPermiso } from "@/lib/auth/dal"
 import type { UsuarioSesion } from "@/lib/auth/tipos"
@@ -87,7 +92,7 @@ async function aplicar(
 export async function enviarOfertaARevision(
   entrada: EntradaOferta
 ): Promise<ResultadoEnvio> {
-  const actor = await requerirPermiso("ofertas.gestionar_propias")
+  const actor = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaOferta.safeParse(entrada)
   if (!validacion.success) {
     return { ...desdeErrorZod(validacion.error), paso: null }
@@ -116,7 +121,7 @@ export async function enviarOfertaARevision(
 export async function retirarOfertaDeRevision(
   entrada: EntradaOferta
 ): Promise<ResultadoAccion> {
-  const actor = await requerirPermiso("ofertas.gestionar_propias")
+  const actor = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaOferta.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   return aplicar(actor, "retirarOfertaDeRevision", {
@@ -134,7 +139,7 @@ export async function retirarOfertaDeRevision(
 export async function cancelarOferta(
   entrada: EntradaCancelarOferta
 ): Promise<ResultadoAccion> {
-  const actor = await requerirPermiso("ofertas.gestionar_propias")
+  const actor = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaCancelarOferta.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
   return aplicar(actor, "cancelarOferta", {
@@ -153,7 +158,7 @@ export async function cancelarOferta(
 export async function archivarOferta(
   entrada: EntradaOferta
 ): Promise<ResultadoAccion> {
-  const actor = await requerirPermiso("ofertas.gestionar_propias")
+  const actor = await requerirPermiso(PERMISOS_GESTION_OFERTAS)
   const validacion = esquemaOferta.safeParse(entrada)
   if (!validacion.success) return desdeErrorZod(validacion.error)
 

@@ -34,7 +34,13 @@ import { formatearCOP } from "@/lib/format"
 import { estadoEnFrase } from "../presentacion"
 import type { AsignacionDisputa } from "../tipos"
 
-const ENLACE = "font-medium text-foreground"
+/**
+ * Enlaces apilados de la ficha (campaña y su anunciante, medio y su cuenta…):
+ * 24 px de alto como mínimo para que dos seguidos no queden a menos del
+ * objetivo táctil de WCAG 2.5.8 (axe `target-size`).
+ */
+const OBJETIVO = "inline-flex min-h-6 w-fit max-w-full items-center"
+const ENLACE = `${OBJETIVO} font-medium text-foreground`
 
 /** Fichas relacionadas que el rol puede abrir (permiso de cada sección). */
 export interface EnlacesDisputa {
@@ -173,7 +179,7 @@ export function ResumenAsignacionDisputa({
                   <EnlaceFicha
                     href={rutaAnunciante(asignacion.anunciante.id)}
                     permitido={enlaces.anunciante}
-                    className="text-xs text-muted-foreground"
+                    className={`${OBJETIVO} text-xs text-muted-foreground`}
                   >
                     {asignacion.anunciante.nombre ?? "Anunciante"}
                   </EnlaceFicha>

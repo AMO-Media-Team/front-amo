@@ -103,7 +103,12 @@ export function VistaTarjetas<TFila extends RowData>({
                     <dt className="text-xs text-muted-foreground">
                       {celda.column.columnDef.meta?.titulo}
                     </dt>
-                    <dd className="min-w-0 truncate">
+                    {/* Sin `truncate`: a 390 px un valor largo se lee
+                        completo en varias líneas (WCAG 1.4.10), y con
+                        `valor-tarjeta` (globals.css) también las insignias
+                        y los textos `whitespace-nowrap`, que de otro modo
+                        se salían de la tarjeta. */}
+                    <dd className="valor-tarjeta wrap-break-word">
                       <Celda celda={celda} />
                     </dd>
                   </div>

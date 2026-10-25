@@ -110,6 +110,7 @@ export const CONFIGURACION: ConfiguracionAsistente = CONFIGURACION_POR_DEFECTO
 export const CAMPANA: CampanaAsistente = {
   id: IDS.campana,
   nombre: "Lanzamiento jugos",
+  anuncianteId: "0192f3a4-5b6c-7d8e-9f01-00000000a0a1",
   estado: "ACTIVA",
   fechaInicio: "2026-11-01",
   fechaFin: "2026-11-30",

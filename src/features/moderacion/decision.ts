@@ -117,8 +117,9 @@ export const SUGERENCIAS_RECHAZO: readonly string[] = [
   "Duplica otra oferta de la misma campaña que ya está en revisión o publicada.",
 ]
 
+/** El anunciante los lee en el aviso de la cancelación («Motivo: …»). */
 export const SUGERENCIAS_CANCELACION: readonly string[] = [
-  "Lo solicitó el anunciante.",
+  "Lo solicitó la empresa.",
   "El contenido incumple la política de publicidad de AMO.",
   "La oferta tiene un error de configuración que no se puede corregir publicada.",
 ]

@@ -314,7 +314,7 @@ export function FormularioTextos({
           nombre="menciones"
           clase="mencion"
           etiqueta="Menciones obligatorias"
-          descripcion="Cuentas que el medio debe etiquetar, por ejemplo la de tu marca."
+          descripcion="Cuentas que el medio debe etiquetar, por ejemplo la de la marca."
           placeholder="@tumarca"
           maximo={MAX_MENCIONES}
           deshabilitado={deshabilitado}

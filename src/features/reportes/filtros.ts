@@ -43,7 +43,7 @@ import {
   serializarFecha,
   ZONA,
 } from "@/lib/fechas"
-import { formatearFecha } from "@/lib/format"
+import { formatearFecha, formatoFecha } from "@/lib/format"
 import type { FiltroDocumento } from "@/lib/export/marca"
 
 import type { FiltroReporte, ReporteCatalogo } from "./catalogo"
@@ -305,7 +305,7 @@ export function argumentosComparacion(filtros: FiltrosReporte): {
   }
 }
 
-const formatoRango = new Intl.DateTimeFormat("es-CO", {
+const formatoRango = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",

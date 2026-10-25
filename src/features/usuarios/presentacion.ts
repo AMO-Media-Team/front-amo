@@ -69,6 +69,7 @@ export const MODULOS_PERMISO: Readonly<Record<string, string>> = {
   disputas: "Disputas",
   notificaciones: "Notificaciones",
   cuenta: "Cuenta",
+  privacidad: "Privacidad",
 }
 
 /** Permisos otorgados agrupados por módulo, en el orden del catálogo (ignora claves desconocidas). */

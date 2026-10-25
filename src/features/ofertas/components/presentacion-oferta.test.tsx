@@ -90,6 +90,7 @@ function oferta(cambios: Partial<OfertaCompleta> = {}): OfertaCompleta {
     },
     historial: [],
     creativos: [],
+    gestionAsistida: false,
     ...cambios,
   }
 }

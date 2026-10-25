@@ -1,15 +1,26 @@
 import { describe, expect, it } from "vitest"
 
-import { accionesAnunciante, bloqueoCancelacion } from "./acciones"
+import { accionesGestion, bloqueoCancelacion } from "./acciones"
 
 const PROPIAS = ["ofertas.gestionar_propias", "campanas.gestionar_propias"]
 const SIN_CUPOS = { cuposOcupados: 0 }
+
+type Argumentos = Parameters<typeof accionesGestion>
+
+/** Las del anunciante con lo suyo. */
+function accionesAnunciante(
+  estado: Argumentos[0],
+  permisos: Argumentos[2],
+  situacion: Argumentos[3]
+) {
+  return accionesGestion(estado, "ANUNCIANTE", permisos, situacion)
+}
 
 function claves(...argumentos: Parameters<typeof accionesAnunciante>) {
   return accionesAnunciante(...argumentos).map((opcion) => opcion.accion)
 }
 
-describe("accionesAnunciante", () => {
+describe("accionesGestion · anunciante", () => {
   it("borrador: enviar, editar y cancelar sin motivo", () => {
     const opciones = accionesAnunciante("BORRADOR", PROPIAS, SIN_CUPOS)
     expect(opciones.map((opcion) => opcion.accion)).toEqual([
@@ -82,6 +93,68 @@ describe("accionesAnunciante", () => {
         []
       )
     }
+  })
+})
+
+describe("accionesGestion · equipo AMO por cuenta del anunciante (ADM-014)", () => {
+  const OPERACIONES = [
+    "ofertas.gestionar",
+    "ofertas.moderar",
+    "ofertas.ver",
+    "campanas.gestionar",
+  ]
+
+  function equipo(estado: Argumentos[0], permisos = OPERACIONES) {
+    return accionesGestion(estado, "ADMIN", permisos, SIN_CUPOS)
+  }
+
+  it("borrador: enviar, editar y cancelar con motivo (al equipo sí se le pide)", () => {
+    expect(equipo("BORRADOR")).toEqual([
+      { accion: "enviar", requiereMotivo: false, bloqueo: null },
+      { accion: "editar", requiereMotivo: false, bloqueo: null },
+      { accion: "cancelar", requiereMotivo: true, bloqueo: null },
+    ])
+  })
+
+  it("devuelta: reenviar, editar y cancelar con motivo", () => {
+    expect(equipo("DEVUELTA").map((o) => [o.accion, o.requiereMotivo])).toEqual(
+      [
+        ["reenviar", false],
+        ["editar", false],
+        ["cancelar", true],
+      ]
+    )
+  })
+
+  it("en revisión solo retirarla: publicar, devolver y rechazar son moderación", () => {
+    expect(equipo("EN_REVISION").map((o) => o.accion)).toEqual(["retirar"])
+  })
+
+  it("cancelar una publicada es de la moderación, no de la gestión", () => {
+    expect(equipo("PUBLICADA")).toEqual([])
+  })
+
+  it("cancelada o terminada: archivarla", () => {
+    for (const estado of ["CANCELADA", "VENCIDA", "CERRADA"] as const) {
+      expect(equipo(estado)).toEqual([
+        { accion: "archivar", requiereMotivo: false, bloqueo: null },
+      ])
+    }
+  })
+
+  it("con solo moderar (o el permiso del anunciante) no gestiona", () => {
+    expect(equipo("BORRADOR", ["ofertas.moderar", "ofertas.ver"])).toEqual([])
+    expect(equipo("BORRADOR", ["ofertas.gestionar_propias"])).toEqual([])
+  })
+
+  it("el anunciante no gestiona con el permiso del equipo", () => {
+    expect(claves("BORRADOR", OPERACIONES, SIN_CUPOS)).toEqual([])
+  })
+
+  it("un medio no gestiona ofertas", () => {
+    expect(
+      accionesGestion("BORRADOR", "MEDIO", OPERACIONES, SIN_CUPOS)
+    ).toEqual([])
   })
 })
 

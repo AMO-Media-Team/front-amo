@@ -7,17 +7,22 @@ import {
   Hourglass,
   Megaphone,
   PiggyBank,
+  Plus,
   Receipt,
   ShieldX,
   Ticket,
 } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, Suspense } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { banderaEmoji } from "@/features/accesos/catalogo"
+import { puedeGestionarCampanasAsistidas } from "@/features/campanas/gestion"
+import { rutaNuevaCampanaAsistida } from "@/features/campanas/rutas-gestion"
 import { ETIQUETAS_REGIMEN, type Regimen } from "@/features/empresa/schemas"
+import { InsigniaReclamoEnTramite } from "@/features/privacidad/components/insignia-reclamo"
+import { requerirUsuario } from "@/lib/auth/dal"
 import {
   formatearCOP,
   formatearFecha,
@@ -161,6 +166,9 @@ export function CabeceraAnunciante({
             {anunciante.pais}
           </span>
           {anunciante.esDemo ? <InsigniaDemo /> : null}
+          <Suspense fallback={null}>
+            <InsigniaReclamoEnTramite anuncianteId={anunciante.id} />
+          </Suspense>
         </>
       }
       lateral={
@@ -451,23 +459,45 @@ export function SeccionResumenAnunciante({
   )
 }
 
-/** Pestaña Campañas: todas las del anunciante, con su desempeño si se puede ver. */
+/**
+ * Pestaña Campañas: todas las del anunciante, con su desempeño si se puede
+ * ver. Con los permisos de la gestión asistida (ADM-014), «Nueva campaña» por
+ * su cuenta, con el anunciante ya elegido.
+ */
 export async function SeccionCampanasAnunciante({
   anunciante,
 }: {
   anunciante: AnuncianteDetalle
 }) {
-  const [campanas, desempeno] = await Promise.all([
+  const [campanas, desempeno, usuario] = await Promise.all([
     campanasDelAnunciante(anunciante.id),
     desempenoDeCampanas(anunciante.id),
+    requerirUsuario(),
   ])
+  const nuevaCampana =
+    usuario.rol.tipo === "ADMIN" &&
+    puedeGestionarCampanasAsistidas(usuario.permisos) ? (
+      <EnlaceBoton
+        size={campanas.length === 0 ? "default" : "sm"}
+        href={rutaNuevaCampanaAsistida(anunciante.id)}
+      >
+        <Plus data-icon="inline-start" aria-hidden />
+        Nueva campaña
+      </EnlaceBoton>
+    ) : null
   if (campanas.length === 0) {
     return (
       <EstadoVacio
         icono={Megaphone}
         titulo="Aún no hay campañas"
-        descripcion="Cuando el anunciante cree campañas y publique ofertas, aparecerán aquí con su presupuesto y su desempeño."
-      />
+        descripcion={
+          nuevaCampana
+            ? "Cuando el anunciante cree campañas y publique ofertas, aparecerán aquí con su presupuesto y su desempeño. También puedes crearlas por su cuenta."
+            : "Cuando el anunciante cree campañas y publique ofertas, aparecerán aquí con su presupuesto y su desempeño."
+        }
+      >
+        {nuevaCampana}
+      </EstadoVacio>
     )
   }
   return (
@@ -480,13 +510,16 @@ export async function SeccionCampanasAnunciante({
           : "Presupuesto comprometido y cupos tomados de cada campaña."
       }
       acciones={
-        <EnlaceBoton
-          variant="outline"
-          size="sm"
-          href={rutaCampanasDe(anunciante.id)}
-        >
-          Ver en el listado
-        </EnlaceBoton>
+        <>
+          <EnlaceBoton
+            variant="outline"
+            size="sm"
+            href={rutaCampanasDe(anunciante.id)}
+          >
+            Ver en el listado
+          </EnlaceBoton>
+          {nuevaCampana}
+        </>
       }
     >
       <ListaCampanas campanas={campanas} desempeno={desempeno} />

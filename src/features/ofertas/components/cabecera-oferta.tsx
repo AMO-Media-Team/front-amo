@@ -11,12 +11,13 @@ import {
   CabeceraFicha,
   EnlaceFicha,
 } from "@/features/operacion/components/ficha"
+import { InsigniaGestionAsistida } from "@/features/campanas/components/distintivos-campana"
 import { ESTADOS_OFERTA } from "@/features/operacion/estados"
 import { formatearRangoCompacto } from "@/features/operacion/formato"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
 
 import { formatoYPlataforma, type UrgenciaFechaLimite } from "../presentacion"
-import type { OfertaCompleta } from "../tipos"
+import type { OfertaCompleta, Perspectiva } from "../tipos"
 
 function Fecha({
   etiqueta,
@@ -47,7 +48,8 @@ export interface EnlacesCabecera {
 /**
  * Cabecera de la ficha de una oferta (la del anunciante y la interna):
  * formato y plataforma, campaña (y anunciante), estado, urgencia de la fecha
- * límite y los hitos de su recorrido. El aviso del estado va debajo.
+ * límite, si la creó el equipo AMO por cuenta del anunciante (ADM-014) y los
+ * hitos de su recorrido. El aviso del estado va debajo.
  */
 export function CabeceraOferta({
   oferta,
@@ -56,6 +58,7 @@ export function CabeceraOferta({
   acciones,
   aviso,
   conReenvio = false,
+  perspectiva = "interno",
 }: {
   oferta: OfertaCompleta
   enlaces: EnlacesCabecera
@@ -64,6 +67,8 @@ export function CabeceraOferta({
   aviso?: ReactNode
   /** Distingue en la moderación una oferta que vuelve tras una devolución. */
   conReenvio?: boolean
+  /** A quién se le explica la insignia de la gestión asistida. */
+  perspectiva?: Perspectiva
 }) {
   const { fechas } = oferta
   return (
@@ -119,6 +124,11 @@ export function CabeceraOferta({
               <RotateCcw aria-hidden className="size-3" />
               Reenvío
             </span>
+          ) : null}
+          {oferta.gestionAsistida ? (
+            <InsigniaGestionAsistida
+              voz={perspectiva === "anunciante" ? "propio" : "asistido"}
+            />
           ) : null}
         </>
       }

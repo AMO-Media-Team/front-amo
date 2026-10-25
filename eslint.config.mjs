@@ -18,6 +18,25 @@ const MENSAJE_VIEW_TRANSITION =
  * `ViewTransition` se vigila con selectores y no con `importNames`: esa opción
  * también rechaza `import * as React from "react"`, que usan los componentes de shadcn.
  */
+/**
+ * Safari abrevia el mes dentro de una fecha («sep.») y la hora («p.m.») distinto que Node: un
+ * `Intl.DateTimeFormat` con mes abreviado u hora rompe la hidratación. Se usa `formatoFecha()`.
+ */
+const FECHAS_INESTABLES = [
+  {
+    selector:
+      "NewExpression[callee.object.name='Intl'][callee.property.name='DateTimeFormat']:has(Property[key.name='month'][value.value='short'])",
+    message:
+      "Usa formatoFecha() de @/lib/format: el mes abreviado de Safari («sep.») no coincide con el del servidor.",
+  },
+  {
+    selector:
+      "NewExpression[callee.object.name='Intl'][callee.property.name='DateTimeFormat']:has(Property[key.name='hour']):not(:has(Literal[value=/^en-/]))",
+    message:
+      "Usa formatoFecha() de @/lib/format: Safari escribe «p.m.» y el servidor «p. m.».",
+  },
+]
+
 const USOS_VIEW_TRANSITION = [
   {
     selector:
@@ -76,7 +95,11 @@ const eslintConfig = defineConfig([
     name: "amo/importaciones-restringidas",
     rules: {
       "no-restricted-imports": reglaImportaciones(),
-      "no-restricted-syntax": ["error", ...USOS_VIEW_TRANSITION],
+      "no-restricted-syntax": [
+        "error",
+        ...USOS_VIEW_TRANSITION,
+        ...FECHAS_INESTABLES,
+      ],
     },
   },
   {

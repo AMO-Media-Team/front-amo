@@ -6,6 +6,7 @@
 import type { ClavePermiso } from "@/lib/auth/permisos"
 import type { TipoRol, UsuarioSesion } from "@/lib/auth/tipos"
 import { type PresetAutomatico, ZONA } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 export type TipoPanel = "admin" | "anunciante" | "medio"
 
@@ -42,11 +43,14 @@ export function panelPara(usuario: UsuarioPanel): TipoPanel | null {
 
 // ── Saludo ───────────────────────────────────────────────────────────────────
 
-const horaBogota = new Intl.DateTimeFormat("en-US", {
-  timeZone: ZONA,
-  hour: "numeric",
-  hourCycle: "h23",
-})
+const horaBogota = formatoFecha(
+  {
+    timeZone: ZONA,
+    hour: "numeric",
+    hourCycle: "h23",
+  },
+  "en-US"
+)
 
 const fechaBogota = new Intl.DateTimeFormat("es-CO", {
   timeZone: ZONA,

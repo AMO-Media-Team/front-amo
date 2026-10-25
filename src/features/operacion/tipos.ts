@@ -318,6 +318,8 @@ export type CampanaFila = {
   cuposTotales: number
   cuposOcupados: number
   creadaAt: string
+  /** La creó el equipo AMO por cuenta del anunciante (ADM-014). */
+  gestionAsistida: boolean
 }
 
 export interface ResumenCampanas {
@@ -347,6 +349,8 @@ export interface CampanaDetalle {
   canceladaAt: string | null
   creadaAt: string
   esDemo: boolean
+  /** La creó el equipo AMO por cuenta del anunciante (ADM-014). */
+  gestionAsistida: boolean
 }
 
 export interface Segmentacion {

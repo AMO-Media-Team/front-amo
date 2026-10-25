@@ -49,13 +49,15 @@ y pago. Este repositorio es el front-end (Next.js) y contiene también el esquem
   usuarios, roles y permisos, auditoría, accesos, cuenta, notificaciones, configuración), modelo de
   datos completo del negocio, analítica (paneles por rol, explorador geográfico en 3 niveles, 7
   reportes con exportación) y consulta de operación.
-- **Entregas 2 y 3 (en curso, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
+- **Entregas 2 y 3 (completas, por fases; estado en `docs/entregas-2-3/progreso.md`)**: registro de
   organizaciones, alta y verificación del medio, términos, vinculación pública (fases 0 y 1); empresa
   del anunciante, campañas, asistente de oferta, creativos y moderación (fase 2); marketplace, Mis
   campañas, evidencia y métricas del medio, y seguimiento del anunciante (fase 3); validación de evidencias
   y métricas con alertas, verificación, cancelación con causa, disputas y suspensión de medios (fase 4);
   liquidaciones, documento soporte, archivo de pagos, facturas con notas crédito y cartera, Ganancias del medio y
-  Facturas del anunciante (fase 5). Sigue el cierre.
+  Facturas del anunciante (fase 5); gestión asistida, reputación del medio, derechos del titular de datos,
+  correo de avisos construido apagado, aviso en vivo, accesibilidad y matriz de navegadores (fase 6, cierre). Las
+  Entregas 2 y 3 están completas; lo que depende de terceros está en `context/Servicios-Pendientes-Definir.md`.
 
 ## Stack
 
@@ -72,6 +74,7 @@ pnpm typecheck              # next typegen + tsc
 pnpm lint  |  pnpm format   # ESLint 9 (flat) | Prettier
 pnpm test                   # Vitest (unitarias y de componentes)
 pnpm test:e2e               # Playwright contra `pnpm build && pnpm start`
+pnpm test:e2e:navegadores   # matriz Firefox, Safari, Safari iOS y Chrome Android (RNF-COM-01)
 pnpm geo:build              # regenera GeoJSON optimizados, diccionarios y semilla geo
 pnpm brand:build            # regenera logos e iconos
 pnpm db:types               # regenera src/types/database.types.ts (requiere `supabase login`)
@@ -87,6 +90,9 @@ pnpm demo:generar | pnpm demo:purgar   # datos demo (ver supabase/seed/demo/READ
 pnpm prod:config-pruebas    # configuración rotulada para las pruebas del cliente (tiempos cortos, textos legales
                             # «VERSIÓN DE PRUEBA»): simula por defecto; --aplicar | --revertir; contra producción
                             # AMO_ARCHIVO_ENTORNO=.env.produccion … --confirmar-produccion
+pnpm prod:limpiar-pruebas <entorno> [--ejecutar] [--confirmar-produccion]   # limpieza final de las pruebas: simula por
+                            # defecto; ejecutarla en producción solo por orden expresa de Andrés (respaldo previo)
+pnpm pruebas:rendimiento-geo local   # p95 del explorador geográfico (GEO-010, < 300 ms)
 ```
 
 Antes de entregar cualquier cambio: `pnpm typecheck && pnpm lint && pnpm test`. En integraciones,
@@ -106,16 +112,17 @@ src/app/(app)/                   Secciones privadas dentro del AppShell
   operacion/verificacion/        Colas de medios, anunciantes, cuentas, documentos y solicitudes (?cola=)
   operacion/{moderacion,ofertas/[id]}/   Cola de ofertas en revisión y ficha completa de la oferta
   operacion/{validacion,disputas}/      Colas de validación (?cola=) y bandeja y ficha de disputas
+  operacion/campanas/{nueva,[id]/editar,[id]/ofertas/nueva}  operacion/ofertas/[id]/editar   Gestión asistida (ADM-014)
   finanzas/{liquidaciones,pagos,facturas,cartera}/   Finanzas: cortes, documento soporte, archivo de pagos, facturas y cartera
-  mi-medio/                      Portal del medio: perfil, documentos, pago, cuentas y nivel
+  mi-medio/                      Portal del medio: perfil, documentos, pago, cuentas, nivel y reputación
   ganancias/  facturas/          Ganancias del medio (pagos y documentos) y facturas del anunciante
   ofertas/  mis-campanas/          Marketplace y ficha de la oferta; tablero, ficha, contenido, evidencia y métricas del medio
   empresa/  campanas/            Portal del anunciante: empresa (datos, documentos, equipo), campañas,
                                  asistente de oferta (campanas/[id]/ofertas/nueva) y ficha de la oferta
   ir/[entidad]/[id]/             Resuelve el destino de una notificación según el rol
-  administracion/{usuarios,roles,auditoria,accesos,configuracion}/
-  notificaciones/  cuenta/{perfil,seguridad,preferencias}/
-src/app/api/                     geo/metricas (datos del mapa) · csp-report
+  administracion/{usuarios,roles,auditoria,accesos,configuracion,privacidad}/   (privacidad: solicitudes de titulares)
+  notificaciones/  cuenta/{perfil,seguridad,preferencias,privacidad}/
+src/app/api/                     geo/metricas (datos del mapa) · csp-report · correos/procesar (despachador de correo)
 src/components/
   ui/            shadcn (Base UI). Se compone; no se edita
   layout/        AppShell: barra lateral, barra superior, ⌘K, selector de tema
@@ -129,6 +136,7 @@ src/lib/
   supabase/      server.ts · client.ts · admin.ts y auth-server.ts (clave secreta, server-only) · proxy.ts · contexto.ts
   geo/           diccionarios generados, resolvers, escalas, SVG de departamentos
   export/        Excel (ExcelJS) y PDF (jsPDF) de marca
+  correo/        Correo de avisos (apagado): adaptadores Resend/registro, plantilla y despachador
   env*.ts format.ts fechas.ts result.ts csp.ts
 src/types/database.types.ts      Generado desde Supabase
 scripts/                         geo · brand · db · bootstrap · demo · pruebas (carrera de cupos)
@@ -158,7 +166,9 @@ e2e/                             Playwright
 7. **Datos sensibles** (documentos, datos bancarios, NIT, contacto): viven en tablas `*_privado`; se
    revelan con `revelar_privado_srv` y cada consulta queda registrada.
 8. **Fechas y dinero**: siempre zona `America/Bogota` y formato es-CO / COP mediante
-   `src/lib/fechas.ts` y `src/lib/format.ts`. El servidor corre en UTC.
+   `src/lib/fechas.ts` y `src/lib/format.ts`. El servidor corre en UTC. Una fecha con mes abreviado u
+   hora se arma con `formatoFecha()` (no con `new Intl.DateTimeFormat`): Safari escribe «sep.» y «p.m.»
+   y rompería la hidratación de React.
 9. **Interfaz**: español de Colombia, tema oscuro por defecto con claro equivalente, accesible
    (WCAG 2.2 AA), responsive a 1440 / 834 / 390 px sin scroll horizontal, y respeto del movimiento
    reducido. Componer con la prop `render` de Base UI, nunca `asChild`.

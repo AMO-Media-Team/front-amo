@@ -10,6 +10,7 @@ import type { FormatoValor, Unidad } from "@/components/charts/formatos"
 import type { Serie } from "@/components/charts/tipos"
 import type { MetricaGeo } from "@/features/geo/metricas"
 import { ZONA } from "@/lib/fechas"
+import { formatoFecha } from "@/lib/format"
 
 interface BaseGrafico {
   id: string
@@ -100,12 +101,12 @@ export function granularidadPara(dias: number): Granularidad {
   return "mes"
 }
 
-const formatoDia = new Intl.DateTimeFormat("es-CO", {
+const formatoDia = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",
 })
-const formatoMes = new Intl.DateTimeFormat("es-CO", {
+const formatoMes = formatoFecha({
   timeZone: ZONA,
   month: "short",
   year: "2-digit",

@@ -60,3 +60,16 @@ export const esquemaPagina = z.object({
   filtros: esquemaFiltros,
   antesId: z.number().int().positive(),
 })
+
+/**
+ * Carga del aviso en vivo (`private.fn_notificacion_realtime`): sin título ni
+ * mensaje, solo lo necesario para el contador. Lo que no cumpla se descarta.
+ */
+export const esquemaAvisoEnVivo = z.object({
+  id: z.number().int().positive(),
+  tipo: z.string().min(1).max(120),
+  prioridad: z.number().int().min(0).max(2),
+  no_leidas: z.number().int().min(0),
+})
+
+export type AvisoEnVivo = z.infer<typeof esquemaAvisoEnVivo>

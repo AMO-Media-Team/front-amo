@@ -2,17 +2,24 @@ import { describe, expect, it } from "vitest"
 
 import {
   agruparPlantillas,
+  contarPorCanal,
+  DOMINIOS_PLANTILLA,
   dominioPlantilla,
   ejemploDe,
+  filtrarPlantillas,
   revisarVariables,
   variablesUsadas,
 } from "./plantillas"
-import type { Plantilla } from "./tipos"
+import type { CanalNotificacion, Plantilla } from "./tipos"
 
-function plantilla(clave: string, nombre: string): Plantilla {
+function plantilla(
+  clave: string,
+  nombre: string,
+  canal: CanalNotificacion = "APP"
+): Plantilla {
   return {
     clave,
-    canal: "APP",
+    canal,
     nombre,
     asunto: null,
     cuerpo: "",
@@ -87,5 +94,60 @@ describe("agruparPlantillas", () => {
       "asignacion"
     )
     expect(dominioPlantilla("suelta")).toBe("suelta")
+  })
+})
+
+describe("filtro por canal", () => {
+  const PLANTILLAS = [
+    plantilla("oferta.publicada", "Oferta publicada"),
+    plantilla("oferta.publicada", "Oferta publicada", "EMAIL"),
+    plantilla("titular.solicitud_radicada", "Solicitud radicada", "EMAIL"),
+    plantilla("usuario.invitado", "Invitación", "EMAIL"),
+    plantilla("seguridad.nuevo_acceso", "Nuevo acceso", "PUSH"),
+  ]
+
+  it("cuenta las de aplicación y las de correo (los demás canales no se administran)", () => {
+    expect(contarPorCanal(PLANTILLAS)).toEqual({ APP: 1, EMAIL: 3 })
+  })
+
+  it("muestra solo las del canal elegido, por nombre sin tildes o por clave", () => {
+    expect(
+      filtrarPlantillas(PLANTILLAS, { canal: "EMAIL", busqueda: "" }).map(
+        (p) => p.clave
+      )
+    ).toEqual([
+      "oferta.publicada",
+      "titular.solicitud_radicada",
+      "usuario.invitado",
+    ])
+    expect(
+      filtrarPlantillas(PLANTILLAS, { canal: "EMAIL", busqueda: "INVITACION" })
+    ).toHaveLength(1)
+    expect(
+      filtrarPlantillas(PLANTILLAS, { canal: "EMAIL", busqueda: " titular. " })
+    ).toHaveLength(1)
+    expect(
+      filtrarPlantillas(PLANTILLAS, { canal: "APP", busqueda: "invitación" })
+    ).toEqual([])
+  })
+
+  it("conoce los dominios de las plantillas de la base, con título en español", () => {
+    for (const dominio of [
+      "medio",
+      "documento",
+      "anunciante",
+      "campana",
+      "factura",
+      "cola",
+      "titular",
+    ]) {
+      expect(DOMINIOS_PLANTILLA[dominio]).toMatch(/^[A-ZÁÉÍÓÚ]/)
+    }
+    expect(
+      agruparPlantillas([
+        plantilla("titular.solicitud_radicada", "Solicitud radicada"),
+        plantilla("cola.solicitud_titular", "Solicitud de un titular"),
+      ]).map((grupo) => grupo.titulo)
+    ).toEqual(["Datos personales", "Colas del equipo AMO"])
   })
 })

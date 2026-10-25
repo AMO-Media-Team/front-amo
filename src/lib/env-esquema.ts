@@ -14,6 +14,23 @@ const LONGITUD_MINIMA_SECRETO = 32
 /** Las claves nuevas de Supabase declaran su alcance en el prefijo. */
 const PREFIJO_CLAVE_PUBLICABLE = "sb_publishable_"
 
+/**
+ * Envío de correos de los avisos (NOT-004): `desactivado` no reclama nada,
+ * `registro` simula el envío sin escribir los correos (local y develop) y
+ * `resend` envía por la API de Resend.
+ */
+export const PROVEEDORES_CORREO = ["desactivado", "registro", "resend"] as const
+export type ProveedorCorreo = (typeof PROVEEDORES_CORREO)[number]
+
+const REMITENTE_CON_NOMBRE = /^([^<>"\r\n]{1,80})\s<([^<>\s]+)>$/
+
+/** `avisos@amo.co` o `AMO <avisos@amo.co>` (formato que acepta Resend). */
+export function esRemitenteValido(valor: string): boolean {
+  const conNombre = REMITENTE_CON_NOMBRE.exec(valor.trim())
+  const correo = conNombre ? conNombre[2] : valor.trim()
+  return z.email().safeParse(correo).success
+}
+
 export const MAPBOX_ESTILO_POR_DEFECTO = "mapbox://styles/mapbox/standard"
 export const SITIO_URL_POR_DEFECTO = "http://localhost:3000"
 
@@ -91,6 +108,23 @@ export const esquemaEnvServidor = z
     TURNSTILE_SITE_KEY: z.string().min(1).optional(),
     TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
     AMO_CSP_MODO: z.enum(["enforce", "report"]).default("enforce"),
+    AMO_CORREO_PROVEEDOR: z.enum(PROVEEDORES_CORREO).default("desactivado"),
+    RESEND_API_KEY: z.string().min(1).optional(),
+    AMO_CORREO_REMITENTE: z
+      .string()
+      .refine(
+        esRemitenteValido,
+        "Formato esperado: avisos@dominio.co o AMO <avisos@dominio.co>."
+      )
+      .optional(),
+    // Lo envía el job amo_correos (Vault `amo_correos_secreto`) al despachador.
+    AMO_CORREOS_SECRETO: z
+      .string()
+      .min(
+        LONGITUD_MINIMA_SECRETO,
+        `Debe tener al menos ${LONGITUD_MINIMA_SECRETO} caracteres.`
+      )
+      .optional(),
   })
   .superRefine((env, ctx) => {
     if (env.VERCEL_ENV === "production" && !env.SUPABASE_SECRET_KEY) {
@@ -118,7 +152,56 @@ export const esquemaEnvServidor = z
         message: "TURNSTILE_SITE_KEY y TURNSTILE_SECRET_KEY van juntas.",
       })
     }
+    validarCorreo(env, ctx)
   })
+
+interface EnvCorreo {
+  VERCEL_ENV?: string
+  AMO_SERVIDOR_SECRET: string
+  AMO_CORREO_PROVEEDOR: ProveedorCorreo
+  RESEND_API_KEY?: string
+  AMO_CORREO_REMITENTE?: string
+  AMO_CORREOS_SECRETO?: string
+}
+
+function validarCorreo(env: EnvCorreo, ctx: z.RefinementCtx): void {
+  if (env.AMO_CORREO_PROVEEDOR === "resend") {
+    for (const variable of [
+      "RESEND_API_KEY",
+      "AMO_CORREO_REMITENTE",
+    ] as const) {
+      if (!env[variable]) {
+        ctx.addIssue({
+          code: "custom",
+          path: [variable],
+          message: "Es obligatoria con AMO_CORREO_PROVEEDOR=resend.",
+        })
+      }
+    }
+  }
+  // En producción `registro` marcaría como enviados correos que nadie recibió.
+  if (
+    env.AMO_CORREO_PROVEEDOR === "registro" &&
+    env.VERCEL_ENV === "production"
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["AMO_CORREO_PROVEEDOR"],
+      message:
+        "«registro» no envía correos: en producción usa resend o desactivado.",
+    })
+  }
+  if (
+    env.AMO_CORREOS_SECRETO &&
+    env.AMO_CORREOS_SECRETO === env.AMO_SERVIDOR_SECRET
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["AMO_CORREOS_SECRETO"],
+      message: "Debe ser distinto de AMO_SERVIDOR_SECRET.",
+    })
+  }
+}
 
 export type EnvCliente = z.output<typeof esquemaEnvCliente>
 export type EnvServidor = z.output<typeof esquemaEnvServidor>

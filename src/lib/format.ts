@@ -202,16 +202,103 @@ export function calcularDelta(actual: number, anterior: number): number | null {
 
 // ── Fechas ──────────────────────────────────────────────────────────────────
 
+/**
+ * `Intl.DateTimeFormat` con el mismo texto en el servidor y en cualquier
+ * navegador. El Intl de WebKit (Safari) abrevia el mes dentro de una fecha
+ * como «sep.» o «ago.» y escribe «p.m.», mientras Node, Chromium y Firefox
+ * escriben «sept», «ago» y «p. m.». React compara el texto del servidor con el
+ * del navegador al hidratar, así que toda fecha con mes abreviado u hora se
+ * arma aquí con la forma de Node (el mes abreviado solo, «sept.», es igual en
+ * todos y no se toca).
+ */
+/**
+ * Espacio de «3:05 p. m.»: el CLDR usa U+202F, pero el `format()` de V8 (Node y
+ * Chromium) lo cambia por un espacio normal; esa es la forma que ya se muestra.
+ */
+const ESPACIO_HORA = " "
+
+export class FormatoFecha {
+  private readonly base: Intl.DateTimeFormat
+  /** El mes va dentro de una fecha (con día, año o día de la semana). */
+  private readonly mesEnContexto: boolean
+
+  constructor(opciones: Intl.DateTimeFormatOptions, locale: string = LOCALE) {
+    this.base = new Intl.DateTimeFormat(locale, opciones)
+    this.mesEnContexto =
+      opciones.month === "short" &&
+      (opciones.day !== undefined ||
+        opciones.year !== undefined ||
+        opciones.weekday !== undefined)
+  }
+
+  private normalizar<T extends Intl.DateTimeFormatPart>(parte: T): T {
+    if (parte.type === "month" && this.mesEnContexto) {
+      const sinPunto = parte.value.replace(/\.$/, "")
+      return { ...parte, value: sinPunto === "sep" ? "sept" : sinPunto }
+    }
+    if (parte.type === "dayPeriod") {
+      const compacto = parte.value.replace(/\s/g, "").toLowerCase()
+      if (compacto === "a.m." || compacto === "am") {
+        return { ...parte, value: `a.${ESPACIO_HORA}m.` }
+      }
+      if (compacto === "p.m." || compacto === "pm") {
+        return { ...parte, value: `p.${ESPACIO_HORA}m.` }
+      }
+    }
+    return parte
+  }
+
+  /** Normaliza cada parte y el espacio que precede a «a. m.»/«p. m.». */
+  private normalizarTodas<T extends Intl.DateTimeFormatPart>(partes: T[]): T[] {
+    const normalizadas = partes.map((parte) => this.normalizar(parte))
+    return normalizadas.map((parte, i) =>
+      parte.type === "literal" &&
+      normalizadas[i + 1]?.type === "dayPeriod" &&
+      /^\s+$/.test(parte.value)
+        ? { ...parte, value: ESPACIO_HORA }
+        : parte
+    )
+  }
+
+  formatToParts(fecha?: Date | number): Intl.DateTimeFormatPart[] {
+    return this.normalizarTodas(this.base.formatToParts(fecha))
+  }
+
+  format(fecha?: Date | number): string {
+    return this.formatToParts(fecha)
+      .map((parte) => parte.value)
+      .join("")
+  }
+
+  formatRange(desde: Date | number, hasta: Date | number): string {
+    return this.normalizarTodas(this.base.formatRangeToParts(desde, hasta))
+      .map((parte) => parte.value)
+      .join("")
+  }
+
+  resolvedOptions(): Intl.ResolvedDateTimeFormatOptions {
+    return this.base.resolvedOptions()
+  }
+}
+
+/** `new Intl.DateTimeFormat(locale, opciones)` estable entre servidor y navegadores. */
+export function formatoFecha(
+  opciones: Intl.DateTimeFormatOptions,
+  locale: string = LOCALE
+): FormatoFecha {
+  return new FormatoFecha(opciones, locale)
+}
+
 export type EstiloFecha = "corto" | "medio" | "largo"
 
-const FORMATOS_FECHA: Record<EstiloFecha, Intl.DateTimeFormat> = {
+const FORMATOS_FECHA: Record<EstiloFecha, Pick<FormatoFecha, "format">> = {
   corto: new Intl.DateTimeFormat(LOCALE, {
     timeZone: ZONA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   }),
-  medio: new Intl.DateTimeFormat(LOCALE, {
+  medio: formatoFecha({
     timeZone: ZONA,
     day: "numeric",
     month: "short",
@@ -225,7 +312,7 @@ const FORMATOS_FECHA: Record<EstiloFecha, Intl.DateTimeFormat> = {
   }),
 }
 
-const formatoFechaHora = new Intl.DateTimeFormat(LOCALE, {
+const formatoFechaHora = formatoFecha({
   timeZone: ZONA,
   day: "numeric",
   month: "short",

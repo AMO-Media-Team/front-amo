@@ -8,6 +8,7 @@ import { limitesFechas, presupuestoMinimo } from "./reglas"
 import type {
   EntradaEditarCampana,
   EntradaNuevaCampana,
+  EntradaNuevaCampanaAsistida,
   ReglasCampana,
 } from "./schemas"
 import type { MiCampana, OfertaDeCampana } from "./tipos"
@@ -19,6 +20,13 @@ export const VALORES_NUEVA_CAMPANA: EntradaNuevaCampana = {
   fechaInicio: "",
   fechaFin: "",
   presupuesto: "",
+}
+
+/** Alta asistida: el anunciante preseleccionado (`?anunciante=`) o ninguno. */
+export function valoresNuevaCampanaAsistida(
+  anuncianteId: string | null
+): EntradaNuevaCampanaAsistida {
+  return { ...VALORES_NUEVA_CAMPANA, anuncianteId: anuncianteId ?? "" }
 }
 
 export function valoresEdicion(campana: MiCampana): EntradaEditarCampana {

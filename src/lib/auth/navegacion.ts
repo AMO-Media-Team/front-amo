@@ -12,6 +12,7 @@ import {
   ChartColumn,
   ClipboardCheck,
   ClipboardList,
+  FileLock2,
   Fingerprint,
   Handshake,
   House,
@@ -217,6 +218,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
           pago: "Pago y tributario",
           cuentas: "Cuentas sociales",
           nivel: "Nivel",
+          reputacion: "Reputación",
         },
       },
       {
@@ -537,6 +539,23 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
           "ajustes",
         ],
       },
+      {
+        id: "privacidad-admin",
+        titulo: "Datos personales",
+        href: ruta("/administracion/privacidad"),
+        icono: FileLock2,
+        permisos: ["privacidad.gestionar"],
+        tiposRol: SOLO_INTERNOS,
+        descripcion:
+          "Solicitudes de titulares de datos: consultas, reclamos y supresiones",
+        palabrasClave: [
+          "habeas data",
+          "ley 1581",
+          "datos personales",
+          "supresión",
+          "titular",
+        ],
+      },
     ],
   },
   {
@@ -571,6 +590,21 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
         permisos: ["cuenta.gestionar"],
         descripcion: "Tema, avisos y otras preferencias",
         palabrasClave: ["tema", "apariencia", "oscuro", "claro"],
+      },
+      {
+        id: "privacidad",
+        titulo: "Privacidad",
+        href: ruta("/cuenta/privacidad"),
+        icono: FileLock2,
+        permisos: ["cuenta.gestionar"],
+        descripcion: "Tus datos personales, autorizaciones y solicitudes",
+        palabrasClave: [
+          "datos personales",
+          "habeas data",
+          "descargar mis datos",
+          "supresión",
+          "autorización",
+        ],
       },
       {
         id: "notificaciones",
@@ -716,6 +750,8 @@ export const RUTAS_PUBLICAS: readonly string[] = [
   "/restablecer",
   "/auth",
   "/api/csp-report",
+  // Despachador de correo (NOT-004): lo llama pg_cron con un secreto propio, sin sesión.
+  "/api/correos/procesar",
   "/manifest.webmanifest",
   "/robots.txt",
 ]
