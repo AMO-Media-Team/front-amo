@@ -164,7 +164,9 @@ e2e/                             Playwright
 7. **Datos sensibles** (documentos, datos bancarios, NIT, contacto): viven en tablas `*_privado`; se
    revelan con `revelar_privado_srv` y cada consulta queda registrada.
 8. **Fechas y dinero**: siempre zona `America/Bogota` y formato es-CO / COP mediante
-   `src/lib/fechas.ts` y `src/lib/format.ts`. El servidor corre en UTC.
+   `src/lib/fechas.ts` y `src/lib/format.ts`. El servidor corre en UTC. Una fecha con mes abreviado u
+   hora se arma con `formatoFecha()` (no con `new Intl.DateTimeFormat`): Safari escribe «sep.» y «p.m.»
+   y rompería la hidratación de React.
 9. **Interfaz**: español de Colombia, tema oscuro por defecto con claro equivalente, accesible
    (WCAG 2.2 AA), responsive a 1440 / 834 / 390 px sin scroll horizontal, y respeto del movimiento
    reducido. Componer con la prop `render` de Base UI, nunca `asChild`.

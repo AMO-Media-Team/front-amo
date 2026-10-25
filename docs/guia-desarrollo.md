@@ -56,6 +56,10 @@
 - **Formularios**: react-hook-form + zod 4 con el mismo esquema en cliente y servidor. Login y MFA con
   `<form action>` + `useActionState`.
 - **Estado en URL**: `nuqs` (adaptador en el layout raíz).
+- **Fechas con mes abreviado u hora**: `formatoFecha(opciones)` de `src/lib/format.ts` (misma API que
+  `Intl.DateTimeFormat`: `format`, `formatToParts`, `formatRange`). El Intl de WebKit escribe «sep.», «ago.» y «p.m.»
+  donde Node, Chromium y Firefox escriben «sept», «ago» y «p. m.»; con `new Intl.DateTimeFormat` Safari no hidrata
+  igual que el servidor (error #418) y React regenera la página.
 - **Fechas y cifras**: `date-fns` + `@date-fns/tz` siempre en `America/Bogota`; moneda y números con
   `src/lib/format.ts` (es-CO, COP). Vercel corre en UTC. Cifras abreviadas con una sola regla (escala larga):
   «mil», «M» = millones, «mil M» = miles de millones, «B» = billones, un decimal (`$1,3 M`, `96,2 mil`,
