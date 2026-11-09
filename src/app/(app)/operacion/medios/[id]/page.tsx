@@ -224,6 +224,8 @@ export default async function PaginaMedio({
             medio={medio}
             verDocumentos={verDocumentos}
             verSensibles={verSensibles}
+            verUsuarios={verUsuarios}
+            puedeInvitar={Boolean(invitarA)}
           />
         </Diferida>
       ),
