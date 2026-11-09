@@ -256,7 +256,7 @@ export function DecisionMedio({
         titulo={`¿Verificar ${medio.nombre} en el nivel ${nivel.nivel}?`}
         descripcion={
           evaluacion.listo === false
-            ? "Según lo que ves aún falta algún requisito. La plataforma lo comprobará y, si falta algo, te dirá qué."
+            ? "Según lo que ves aún falta algún requisito. Apruébalos primero con «Revisar» en cada uno; si aun así continúas, la plataforma lo comprobará y te dirá qué falta."
             : `Podrá ver y aceptar ofertas de su nivel${
                 nivel.tope === null
                   ? ", sin tope anual"

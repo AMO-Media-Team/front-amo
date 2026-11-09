@@ -13,12 +13,17 @@ import {
   ShieldX,
   Star,
   Target,
+  UserPlus,
   UsersRound,
 } from "lucide-react"
+import type { Route } from "next"
 import { type ReactNode, Suspense } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
+import { EnlaceBoton } from "@/components/layout/enlace-boton"
 import { banderaEmoji } from "@/features/accesos/catalogo"
+import { PESTANA_USUARIOS } from "@/features/gestion-medios/presentacion"
+import { usuariosDelMedio } from "@/features/gestion-medios/queries"
 import { InsigniaReclamoEnTramite } from "@/features/privacidad/components/insignia-reclamo"
 import {
   formatearCOP,
@@ -47,7 +52,7 @@ import {
   perfilAudiencia,
   topeAnualDelMedio,
 } from "../queries/medios"
-import { RUTAS_OPERACION } from "../rutas"
+import { RUTAS_OPERACION, rutaMedio } from "../rutas"
 import type { CuentaSocialDetalle, MedioDetalle, TopeAnual } from "../tipos"
 import {
   BarraLlenado,
@@ -674,17 +679,60 @@ export function ResumenMedio({
 
 // ── Documentos y pagos ───────────────────────────────────────────────────────
 
+/**
+ * Sin documentos todavía: los carga el propio medio desde su cuenta (el equipo
+ * AMO no los carga por él). Si el medio aún no tiene usuarios, nadie puede
+ * cargarlos: se dice y, a quien puede invitar, se le lleva a «Usuarios».
+ */
+async function vacioDocumentosMedio(
+  medioId: string,
+  { verUsuarios, puedeInvitar }: { verUsuarios: boolean; puedeInvitar: boolean }
+): Promise<{ descripcion: string; accion?: ReactNode }> {
+  const base =
+    "Los carga el propio medio desde su cuenta, en Mi medio › Documentos. Cuando los suba, aquí verás su estado."
+  if (!verUsuarios) return { descripcion: base }
+  // Es solo una ayuda: si no se pueden leer las personas, basta el texto base.
+  const personas = await usuariosDelMedio(medioId).catch(() => null)
+  if (!personas || personas.length > 0) return { descripcion: base }
+  if (!puedeInvitar) {
+    return {
+      descripcion: `${base} Este medio aún no tiene usuarios: pide a un administrador que invite a su equipo.`,
+    }
+  }
+  return {
+    descripcion: `${base} Este medio aún no tiene usuarios: invita a su equipo para que pueda cargarlos.`,
+    accion: (
+      <EnlaceBoton
+        href={`${rutaMedio(medioId)}?pestana=${PESTANA_USUARIOS}` as Route}
+        variant="outline"
+        size="sm"
+      >
+        <UserPlus data-icon="inline-start" aria-hidden />
+        Invitar a su equipo
+      </EnlaceBoton>
+    ),
+  }
+}
+
 /** Documentos (metadatos) con `medios.verificar` + `datos_sensibles.ver`; pago con lo segundo. */
 export async function SeccionDocumentosMedio({
   medio,
   verDocumentos,
   verSensibles,
+  verUsuarios = false,
+  puedeInvitar = false,
 }: {
   medio: MedioDetalle
   verDocumentos: boolean
   verSensibles: boolean
+  verUsuarios?: boolean
+  puedeInvitar?: boolean
 }) {
   const documentos = verDocumentos ? await documentosDelMedio(medio.id) : null
+  const vacio =
+    documentos && documentos.length === 0
+      ? await vacioDocumentosMedio(medio.id, { verUsuarios, puedeInvitar })
+      : undefined
   if (!documentos && !verSensibles) {
     return (
       <EstadoVacio
@@ -700,6 +748,7 @@ export async function SeccionDocumentosMedio({
           <ListaDocumentos
             documentos={documentos}
             descripcion="Solo metadatos de la revisión: los archivos se consultan en el flujo de verificación."
+            vacio={vacio}
           />
         </div>
       ) : null}
