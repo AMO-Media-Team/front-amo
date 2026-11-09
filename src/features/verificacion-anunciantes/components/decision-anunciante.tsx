@@ -270,7 +270,7 @@ export function DecisionAnunciante({
         descripcion={
           resumen.listos
             ? "Podrá activar campañas y enviar ofertas a revisión. Su equipo recibirá un aviso."
-            : "Según lo que ves aún falta algún documento aprobado. La plataforma lo comprobará y, si falta algo, te dirá qué."
+            : "Según lo que ves aún falta algún documento aprobado. Apruébalos primero con «Revisar» en cada documento; si aun así continúas, la plataforma lo comprobará y te dirá qué falta."
         }
         textoConfirmar="Verificar empresa"
         focoAlCerrar={focoAlCerrar}

@@ -5,6 +5,7 @@ import {
   FileWarning,
   FileX2,
 } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { EstadoVacio } from "@/components/feedback/estado-vacio"
 import { formatearFecha, formatearFechaHora } from "@/lib/format"
@@ -42,13 +43,18 @@ function textoAviso(
  * Documentos de verificación: solo metadatos (tipo, estado, fechas y
  * observaciones de la revisión). El archivo y su ruta nunca llegan a esta
  * vista; se consultan en el flujo de verificación.
+ *
+ * `vacio` explica quién carga los documentos cuando aún no hay ninguno y,
+ * si hace falta, ofrece el paso siguiente (p. ej. invitar al equipo del medio).
  */
 export function ListaDocumentos({
   documentos,
   descripcion,
+  vacio,
 }: {
   documentos: readonly DocumentoMetadatos[]
   descripcion: string
+  vacio?: { descripcion: ReactNode; accion?: ReactNode }
 }) {
   if (documentos.length === 0) {
     return (
@@ -61,9 +67,14 @@ export function ListaDocumentos({
           variante="simple"
           icono={FileText}
           titulo="Sin documentos cargados"
-          descripcion="Los documentos que suba para su verificación aparecerán aquí."
+          descripcion={
+            vacio?.descripcion ??
+            "Los documentos que suba para su verificación aparecerán aquí."
+          }
           className="py-6"
-        />
+        >
+          {vacio?.accion}
+        </EstadoVacio>
       </TarjetaFicha>
     )
   }
